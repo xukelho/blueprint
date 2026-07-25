@@ -1,0 +1,32 @@
+services:
+  blueprint-frontend:
+    build:
+      context: ./Frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./Frontend:/app
+      - blueprint-frontend-node-modules:/app/node_modules
+    environment:
+      WATCHPACK_POLLING: "true"
+
+  blueprint-api:
+    build:
+      context: ./Backend
+      dockerfile: Dockerfile
+    ports:
+      - "1818:1818"
+
+  postgresdb:
+    build:
+      context: ./Database
+      dockerfile: Dockerfile
+    volumes:
+      - blueprint-db:/var/lib/postgresql/data
+
+volumes:
+  blueprint-frontend-node-modules:
+    name: blueprint-frontend-node-modules
+  blueprint-db:
+    name: blueprint-db

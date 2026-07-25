@@ -89,6 +89,34 @@ Technology marked as a baseline or candidate in the architecture documentation r
 - Requirements use stable identifiers so that design, implementation and tests can reference them.
 - A document should link to related documents rather than duplicate their detailed content.
 
+## Docker Commands
+
+Run these commands from the repository root. `make start` and the individual
+service start commands run in the foreground, just like `docker compose up`.
+Use `Ctrl+C` to stop a foreground process.
+
+| Command | Description |
+| --- | --- |
+| `make start` / `make up` | Start all services defined in `docker-compose.yml`. |
+| `make stop` / `make down` | Stop and remove all Compose containers and networks. |
+| `make restart` | Bring down all services, then start them again. |
+| `make startdb` / `make updb` | Start only the `postgresdb` database service. |
+| `make stopdb` | Stop only the database service. |
+| `make downdb` | Stop and remove only the database container. Its named volume is retained. |
+| `make restartdb` | Remove the database container, then start it again. |
+| `make startapi` / `make upapi` | Start only the `blueprint-api` service. |
+| `make stopapi` | Stop only the API service. |
+| `make downapi` | Stop and remove only the API container. |
+| `make restartapi` | Remove the API container, then start it again. |
+| `make startfrontend` / `make upfrontend` | Start only the `blueprint-frontend` service. |
+| `make stopfrontend` | Stop only the frontend service. |
+| `make downfrontend` | Stop and remove only the frontend container. |
+| `make restartfrontend` | Remove the frontend container, then start it again. |
+
+Docker Compose cannot run `down` for just one service: its `down` command always
+targets the whole project. The service-specific `down*` commands therefore stop
+and remove that service's container, which provides the equivalent scoped result.
+
 ## Guiding Principle
 
 Blueprint should make it unambiguous which revision is current, what feedback remains open, what decisions were made and who made them—without requiring clients to install specialist BIM software.
