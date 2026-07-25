@@ -10,6 +10,7 @@ services:
       - blueprint-frontend-node-modules:/app/node_modules
     environment:
       WATCHPACK_POLLING: "true"
+      VITE_API_PROXY_TARGET: "http://blueprint-api:1818"
 
   blueprint-api:
     build:
@@ -17,11 +18,24 @@ services:
       dockerfile: Dockerfile
     ports:
       - "1818:1818"
+    environment:
+      ConnectionStrings__DefaultConnection: "Host=postgresdb;Port=7584;Database=blueprint;Username=blueprint;Password=blueprint_dev_password"
+    depends_on:
+      postgresdb:
+        condition: service_healthy
 
   postgresdb:
     build:
       context: ./Database
       dockerfile: Dockerfile
+    ports:
+      # Bind only on the host loopback interface to avoid exposing the
+      # development database to the local network.
+      - "127.0.0.1:5837:7584"
+    environment:
+      POSTGRES_DB: blueprint
+      POSTGRES_USER: blueprint
+      POSTGRES_PASSWORD: blueprint_dev_password
     volumes:
       - blueprint-db:/var/lib/postgresql/data
 

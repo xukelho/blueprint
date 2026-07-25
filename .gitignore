@@ -1,0 +1,16 @@
+# .NET build output
+**/bin/
+**/obj/
+
+# Node build output and dependencies
+**/node_modules/
+**/dist/
+*.tsbuildinfo
+
+# Local configuration and editor files
+.env
+.env.*
+!.env.example
+*.user
+.vs/
+.vscode/
