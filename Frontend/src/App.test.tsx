@@ -50,7 +50,7 @@ describe("login", () => {
     await user.click(screen.getByRole("button", { name: "Sign in" }));
 
     await waitFor(() => expect(screen.queryByText("Sign in to Blueprint")).not.toBeInTheDocument());
-    expect(document.body.firstElementChild).toBeEmptyDOMElement();
+    expect(screen.getByRole("heading", { name: "Bom dia, Ana" })).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -88,9 +88,60 @@ describe("login", () => {
 });
 
 describe("dashboard", () => {
-  it("renders no visible content", () => {
-    const { container } = renderApp("/dashboard");
+  it("renders the architect dashboard and active projects", () => {
+    renderApp("/dashboard");
 
-    expect(container).toBeEmptyDOMElement();
+    expect(screen.getByRole("heading", { name: "Bom dia, Ana" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Projetos ativos" })).toBeInTheDocument();
+    expect(screen.getByText("Casa do Vale")).toBeInTheDocument();
+    expect(screen.getByLabelText("Navegação principal")).toBeInTheDocument();
+  });
+
+  it("filters projects by client and clears the search", async () => {
+    const user = userEvent.setup();
+    renderApp("/dashboard");
+
+    await user.type(screen.getByLabelText("Pesquisar projetos"), "Inês Costa");
+
+    expect(screen.getByText("Apartamento Alvalade")).toBeInTheDocument();
+    expect(screen.queryByText("Casa do Vale")).not.toBeInTheDocument();
+    expect(screen.getByText("1 projeto encontrado")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Limpar pesquisa" }));
+    expect(screen.getByText("Casa do Vale")).toBeInTheDocument();
+  });
+
+  it("collapses and expands the navigation", async () => {
+    const user = userEvent.setup();
+    renderApp("/dashboard");
+
+    await user.click(screen.getByRole("button", { name: "Recolher navegação" }));
+    expect(screen.getByRole("button", { name: "Expandir navegação" })).toBeInTheDocument();
+  });
+});
+
+describe("mockup navigation", () => {
+  it.each([
+    ["/projects", "Projetos"],
+    ["/projects/new", "Criar projeto"],
+    ["/projects/casa-do-vale", "Casa do Vale"],
+    ["/clients", "Clientes"],
+    ["/clients/marta-silva", "Marta Silva"],
+    ["/settings", "Definições"],
+    ["/notifications", "Notificações"],
+    ["/help", "Como podemos ajudar?"],
+    ["/profile", "Perfil de utilizador"],
+  ])("renders %s", (path, heading) => {
+    renderApp(path);
+    expect(screen.getByRole("heading", { name: heading, level: 1 })).toBeInTheDocument();
+  });
+
+  it("navigates from the dashboard to projects", async () => {
+    const user = userEvent.setup();
+    renderApp("/dashboard");
+
+    await user.click(screen.getByRole("button", { name: "Projetos" }));
+
+    expect(screen.getByRole("heading", { name: "Projetos", level: 1 })).toBeInTheDocument();
   });
 });
