@@ -25,6 +25,7 @@ public static class DatabaseInitializer
         var now = DateTimeOffset.UtcNow;
         var admin = new User
         {
+            RoleId = UserRoleIds.PlatformAdmin,
             Username = InitialAdminUsername,
             Password = string.Empty,
             CreatedAt = now,

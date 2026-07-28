@@ -15,7 +15,19 @@ public static class AuthenticationEndpoints
             .Produces<LoginResponse>(StatusCodes.Status401Unauthorized)
             .ProducesValidationProblem();
 
+        endpoints.MapPost("/api/auth/logout", Logout)
+            .WithName("Logout")
+            .WithTags("Authentication")
+            .Produces<LoginResponse>();
+
         return endpoints;
+    }
+
+    private static IResult Logout()
+    {
+        // This is the single logout contract. Session revocation can be added
+        // here when the application starts issuing persistent sessions.
+        return TypedResults.Ok(new LoginResponse("success"));
     }
 
     private static async Task<IResult> Login(
@@ -29,11 +41,13 @@ public static class AuthenticationEndpoints
             return TypedResults.ValidationProblem(errors);
         }
 
-        return await credentialValidator.ValidateAsync(
+        var role = await credentialValidator.GetRoleForValidCredentialsAsync(
             request!.Username,
             request.Password,
-            cancellationToken)
-            ? TypedResults.Ok(new LoginResponse("success"))
+            cancellationToken);
+
+        return role is not null
+            ? TypedResults.Ok(new LoginResponse("success", role))
             : TypedResults.Json(
                 new LoginResponse("fail"),
                 statusCode: StatusCodes.Status401Unauthorized);

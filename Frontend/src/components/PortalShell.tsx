@@ -8,24 +8,28 @@ import {
   FolderKanban,
   Layers3,
   LayoutDashboard,
+  LogOut,
   Menu,
   MoreHorizontal,
+  ShieldCheck,
   Settings,
   Users,
   X,
 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { clearAuthenticatedRole, isPlatformAdmin } from "../auth";
 
 const primaryNav = [
-  { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
-  { label: "Projetos", icon: FolderKanban, path: "/projects" },
-  { label: "Clientes", icon: Users, path: "/clients" },
-  { label: "Definições", icon: Settings, path: "/settings" },
+  { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard", mockStatus: "mock" },
+  { label: "Projetos", icon: FolderKanban, path: "/projects", mockStatus: "mock" },
+  { label: "Clientes", icon: Users, path: "/clients", mockStatus: "mock" },
+  { label: "Administração", icon: ShieldCheck, path: "/administration", mockStatus: undefined },
+  { label: "Definições", icon: Settings, path: "/settings", mockStatus: "mock" },
 ];
 
 const secondaryNav = [
-  { label: "Notificações", icon: Bell, path: "/notifications", badge: 6 },
-  { label: "Ajuda e suporte", icon: CircleHelp, path: "/help" },
+  { label: "Notificações", icon: Bell, path: "/notifications", badge: 6, mockStatus: "mock" },
+  { label: "Ajuda e suporte", icon: CircleHelp, path: "/help", mockStatus: "mock" },
 ];
 
 type PortalShellProps = {
@@ -36,8 +40,12 @@ type PortalShellProps = {
 export default function PortalShell({ children, wide = false }: PortalShellProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const visiblePrimaryNav = primaryNav.filter(
+    (item) => item.path !== "/administration" || isPlatformAdmin(),
+  );
 
   const goTo = (path: string) => {
     navigate(path);
@@ -48,6 +56,18 @@ export default function PortalShell({ children, wide = false }: PortalShellProps
     path === "/dashboard"
       ? location.pathname === path
       : location.pathname === path || location.pathname.startsWith(`${path}/`);
+
+  const handleLogout = async () => {
+    if (isLoggingOut) return;
+
+    setIsLoggingOut(true);
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } finally {
+      clearAuthenticatedRole();
+      navigate("/", { replace: true });
+    }
+  };
 
   return (
     <div className={`app-shell ${sidebarCollapsed ? "app-shell--collapsed" : ""}`}>
@@ -97,7 +117,7 @@ export default function PortalShell({ children, wide = false }: PortalShellProps
 
         <nav className="sidebar__nav" aria-label="Navegação principal">
           <div className="nav-group">
-            {primaryNav.map((item) => {
+            {visiblePrimaryNav.map((item) => {
               const Icon = item.icon;
               const active = isActive(item.path);
               return (
@@ -105,12 +125,17 @@ export default function PortalShell({ children, wide = false }: PortalShellProps
                   className={`nav-item ${active ? "nav-item--active" : ""}`}
                   type="button"
                   key={item.path}
-                  title={sidebarCollapsed ? item.label : undefined}
+                  title={sidebarCollapsed && item.mockStatus ? `${item.label} — Mock` : sidebarCollapsed ? item.label : undefined}
                   aria-current={active ? "page" : undefined}
                   onClick={() => goTo(item.path)}
                 >
                   <Icon size={19} strokeWidth={1.8} aria-hidden="true" />
                   <span className="sidebar-label">{item.label}</span>
+                  {item.mockStatus && (
+                    <span className={`nav-status nav-status--${item.mockStatus}`} aria-hidden="true">
+                      Mock
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -125,12 +150,13 @@ export default function PortalShell({ children, wide = false }: PortalShellProps
                   className={`nav-item ${active ? "nav-item--active" : ""}`}
                   type="button"
                   key={item.path}
-                  title={sidebarCollapsed ? item.label : undefined}
+                  title={sidebarCollapsed ? `${item.label} — Mock` : undefined}
                   aria-current={active ? "page" : undefined}
                   onClick={() => goTo(item.path)}
                 >
                   <Icon size={19} strokeWidth={1.8} aria-hidden="true" />
                   <span className="sidebar-label">{item.label}</span>
+                  <span className="nav-status nav-status--mock" aria-hidden="true">Mock</span>
                   {item.badge && <span className="nav-badge">{item.badge}</span>}
                 </button>
               );
@@ -138,7 +164,7 @@ export default function PortalShell({ children, wide = false }: PortalShellProps
             <button
               className={`user-menu ${location.pathname === "/profile" ? "user-menu--active" : ""}`}
               type="button"
-              title={sidebarCollapsed ? "Perfil de utilizador" : undefined}
+              title={sidebarCollapsed ? "Perfil de utilizador — Mock" : undefined}
               onClick={() => goTo("/profile")}
             >
               <span className="user-avatar">AM</span>
@@ -146,7 +172,20 @@ export default function PortalShell({ children, wide = false }: PortalShellProps
                 <strong>Ana Martins</strong>
                 <small>Arquiteta</small>
               </span>
+              <span className="nav-status nav-status--mock" aria-hidden="true">Mock</span>
               <MoreHorizontal className="sidebar-label" size={18} aria-hidden="true" />
+            </button>
+            <button
+              className="nav-item logout-button"
+              type="button"
+              title={sidebarCollapsed ? "Terminar sessão" : undefined}
+              disabled={isLoggingOut}
+              onClick={handleLogout}
+            >
+              <LogOut size={19} strokeWidth={1.8} aria-hidden="true" />
+              <span className="sidebar-label">
+                {isLoggingOut ? "A terminar sessão…" : "Terminar sessão"}
+              </span>
             </button>
           </div>
         </nav>

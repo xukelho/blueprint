@@ -9,6 +9,7 @@ import {
   User,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { clearAuthenticatedRole, setAuthenticatedRole } from "../auth";
 
 type FieldErrors = {
   username?: string;
@@ -17,12 +18,14 @@ type FieldErrors = {
 
 type LoginResponse = {
   status: string;
+  role?: string;
 };
 
 function LoginPage() {
   const navigate = useNavigate();
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+  const isDevelopment = import.meta.env.MODE === "development";
+  const [username, setUsername] = useState(isDevelopment ? "admin" : "");
+  const [password, setPassword] = useState(isDevelopment ? "admin" : "");
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [message, setMessage] = useState("");
@@ -58,6 +61,10 @@ function LoginPage() {
       if (response.ok) {
         const result = (await response.json()) as LoginResponse;
         if (result.status === "success") {
+          clearAuthenticatedRole();
+          if (result.role) {
+            setAuthenticatedRole(result.role);
+          }
           navigate("/dashboard", { replace: true });
           return;
         }
@@ -200,7 +207,12 @@ function LoginPage() {
               Keep me signed in
             </label>
 
-            <button className="submit-button" type="submit" disabled={isSubmitting}>
+            <button
+              className="submit-button"
+              type="submit"
+              disabled={isSubmitting}
+              autoFocus={isDevelopment}
+            >
               {isSubmitting ? "Signing in…" : "Sign in"}
               {!isSubmitting && <ArrowRight size={18} aria-hidden="true" />}
             </button>

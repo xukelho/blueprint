@@ -22,6 +22,7 @@ await DatabaseInitializer.InitializeAsync(app.Services);
 app.MapOpenApi();
 app.MapHealthEndpoints();
 app.MapAuthenticationEndpoints();
+app.MapAdministrationEndpoints();
 
 app.Run();
 

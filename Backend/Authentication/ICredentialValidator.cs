@@ -2,7 +2,7 @@ namespace Blueprint.Api.Authentication;
 
 public interface ICredentialValidator
 {
-    Task<bool> ValidateAsync(
+    Task<string?> GetRoleForValidCredentialsAsync(
         string username,
         string password,
         CancellationToken cancellationToken = default);

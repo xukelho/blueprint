@@ -9,14 +9,17 @@ import {
   FolderKanban,
   LayoutDashboard,
   Layers3,
+  LogOut,
   MapPin,
   Menu,
   MoreHorizontal,
   Search,
+  ShieldCheck,
   Settings,
   Users,
   X,
 } from "lucide-react";
+import { clearAuthenticatedRole, isPlatformAdmin } from "../auth";
 
 type Project = {
   id: number;
@@ -107,15 +110,16 @@ const projects: Project[] = [
 ];
 
 const primaryNav = [
-  { label: "Dashboard", icon: LayoutDashboard, active: true, path: "/dashboard" },
-  { label: "Projetos", icon: FolderKanban, path: "/projects" },
-  { label: "Clientes", icon: Users, path: "/clients" },
-  { label: "Definições", icon: Settings, path: "/settings" },
+  { label: "Dashboard", icon: LayoutDashboard, active: true, path: "/dashboard", mockStatus: "mock" },
+  { label: "Projetos", icon: FolderKanban, path: "/projects", mockStatus: "mock" },
+  { label: "Clientes", icon: Users, path: "/clients", mockStatus: "mock" },
+  { label: "Administração", icon: ShieldCheck, path: "/administration", mockStatus: undefined },
+  { label: "Definições", icon: Settings, path: "/settings", mockStatus: "mock" },
 ];
 
 const secondaryNav = [
-  { label: "Notificações", icon: Bell, badge: 6, path: "/notifications" },
-  { label: "Ajuda e suporte", icon: CircleHelp, path: "/help" },
+  { label: "Notificações", icon: Bell, badge: 6, path: "/notifications", mockStatus: "mock" },
+  { label: "Ajuda e suporte", icon: CircleHelp, path: "/help", mockStatus: "mock" },
 ];
 
 function PlanPreview({ variant }: { variant: Project["plan"] }) {
@@ -137,8 +141,12 @@ function DashboardPage() {
   const navigate = useNavigate();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [query, setQuery] = useState("");
   const [openMenu, setOpenMenu] = useState<number | null>(null);
+  const visiblePrimaryNav = primaryNav.filter(
+    (item) => item.path !== "/administration" || isPlatformAdmin(),
+  );
 
   const filteredProjects = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase("pt-PT");
@@ -153,6 +161,18 @@ function DashboardPage() {
 
   const selectProject = () => {
     navigate("/projects/casa-do-vale");
+  };
+
+  const handleLogout = async () => {
+    if (isLoggingOut) return;
+
+    setIsLoggingOut(true);
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } finally {
+      clearAuthenticatedRole();
+      navigate("/", { replace: true });
+    }
   };
 
   return (
@@ -205,19 +225,24 @@ function DashboardPage() {
 
         <nav className="sidebar__nav" aria-label="Navegação principal">
           <div className="nav-group">
-            {primaryNav.map((item) => {
+            {visiblePrimaryNav.map((item) => {
               const Icon = item.icon;
               return (
                 <button
                   className={`nav-item ${item.active ? "nav-item--active" : ""}`}
                   type="button"
                   key={item.label}
-                  title={sidebarCollapsed ? item.label : undefined}
+                  title={sidebarCollapsed && item.mockStatus ? `${item.label} — Mock` : sidebarCollapsed ? item.label : undefined}
                   aria-current={item.active ? "page" : undefined}
                   onClick={() => navigate(item.path)}
                 >
                   <Icon size={19} strokeWidth={1.8} aria-hidden="true" />
                   <span className="sidebar-label">{item.label}</span>
+                  {item.mockStatus && (
+                    <span className={`nav-status nav-status--${item.mockStatus}`} aria-hidden="true">
+                      Mock
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -231,11 +256,12 @@ function DashboardPage() {
                   className="nav-item"
                   type="button"
                   key={item.label}
-                  title={sidebarCollapsed ? item.label : undefined}
+                  title={sidebarCollapsed ? `${item.label} — Mock` : undefined}
                   onClick={() => navigate(item.path)}
                 >
                   <Icon size={19} strokeWidth={1.8} aria-hidden="true" />
                   <span className="sidebar-label">{item.label}</span>
+                  <span className="nav-status nav-status--mock" aria-hidden="true">Mock</span>
                   {item.badge && <span className="nav-badge">{item.badge}</span>}
                 </button>
               );
@@ -243,7 +269,7 @@ function DashboardPage() {
             <button
               className="user-menu"
               type="button"
-              title={sidebarCollapsed ? "Menu de utilizador" : undefined}
+              title={sidebarCollapsed ? "Menu de utilizador — Mock" : undefined}
               onClick={() => navigate("/profile")}
             >
               <span className="user-avatar">AM</span>
@@ -251,7 +277,20 @@ function DashboardPage() {
                 <strong>Ana Martins</strong>
                 <small>Arquiteta</small>
               </span>
+              <span className="nav-status nav-status--mock" aria-hidden="true">Mock</span>
               <MoreHorizontal className="sidebar-label" size={18} aria-hidden="true" />
+            </button>
+            <button
+              className="nav-item logout-button"
+              type="button"
+              title={sidebarCollapsed ? "Terminar sessão" : undefined}
+              disabled={isLoggingOut}
+              onClick={handleLogout}
+            >
+              <LogOut size={19} strokeWidth={1.8} aria-hidden="true" />
+              <span className="sidebar-label">
+                {isLoggingOut ? "A terminar sessão…" : "Terminar sessão"}
+              </span>
             </button>
           </div>
         </nav>

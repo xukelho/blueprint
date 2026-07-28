@@ -1,6 +1,8 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import DashboardPage from "./pages/DashboardPage";
 import LoginPage from "./pages/LoginPage";
+import AdministrationPage from "./pages/AdministrationPage";
+import { isPlatformAdmin } from "./auth";
 import {
   ClientPage,
   ClientsPage,
@@ -23,6 +25,10 @@ function App() {
       <Route path="/projects/casa-do-vale" element={<ProjectPage />} />
       <Route path="/clients" element={<ClientsPage />} />
       <Route path="/clients/marta-silva" element={<ClientPage />} />
+      <Route
+        path="/administration"
+        element={isPlatformAdmin() ? <AdministrationPage /> : <Navigate to="/dashboard" replace />}
+      />
       <Route path="/settings" element={<SettingsPage />} />
       <Route path="/notifications" element={<NotificationsPage />} />
       <Route path="/help" element={<HelpPage />} />

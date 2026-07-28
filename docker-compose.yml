@@ -4,7 +4,7 @@ services:
       context: ./Frontend
       dockerfile: Dockerfile
     ports:
-      - "3000:3000"
+      - "5385:5385"
     volumes:
       - ./Frontend:/app
       - blueprint-frontend-node-modules:/app/node_modules

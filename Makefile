@@ -5,7 +5,7 @@
 
 # Full application
 start up:
-	docker compose up
+	docker compose up --build
 
 stop down:
 	docker compose down
@@ -31,7 +31,7 @@ restartdb:
 
 # API (blueprint-api)
 startapi upapi:
-	docker compose up blueprint-api
+	docker compose up --build blueprint-api
 
 stopapi:
 	docker compose stop blueprint-api

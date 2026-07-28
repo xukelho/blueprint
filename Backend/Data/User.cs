@@ -4,6 +4,8 @@ public sealed class User
 {
     public long Id { get; set; }
 
+    public long RoleId { get; set; }
+
     public required string Username { get; set; }
 
     public required string Password { get; set; }
@@ -15,4 +17,12 @@ public sealed class User
     public DateTimeOffset UpdatedAt { get; set; }
 
     public long UpdatedBy { get; set; }
+
+    public UserRole? Role { get; set; }
+
+    public Client? Client { get; set; }
+
+    public Company? Company { get; set; }
+
+    public Architect? Architect { get; set; }
 }

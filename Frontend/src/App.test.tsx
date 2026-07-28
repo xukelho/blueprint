@@ -7,6 +7,7 @@ import App from "./App";
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  sessionStorage.clear();
 });
 
 function renderApp(initialPath = "/") {
@@ -40,7 +41,7 @@ describe("login", () => {
 
   it("posts credentials and navigates after a successful login", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ status: "success" }), {
+      new Response(JSON.stringify({ status: "success", role: "platform admin" }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       }),
@@ -118,20 +119,55 @@ describe("dashboard", () => {
     await user.click(screen.getByRole("button", { name: "Recolher navegação" }));
     expect(screen.getByRole("button", { name: "Expandir navegação" })).toBeInTheDocument();
   });
+
+  it("logs out and returns to the sign-in page", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ status: "success" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const user = userEvent.setup();
+    renderApp("/dashboard");
+
+    await user.click(screen.getByRole("button", { name: "Terminar sessão" }));
+
+    expect(await screen.findByText("Sign in to Blueprint")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith("/api/auth/logout", { method: "POST" });
+  });
 });
 
 describe("mockup navigation", () => {
+  it("shows the completed administration destination without a mock label to platform admins", () => {
+    sessionStorage.setItem("blueprint.auth.role", "platform admin");
+    renderApp("/dashboard");
+
+    expect(screen.getByRole("button", { name: "Administração" })).toBeInTheDocument();
+    expect(screen.queryByText("Mock parcial")).not.toBeInTheDocument();
+  });
+
+  it("hides administration from users who are not platform admins", () => {
+    sessionStorage.setItem("blueprint.auth.role", "architect");
+    renderApp("/dashboard");
+
+    expect(screen.queryByRole("button", { name: "Administração" })).not.toBeInTheDocument();
+  });
+
   it.each([
     ["/projects", "Projetos"],
     ["/projects/new", "Criar projeto"],
     ["/projects/casa-do-vale", "Casa do Vale"],
     ["/clients", "Clientes"],
     ["/clients/marta-silva", "Marta Silva"],
+    ["/administration", "Administração"],
     ["/settings", "Definições"],
     ["/notifications", "Notificações"],
     ["/help", "Como podemos ajudar?"],
     ["/profile", "Perfil de utilizador"],
   ])("renders %s", (path, heading) => {
+    if (path === "/administration") {
+      sessionStorage.setItem("blueprint.auth.role", "platform admin");
+    }
     renderApp(path);
     expect(screen.getByRole("heading", { name: heading, level: 1 })).toBeInTheDocument();
   });
@@ -144,4 +180,5 @@ describe("mockup navigation", () => {
 
     expect(screen.getByRole("heading", { name: "Projetos", level: 1 })).toBeInTheDocument();
   });
+
 });
