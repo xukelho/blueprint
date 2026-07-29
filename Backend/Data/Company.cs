@@ -1,14 +1,12 @@
 namespace Blueprint.Api.Data;
 
-public sealed class Company : IUserProfile
+public sealed class Company
 {
     public long Id { get; set; }
 
-    public long UserId { get; set; }
+    public required string Name { get; set; }
 
-    public required string DisplayName { get; set; }
-
-    public required string FullName { get; set; }
+    public required string LegalName { get; set; }
 
     public required string Nif { get; set; }
 
@@ -18,5 +16,17 @@ public sealed class Company : IUserProfile
 
     public required string Address { get; set; }
 
-    public User? User { get; set; }
+    public bool IsActive { get; set; }
+
+    public DateTimeOffset CreatedAt { get; set; }
+
+    public long CreatedBy { get; set; }
+
+    public DateTimeOffset UpdatedAt { get; set; }
+
+    public long UpdatedBy { get; set; }
+
+    public ICollection<Employee> Employees { get; set; } = [];
+
+    public ICollection<Client> Clients { get; set; } = [];
 }

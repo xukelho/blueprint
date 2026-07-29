@@ -2,18 +2,32 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import DashboardPage from "./pages/DashboardPage";
 import LoginPage from "./pages/LoginPage";
 import AdministrationPage from "./pages/AdministrationPage";
-import { isPlatformAdmin } from "./auth";
+import EmployeePage from "./pages/EmployeePage";
+import ClientPage from "./pages/ClientPage";
+import { isClient, isEmployee, isPlatformAdmin } from "./auth";
 import {
-  ClientPage,
+  ClientPage as ClientDetailMockPage,
   ClientsPage,
   HelpPage,
   NotificationsPage,
-  ProfilePage,
   ProjectCreatePage,
   ProjectPage,
   ProjectsPage,
   SettingsPage,
 } from "./pages/MockupPages";
+
+function AdministrationRoute() {
+  return isPlatformAdmin()
+    ? <AdministrationPage />
+    : <Navigate to="/dashboard" replace />;
+}
+
+function ProfileRoute() {
+  if (isPlatformAdmin()) return <Navigate to="/dashboard" replace />;
+  if (isEmployee()) return <EmployeePage />;
+  if (isClient()) return <ClientPage />;
+  return <Navigate to="/dashboard" replace />;
+}
 
 function App() {
   return (
@@ -24,15 +38,15 @@ function App() {
       <Route path="/projects/new" element={<ProjectCreatePage />} />
       <Route path="/projects/casa-do-vale" element={<ProjectPage />} />
       <Route path="/clients" element={<ClientsPage />} />
-      <Route path="/clients/marta-silva" element={<ClientPage />} />
+      <Route path="/clients/marta-silva" element={<ClientDetailMockPage />} />
       <Route
         path="/administration"
-        element={isPlatformAdmin() ? <AdministrationPage /> : <Navigate to="/dashboard" replace />}
+        element={<AdministrationRoute />}
       />
       <Route path="/settings" element={<SettingsPage />} />
       <Route path="/notifications" element={<NotificationsPage />} />
       <Route path="/help" element={<HelpPage />} />
-      <Route path="/profile" element={<ProfilePage />} />
+      <Route path="/profile" element={<ProfileRoute />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

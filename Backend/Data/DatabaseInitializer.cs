@@ -25,7 +25,6 @@ public static class DatabaseInitializer
         var now = DateTimeOffset.UtcNow;
         var admin = new User
         {
-            RoleId = UserRoleIds.PlatformAdmin,
             Username = InitialAdminUsername,
             Password = string.Empty,
             CreatedAt = now,
@@ -38,6 +37,10 @@ public static class DatabaseInitializer
             .HashPassword(admin, InitialAdminPassword);
 
         dbContext.Users.Add(admin);
+        admin.UserRoles.Add(new UserRole
+        {
+            RoleId = RoleIds.PlatformAdmin
+        });
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 }

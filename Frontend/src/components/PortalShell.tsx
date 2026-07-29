@@ -17,7 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { clearAuthenticatedRole, isPlatformAdmin } from "../auth";
+import { clearAuthenticatedRoles, isPlatformAdmin } from "../auth";
 
 const primaryNav = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard", mockStatus: "mock" },
@@ -64,7 +64,7 @@ export default function PortalShell({ children, wide = false }: PortalShellProps
     try {
       await fetch("/api/auth/logout", { method: "POST" });
     } finally {
-      clearAuthenticatedRole();
+      clearAuthenticatedRoles();
       navigate("/", { replace: true });
     }
   };

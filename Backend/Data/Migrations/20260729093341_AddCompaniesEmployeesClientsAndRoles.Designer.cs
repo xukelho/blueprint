@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Blueprint.Api.Data.Migrations
 {
     [DbContext(typeof(BlueprintDbContext))]
-    [Migration("20260727223852_AddUserRolesAndProfiles")]
-    partial class AddUserRolesAndProfiles
+    [Migration("20260729093341_AddCompaniesEmployeesClientsAndRoles")]
+    partial class AddCompaniesEmployeesClientsAndRoles
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -24,63 +24,6 @@ namespace Blueprint.Api.Data.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
-
-            modelBuilder.Entity("Blueprint.Api.Data.Architect", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<string>("Address")
-                        .IsRequired()
-                        .HasMaxLength(1024)
-                        .HasColumnType("character varying(1024)")
-                        .HasColumnName("address");
-
-                    b.Property<string>("DisplayName")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)")
-                        .HasColumnName("display_name");
-
-                    b.Property<string>("Email")
-                        .IsRequired()
-                        .HasMaxLength(320)
-                        .HasColumnType("character varying(320)")
-                        .HasColumnName("email");
-
-                    b.Property<string>("FullName")
-                        .IsRequired()
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)")
-                        .HasColumnName("full_name");
-
-                    b.Property<string>("Nif")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("nif");
-
-                    b.Property<string>("PhoneNumber")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("phone_number");
-
-                    b.Property<long>("UserId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("user_id");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId")
-                        .IsUnique();
-
-                    b.ToTable("architects", (string)null);
-                });
 
             modelBuilder.Entity("Blueprint.Api.Data.Client", b =>
                 {
@@ -97,6 +40,10 @@ namespace Blueprint.Api.Data.Migrations
                         .HasColumnType("character varying(1024)")
                         .HasColumnName("address");
 
+                    b.Property<long?>("CompanyId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("company_id");
+
                     b.Property<string>("DisplayName")
                         .IsRequired()
                         .HasMaxLength(256)
@@ -132,6 +79,8 @@ namespace Blueprint.Api.Data.Migrations
                         .HasColumnName("user_id");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CompanyId");
 
                     b.HasIndex("UserId")
                         .IsUnique();
@@ -154,6 +103,82 @@ namespace Blueprint.Api.Data.Migrations
                         .HasColumnType("character varying(1024)")
                         .HasColumnName("address");
 
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long>("CreatedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)")
+                        .HasColumnName("email");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("LegalName")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("legal_name");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Nif")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("nif");
+
+                    b.Property<string>("PhoneNumber")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("phone_number");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<long>("UpdatedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("companies", (string)null);
+                });
+
+            modelBuilder.Entity("Blueprint.Api.Data.Employee", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Address")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
+                        .HasColumnName("address");
+
+                    b.Property<long>("CompanyId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("company_id");
+
                     b.Property<string>("DisplayName")
                         .IsRequired()
                         .HasMaxLength(256)
@@ -190,10 +215,57 @@ namespace Blueprint.Api.Data.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CompanyId");
+
                     b.HasIndex("UserId")
                         .IsUnique();
 
-                    b.ToTable("companies", (string)null);
+                    b.ToTable("employees", (string)null);
+                });
+
+            modelBuilder.Entity("Blueprint.Api.Data.Role", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("name");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("roles", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1L,
+                            Name = "platform admin"
+                        },
+                        new
+                        {
+                            Id = 2L,
+                            Name = "client"
+                        },
+                        new
+                        {
+                            Id = 3L,
+                            Name = "employee"
+                        },
+                        new
+                        {
+                            Id = 4L,
+                            Name = "architect"
+                        });
                 });
 
             modelBuilder.Entity("Blueprint.Api.Data.User", b =>
@@ -219,10 +291,6 @@ namespace Blueprint.Api.Data.Migrations
                         .HasColumnType("character varying(512)")
                         .HasColumnName("password");
 
-                    b.Property<long>("RoleId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("role_id");
-
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
@@ -239,8 +307,6 @@ namespace Blueprint.Api.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("RoleId");
-
                     b.HasIndex("Username")
                         .IsUnique();
 
@@ -249,105 +315,96 @@ namespace Blueprint.Api.Data.Migrations
 
             modelBuilder.Entity("Blueprint.Api.Data.UserRole", b =>
                 {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
+                    b.Property<long>("UserId")
                         .HasColumnType("bigint")
-                        .HasColumnName("id");
+                        .HasColumnName("user_id");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+                    b.Property<long>("RoleId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("role_id");
 
-                    b.Property<string>("Role")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("role");
+                    b.HasKey("UserId", "RoleId");
 
-                    b.HasKey("Id");
-
-                    b.HasIndex("Role")
-                        .IsUnique();
+                    b.HasIndex("RoleId");
 
                     b.ToTable("user_roles", (string)null);
-
-                    b.HasData(
-                        new
-                        {
-                            Id = 1L,
-                            Role = "platform admin"
-                        },
-                        new
-                        {
-                            Id = 2L,
-                            Role = "client"
-                        },
-                        new
-                        {
-                            Id = 3L,
-                            Role = "company"
-                        },
-                        new
-                        {
-                            Id = 4L,
-                            Role = "architect"
-                        });
-                });
-
-            modelBuilder.Entity("Blueprint.Api.Data.Architect", b =>
-                {
-                    b.HasOne("Blueprint.Api.Data.User", "User")
-                        .WithOne("Architect")
-                        .HasForeignKey("Blueprint.Api.Data.Architect", "UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Blueprint.Api.Data.Client", b =>
                 {
+                    b.HasOne("Blueprint.Api.Data.Company", "Company")
+                        .WithMany("Clients")
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Blueprint.Api.Data.User", "User")
                         .WithOne("Client")
                         .HasForeignKey("Blueprint.Api.Data.Client", "UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.Navigation("Company");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Blueprint.Api.Data.Employee", b =>
+                {
+                    b.HasOne("Blueprint.Api.Data.Company", "Company")
+                        .WithMany("Employees")
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Blueprint.Api.Data.User", "User")
+                        .WithOne("Employee")
+                        .HasForeignKey("Blueprint.Api.Data.Employee", "UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Company");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Blueprint.Api.Data.UserRole", b =>
+                {
+                    b.HasOne("Blueprint.Api.Data.Role", "Role")
+                        .WithMany("UserRoles")
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Blueprint.Api.Data.User", "User")
+                        .WithMany("UserRoles")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Role");
+
                     b.Navigation("User");
                 });
 
             modelBuilder.Entity("Blueprint.Api.Data.Company", b =>
                 {
-                    b.HasOne("Blueprint.Api.Data.User", "User")
-                        .WithOne("Company")
-                        .HasForeignKey("Blueprint.Api.Data.Company", "UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                    b.Navigation("Clients");
 
-                    b.Navigation("User");
+                    b.Navigation("Employees");
+                });
+
+            modelBuilder.Entity("Blueprint.Api.Data.Role", b =>
+                {
+                    b.Navigation("UserRoles");
                 });
 
             modelBuilder.Entity("Blueprint.Api.Data.User", b =>
                 {
-                    b.HasOne("Blueprint.Api.Data.UserRole", "Role")
-                        .WithMany("Users")
-                        .HasForeignKey("RoleId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Role");
-                });
-
-            modelBuilder.Entity("Blueprint.Api.Data.User", b =>
-                {
-                    b.Navigation("Architect");
-
                     b.Navigation("Client");
 
-                    b.Navigation("Company");
-                });
+                    b.Navigation("Employee");
 
-            modelBuilder.Entity("Blueprint.Api.Data.UserRole", b =>
-                {
-                    b.Navigation("Users");
+                    b.Navigation("UserRoles");
                 });
 #pragma warning restore 612, 618
         }

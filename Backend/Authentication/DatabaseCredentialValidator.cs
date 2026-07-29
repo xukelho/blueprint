@@ -9,14 +9,15 @@ public sealed class DatabaseCredentialValidator(BlueprintDbContext dbContext)
 {
     private readonly PasswordHasher<User> _passwordHasher = new();
 
-    public async Task<string?> GetRoleForValidCredentialsAsync(
+    public async Task<IReadOnlyList<string>?> GetRolesForValidCredentialsAsync(
         string username,
         string password,
         CancellationToken cancellationToken = default)
     {
         var user = await dbContext.Users
             .AsNoTracking()
-            .Include(candidate => candidate.Role)
+            .Include(candidate => candidate.UserRoles)
+                .ThenInclude(candidate => candidate.Role)
             .SingleOrDefaultAsync(
                 candidate => candidate.Username == username,
                 cancellationToken);
@@ -28,6 +29,9 @@ public sealed class DatabaseCredentialValidator(BlueprintDbContext dbContext)
             return null;
         }
 
-        return user.Role?.Role;
+        return user.UserRoles
+            .OrderBy(candidate => candidate.RoleId)
+            .Select(candidate => candidate.Role!.Name)
+            .ToArray();
     }
 }

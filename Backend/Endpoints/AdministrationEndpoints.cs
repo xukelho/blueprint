@@ -15,51 +15,20 @@ public static class AdministrationEndpoints
         var administration = endpoints.MapGroup("/api/admin")
             .WithTags("Administration");
 
+        MapRoleEndpoints(administration);
         MapUserEndpoints(administration);
-        MapProfileEndpoints<Client>(
-            administration,
-            "clients",
-            "Client",
-            UserRoleIds.Client,
-            static () => new Client
-            {
-                DisplayName = string.Empty,
-                FullName = string.Empty,
-                Nif = string.Empty,
-                Email = string.Empty,
-                PhoneNumber = string.Empty,
-                Address = string.Empty
-            });
-        MapProfileEndpoints<Architect>(
-            administration,
-            "architects",
-            "Architect",
-            UserRoleIds.Architect,
-            static () => new Architect
-            {
-                DisplayName = string.Empty,
-                FullName = string.Empty,
-                Nif = string.Empty,
-                Email = string.Empty,
-                PhoneNumber = string.Empty,
-                Address = string.Empty
-            });
-        MapProfileEndpoints<Company>(
-            administration,
-            "companies",
-            "Company",
-            UserRoleIds.Company,
-            static () => new Company
-            {
-                DisplayName = string.Empty,
-                FullName = string.Empty,
-                Nif = string.Empty,
-                Email = string.Empty,
-                PhoneNumber = string.Empty,
-                Address = string.Empty
-            });
+        MapEmployeeEndpoints(administration);
+        MapClientEndpoints(administration);
+        MapCompanyEndpoints(administration);
 
         return endpoints;
+    }
+
+    private static void MapRoleEndpoints(RouteGroupBuilder administration)
+    {
+        administration.MapGet("/roles", GetRoles)
+            .WithName("GetAdministrationRoles")
+            .Produces<IReadOnlyList<RoleResponse>>();
     }
 
     private static void MapUserEndpoints(RouteGroupBuilder administration)
@@ -69,19 +38,16 @@ public static class AdministrationEndpoints
         users.MapGet("/", GetUsers)
             .WithName("GetAdministrationUsers")
             .Produces<IReadOnlyList<UserResponse>>();
-
         users.MapGet("/{id:long}", GetUser)
             .WithName("GetAdministrationUser")
             .Produces<UserResponse>()
             .Produces(StatusCodes.Status404NotFound);
-
         users.MapPost("/", CreateUser)
             .WithName("CreateAdministrationUser")
             .Accepts<CreateUserRequest>("application/json")
             .Produces<UserResponse>(StatusCodes.Status201Created)
             .Produces<AdministrationErrorResponse>(StatusCodes.Status409Conflict)
             .ProducesValidationProblem();
-
         users.MapPut("/{id:long}", UpdateUser)
             .WithName("UpdateAdministrationUser")
             .Accepts<UpdateUserRequest>("application/json")
@@ -89,102 +55,123 @@ public static class AdministrationEndpoints
             .Produces(StatusCodes.Status404NotFound)
             .Produces<AdministrationErrorResponse>(StatusCodes.Status409Conflict)
             .ProducesValidationProblem();
-
         users.MapDelete("/{id:long}", DeleteUser)
             .WithName("DeleteAdministrationUser")
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status404NotFound);
     }
 
-    private static void MapProfileEndpoints<TProfile>(
-        RouteGroupBuilder administration,
-        string route,
-        string resourceName,
-        long requiredRoleId,
-        Func<TProfile> profileFactory)
-        where TProfile : class, IUserProfile
+    private static void MapEmployeeEndpoints(RouteGroupBuilder administration)
     {
-        var profiles = administration.MapGroup($"/{route}");
+        var employees = administration.MapGroup("/employees");
 
-        profiles.MapGet(
-                "/",
-                (BlueprintDbContext dbContext, CancellationToken cancellationToken) =>
-                    GetProfiles<TProfile>(dbContext, cancellationToken))
-            .WithName($"GetAdministration{resourceName}s")
-            .Produces<IReadOnlyList<ProfileResponse>>();
-
-        profiles.MapGet(
-                "/{id:long}",
-                (long id, BlueprintDbContext dbContext, CancellationToken cancellationToken) =>
-                    GetProfile<TProfile>(id, dbContext, cancellationToken))
-            .WithName($"GetAdministration{resourceName}")
-            .Produces<ProfileResponse>()
+        employees.MapGet("/", GetEmployees)
+            .WithName("GetAdministrationEmployees")
+            .Produces<IReadOnlyList<EmployeeResponse>>();
+        employees.MapGet("/{id:long}", GetEmployee)
+            .WithName("GetAdministrationEmployee")
+            .Produces<EmployeeResponse>()
             .Produces(StatusCodes.Status404NotFound);
-
-        profiles.MapPost(
-                "/",
-                (CreateProfileRequest? request,
-                    BlueprintDbContext dbContext,
-                    CancellationToken cancellationToken) =>
-                    CreateProfile<TProfile>(
-                        request,
-                        route,
-                        requiredRoleId,
-                        profileFactory,
-                        dbContext,
-                        cancellationToken))
-            .WithName($"CreateAdministration{resourceName}")
-            .Accepts<CreateProfileRequest>("application/json")
-            .Produces<ProfileResponse>(StatusCodes.Status201Created)
+        employees.MapPost("/", CreateEmployee)
+            .WithName("CreateAdministrationEmployee")
+            .Accepts<CreateEmployeeRequest>("application/json")
+            .Produces<EmployeeResponse>(StatusCodes.Status201Created)
             .Produces<AdministrationErrorResponse>(StatusCodes.Status404NotFound)
             .Produces<AdministrationErrorResponse>(StatusCodes.Status409Conflict)
             .ProducesValidationProblem();
-
-        profiles.MapPut(
-                "/{id:long}",
-                (long id,
-                    UpdateProfileRequest? request,
-                    BlueprintDbContext dbContext,
-                    CancellationToken cancellationToken) =>
-                    UpdateProfile<TProfile>(
-                        id,
-                        request,
-                        dbContext,
-                        cancellationToken))
-            .WithName($"UpdateAdministration{resourceName}")
-            .Accepts<UpdateProfileRequest>("application/json")
-            .Produces<ProfileResponse>()
+        employees.MapPut("/{id:long}", UpdateEmployee)
+            .WithName("UpdateAdministrationEmployee")
+            .Accepts<UpdateEmployeeRequest>("application/json")
+            .Produces<EmployeeResponse>()
             .Produces(StatusCodes.Status404NotFound)
+            .Produces<AdministrationErrorResponse>(StatusCodes.Status409Conflict)
             .ProducesValidationProblem();
-
-        profiles.MapDelete(
-                "/{id:long}",
-                (long id, BlueprintDbContext dbContext, CancellationToken cancellationToken) =>
-                    DeleteProfile<TProfile>(id, dbContext, cancellationToken))
-            .WithName($"DeleteAdministration{resourceName}")
+        employees.MapDelete("/{id:long}", DeleteEmployee)
+            .WithName("DeleteAdministrationEmployee")
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status404NotFound);
+    }
+
+    private static void MapClientEndpoints(RouteGroupBuilder administration)
+    {
+        var clients = administration.MapGroup("/clients");
+
+        clients.MapGet("/", GetClients)
+            .WithName("GetAdministrationClients")
+            .Produces<IReadOnlyList<ClientResponse>>();
+        clients.MapGet("/{id:long}", GetClient)
+            .WithName("GetAdministrationClient")
+            .Produces<ClientResponse>()
+            .Produces(StatusCodes.Status404NotFound);
+        clients.MapPost("/", CreateClient)
+            .WithName("CreateAdministrationClient")
+            .Accepts<CreateClientRequest>("application/json")
+            .Produces<ClientResponse>(StatusCodes.Status201Created)
+            .Produces<AdministrationErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<AdministrationErrorResponse>(StatusCodes.Status409Conflict)
+            .ProducesValidationProblem();
+        clients.MapPut("/{id:long}", UpdateClient)
+            .WithName("UpdateAdministrationClient")
+            .Accepts<UpdateClientRequest>("application/json")
+            .Produces<ClientResponse>()
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces<AdministrationErrorResponse>(StatusCodes.Status409Conflict)
+            .ProducesValidationProblem();
+        clients.MapDelete("/{id:long}", DeleteClient)
+            .WithName("DeleteAdministrationClient")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status404NotFound);
+    }
+
+    private static void MapCompanyEndpoints(RouteGroupBuilder administration)
+    {
+        var companies = administration.MapGroup("/companies");
+
+        companies.MapGet("/", GetCompanies)
+            .WithName("GetAdministrationCompanies")
+            .Produces<IReadOnlyList<CompanyResponse>>();
+        companies.MapGet("/{id:long}", GetCompany)
+            .WithName("GetAdministrationCompany")
+            .Produces<CompanyResponse>()
+            .Produces(StatusCodes.Status404NotFound);
+        companies.MapPost("/", CreateCompany)
+            .WithName("CreateAdministrationCompany")
+            .Accepts<CreateCompanyRequest>("application/json")
+            .Produces<CompanyResponse>(StatusCodes.Status201Created)
+            .ProducesValidationProblem();
+        companies.MapPut("/{id:long}", UpdateCompany)
+            .WithName("UpdateAdministrationCompany")
+            .Accepts<UpdateCompanyRequest>("application/json")
+            .Produces<CompanyResponse>()
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces<AdministrationErrorResponse>(StatusCodes.Status409Conflict)
+            .ProducesValidationProblem();
+        companies.MapDelete("/{id:long}", DeleteCompany)
+            .WithName("DeleteAdministrationCompany")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status404NotFound);
+    }
+
+    private static async Task<IResult> GetRoles(
+        BlueprintDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var roles = await dbContext.Roles
+            .AsNoTracking()
+            .OrderBy(candidate => candidate.Id)
+            .Select(candidate => new RoleResponse(candidate.Id, candidate.Name))
+            .ToListAsync(cancellationToken);
+        return TypedResults.Ok(roles);
     }
 
     private static async Task<IResult> GetUsers(
         BlueprintDbContext dbContext,
         CancellationToken cancellationToken)
     {
-        var users = await dbContext.Users
-            .AsNoTracking()
+        var users = await UserQuery(dbContext)
             .OrderBy(candidate => candidate.Id)
-            .Select(candidate => new UserResponse(
-                candidate.Id,
-                candidate.RoleId,
-                candidate.Role!.Role,
-                candidate.Username,
-                candidate.CreatedAt,
-                candidate.CreatedBy,
-                candidate.UpdatedAt,
-                candidate.UpdatedBy))
             .ToListAsync(cancellationToken);
-
-        return TypedResults.Ok(users);
+        return TypedResults.Ok(users.Select(ToResponse).ToArray());
     }
 
     private static async Task<IResult> GetUser(
@@ -192,8 +179,9 @@ public static class AdministrationEndpoints
         BlueprintDbContext dbContext,
         CancellationToken cancellationToken)
     {
-        var user = await FindUserResponse(id, dbContext, cancellationToken);
-        return user is null ? TypedResults.NotFound() : TypedResults.Ok(user);
+        var user = await UserQuery(dbContext)
+            .SingleOrDefaultAsync(candidate => candidate.Id == id, cancellationToken);
+        return user is null ? TypedResults.NotFound() : TypedResults.Ok(ToResponse(user));
     }
 
     private static async Task<IResult> CreateUser(
@@ -201,52 +189,26 @@ public static class AdministrationEndpoints
         BlueprintDbContext dbContext,
         CancellationToken cancellationToken)
     {
-        var errors = ValidateUser(request?.RoleId, request?.Username, request?.Password, true);
+        var errors = ValidateCredentials(request?.Username, request?.Password, true);
         if (errors.Count > 0)
         {
             return TypedResults.ValidationProblem(errors);
         }
 
         var validRequest = request!;
-        if (!await dbContext.UserRoles.AnyAsync(
-                candidate => candidate.Id == validRequest.RoleId,
-                cancellationToken))
-        {
-            return TypedResults.ValidationProblem(
-                new Dictionary<string, string[]>
-                {
-                    ["roleId"] = ["The selected role does not exist."]
-                });
-        }
-
         var normalizedUsername = validRequest.Username.Trim();
-        if (await dbContext.Users.AnyAsync(
-                candidate => candidate.Username == normalizedUsername,
-                cancellationToken))
+        if (await UsernameExists(normalizedUsername, null, dbContext, cancellationToken))
         {
             return Conflict("A user with this username already exists.");
         }
 
-        var now = DateTimeOffset.UtcNow;
-        var user = new User
-        {
-            RoleId = validRequest.RoleId,
-            Username = normalizedUsername,
-            Password = string.Empty,
-            CreatedAt = now,
-            CreatedBy = AuditActors.System,
-            UpdatedAt = now,
-            UpdatedBy = AuditActors.System
-        };
-        user.Password = new PasswordHasher<User>().HashPassword(user, validRequest.Password);
-
+        var user = NewUser(normalizedUsername, validRequest.Password);
+        user.UserRoles.Add(new UserRole { RoleId = RoleIds.PlatformAdmin });
         dbContext.Users.Add(user);
         await dbContext.SaveChangesAsync(cancellationToken);
-        await dbContext.Entry(user).Reference(candidate => candidate.Role).LoadAsync(cancellationToken);
+        await LoadUserRoles(user, dbContext, cancellationToken);
 
-        return TypedResults.Created(
-            $"/api/admin/users/{user.Id}",
-            ToResponse(user));
+        return TypedResults.Created($"/api/admin/users/{user.Id}", ToResponse(user));
     }
 
     private static async Task<IResult> UpdateUser(
@@ -255,68 +217,64 @@ public static class AdministrationEndpoints
         BlueprintDbContext dbContext,
         CancellationToken cancellationToken)
     {
-        var errors = ValidateUser(request?.RoleId, request?.Username, request?.Password, false);
+        var errors = ValidateCredentials(request?.Username, request?.Password, false);
+        ValidateRoleIds(request?.RoleIds, errors);
         if (errors.Count > 0)
         {
             return TypedResults.ValidationProblem(errors);
         }
 
-        var validRequest = request!;
         var user = await dbContext.Users
-            .Include(candidate => candidate.Role)
+            .Include(candidate => candidate.UserRoles)
+            .Include(candidate => candidate.Employee)
+            .Include(candidate => candidate.Client)
             .SingleOrDefaultAsync(candidate => candidate.Id == id, cancellationToken);
         if (user is null)
         {
             return TypedResults.NotFound();
         }
 
-        if (!await dbContext.UserRoles.AnyAsync(
-                candidate => candidate.Id == validRequest.RoleId,
-                cancellationToken))
+        var roleIds = request!.RoleIds.Distinct().Order().ToArray();
+        if (!RolesMatchProfile(user, roleIds))
         {
-            return TypedResults.ValidationProblem(
-                new Dictionary<string, string[]>
-                {
-                    ["roleId"] = ["The selected role does not exist."]
-                });
+            return Conflict("The selected roles do not match the user's account category.");
         }
 
-        var requiredProfileRole = await GetProfileRole(id, dbContext, cancellationToken);
-        if (requiredProfileRole.HasMultipleProfiles)
-        {
-            return Conflict(
-                "This user has more than one profile type. Remove the extra profiles before changing the user.");
-        }
-
-        if (requiredProfileRole.RoleId is not null &&
-            requiredProfileRole.RoleId != validRequest.RoleId)
-        {
-            return Conflict(
-                "The selected role does not match the user's existing profile.");
-        }
-
-        var normalizedUsername = validRequest.Username.Trim();
-        if (await dbContext.Users.AnyAsync(
-                candidate => candidate.Id != id &&
-                    candidate.Username == normalizedUsername,
-                cancellationToken))
+        var normalizedUsername = request.Username.Trim();
+        if (await UsernameExists(normalizedUsername, id, dbContext, cancellationToken))
         {
             return Conflict("A user with this username already exists.");
         }
 
-        user.RoleId = validRequest.RoleId;
+        var removedRoles = user.UserRoles
+            .Where(candidate => !roleIds.Contains(candidate.RoleId))
+            .ToArray();
+        foreach (var removedRole in removedRoles)
+        {
+            user.UserRoles.Remove(removedRole);
+            dbContext.UserRoles.Remove(removedRole);
+        }
+        foreach (var roleId in roleIds.Where(
+                     roleId => user.UserRoles.All(
+                         candidate => candidate.RoleId != roleId)))
+        {
+            user.UserRoles.Add(new UserRole
+            {
+                UserId = user.Id,
+                RoleId = roleId
+            });
+        }
         user.Username = normalizedUsername;
         user.UpdatedAt = DateTimeOffset.UtcNow;
         user.UpdatedBy = AuditActors.System;
-        if (!string.IsNullOrEmpty(validRequest.Password))
+        if (!string.IsNullOrEmpty(request.Password))
         {
-            user.Password = new PasswordHasher<User>()
-                .HashPassword(user, validRequest.Password);
+            user.Password = new PasswordHasher<User>().HashPassword(user, request.Password);
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
-        var response = await FindUserResponse(id, dbContext, cancellationToken);
-        return TypedResults.Ok(response!);
+        await LoadUserRoles(user, dbContext, cancellationToken);
+        return TypedResults.Ok(ToResponse(user));
     }
 
     private static async Task<IResult> DeleteUser(
@@ -335,221 +293,566 @@ public static class AdministrationEndpoints
         return TypedResults.NoContent();
     }
 
-    private static async Task<IResult> GetProfiles<TProfile>(
+    private static async Task<IResult> GetEmployees(
         BlueprintDbContext dbContext,
         CancellationToken cancellationToken)
-        where TProfile : class, IUserProfile
     {
-        var profiles = await dbContext.Set<TProfile>()
-            .AsNoTracking()
+        var employees = await dbContext.Employees.AsNoTracking()
             .OrderBy(candidate => candidate.Id)
             .Select(candidate => ToResponse(candidate))
             .ToListAsync(cancellationToken);
-
-        return TypedResults.Ok(profiles);
+        return TypedResults.Ok(employees);
     }
 
-    private static async Task<IResult> GetProfile<TProfile>(
+    private static async Task<IResult> GetEmployee(
         long id,
         BlueprintDbContext dbContext,
         CancellationToken cancellationToken)
-        where TProfile : class, IUserProfile
     {
-        var profile = await dbContext.Set<TProfile>()
-            .AsNoTracking()
+        var employee = await dbContext.Employees.AsNoTracking()
             .SingleOrDefaultAsync(candidate => candidate.Id == id, cancellationToken);
-
-        return profile is null
+        return employee is null
             ? TypedResults.NotFound()
-            : TypedResults.Ok(ToResponse(profile));
+            : TypedResults.Ok(ToResponse(employee));
     }
 
-    private static async Task<IResult> CreateProfile<TProfile>(
-        CreateProfileRequest? request,
-        string route,
-        long requiredRoleId,
-        Func<TProfile> profileFactory,
+    private static async Task<IResult> CreateEmployee(
+        CreateEmployeeRequest? request,
         BlueprintDbContext dbContext,
         CancellationToken cancellationToken)
-        where TProfile : class, IUserProfile
     {
-        var errors = ValidateProfile(request);
+        var errors = ValidateCredentials(request?.Username, request?.Password, true);
+        ValidateProfile(request, errors);
+        ValidateEmployeeRoles(request?.RoleIds, errors);
+        if (request is not null && request.CompanyId <= 0)
+        {
+            errors["companyId"] = ["Company is required."];
+        }
         if (errors.Count > 0)
         {
             return TypedResults.ValidationProblem(errors);
         }
 
         var validRequest = request!;
-        var user = await dbContext.Users
-            .AsNoTracking()
-            .SingleOrDefaultAsync(candidate => candidate.Id == validRequest.UserId, cancellationToken);
-        if (user is null)
+        var companyResult = await RequireActiveCompany(
+            validRequest.CompanyId, dbContext, cancellationToken);
+        if (companyResult is not null)
         {
-            return TypedResults.NotFound(
-                new AdministrationErrorResponse("The selected user does not exist."));
+            return companyResult;
         }
 
-        if (user.RoleId != requiredRoleId)
+        var normalizedUsername = validRequest.Username.Trim();
+        if (await UsernameExists(normalizedUsername, null, dbContext, cancellationToken))
         {
-            return Conflict("The selected user's role does not match this profile type.");
+            return Conflict("A user with this username already exists.");
         }
 
-        if (await UserHasAnyProfile(validRequest.UserId, dbContext, cancellationToken))
+        var user = NewUser(normalizedUsername, validRequest.Password);
+        foreach (var roleId in validRequest.RoleIds.Distinct())
         {
-            return Conflict("The selected user already has a profile.");
+            user.UserRoles.Add(new UserRole { RoleId = roleId });
         }
 
-        var profile = profileFactory();
-        profile.UserId = validRequest.UserId;
-        Apply(profile, validRequest);
-
-        dbContext.Set<TProfile>().Add(profile);
+        var employee = new Employee
+        {
+            User = user,
+            CompanyId = validRequest.CompanyId,
+            DisplayName = validRequest.DisplayName.Trim(),
+            FullName = validRequest.FullName.Trim(),
+            Nif = validRequest.Nif.Trim(),
+            Email = validRequest.Email.Trim(),
+            PhoneNumber = validRequest.PhoneNumber.Trim(),
+            Address = validRequest.Address.Trim()
+        };
+        dbContext.Employees.Add(employee);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return TypedResults.Created(
-            $"/api/admin/{route}/{profile.Id}",
-            ToResponse(profile));
+            $"/api/admin/employees/{employee.Id}",
+            ToResponse(employee));
     }
 
-    private static async Task<IResult> UpdateProfile<TProfile>(
+    private static async Task<IResult> UpdateEmployee(
         long id,
-        UpdateProfileRequest? request,
+        UpdateEmployeeRequest? request,
         BlueprintDbContext dbContext,
         CancellationToken cancellationToken)
-        where TProfile : class, IUserProfile
     {
-        var errors = ValidateProfile(request);
+        var errors = new Dictionary<string, string[]>();
+        ValidateProfile(request, errors);
+        if (request is not null && request.CompanyId <= 0)
+        {
+            errors["companyId"] = ["Company is required."];
+        }
         if (errors.Count > 0)
         {
             return TypedResults.ValidationProblem(errors);
         }
 
-        var profile = await dbContext.Set<TProfile>()
+        var employee = await dbContext.Employees
             .SingleOrDefaultAsync(candidate => candidate.Id == id, cancellationToken);
-        if (profile is null)
+        if (employee is null)
         {
             return TypedResults.NotFound();
         }
 
-        Apply(profile, request!);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        if (employee.CompanyId != request!.CompanyId)
+        {
+            var companyResult = await RequireActiveCompany(
+                request.CompanyId, dbContext, cancellationToken);
+            if (companyResult is not null)
+            {
+                return companyResult;
+            }
+        }
 
-        return TypedResults.Ok(ToResponse(profile));
+        Apply(employee, request);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return TypedResults.Ok(ToResponse(employee));
     }
 
-    private static async Task<IResult> DeleteProfile<TProfile>(
+    private static async Task<IResult> DeleteEmployee(
         long id,
         BlueprintDbContext dbContext,
         CancellationToken cancellationToken)
-        where TProfile : class, IUserProfile
     {
-        var profile = await dbContext.Set<TProfile>().FindAsync([id], cancellationToken);
-        if (profile is null)
+        var employee = await dbContext.Employees
+            .SingleOrDefaultAsync(candidate => candidate.Id == id, cancellationToken);
+        if (employee is null)
         {
             return TypedResults.NotFound();
         }
 
-        dbContext.Set<TProfile>().Remove(profile);
+        var user = await dbContext.Users.FindAsync([employee.UserId], cancellationToken);
+        dbContext.Users.Remove(user!);
         await dbContext.SaveChangesAsync(cancellationToken);
         return TypedResults.NoContent();
     }
 
-    private static async Task<UserResponse?> FindUserResponse(
-        long id,
-        BlueprintDbContext dbContext,
-        CancellationToken cancellationToken) =>
-        await dbContext.Users
-            .AsNoTracking()
-            .Where(candidate => candidate.Id == id)
-            .Select(candidate => new UserResponse(
-                candidate.Id,
-                candidate.RoleId,
-                candidate.Role!.Role,
-                candidate.Username,
-                candidate.CreatedAt,
-                candidate.CreatedBy,
-                candidate.UpdatedAt,
-                candidate.UpdatedBy))
-            .SingleOrDefaultAsync(cancellationToken);
-
-    private static async Task<(long? RoleId, bool HasMultipleProfiles)> GetProfileRole(
-        long userId,
+    private static async Task<IResult> GetClients(
         BlueprintDbContext dbContext,
         CancellationToken cancellationToken)
     {
-        var roles = new List<long>(3);
-        if (await dbContext.Clients.AnyAsync(
-                candidate => candidate.UserId == userId,
-                cancellationToken))
-        {
-            roles.Add(UserRoleIds.Client);
-        }
-
-        if (await dbContext.Companies.AnyAsync(
-                candidate => candidate.UserId == userId,
-                cancellationToken))
-        {
-            roles.Add(UserRoleIds.Company);
-        }
-
-        if (await dbContext.Architects.AnyAsync(
-                candidate => candidate.UserId == userId,
-                cancellationToken))
-        {
-            roles.Add(UserRoleIds.Architect);
-        }
-
-        return (roles.Count == 1 ? roles[0] : null, roles.Count > 1);
+        var clients = await dbContext.Clients.AsNoTracking()
+            .OrderBy(candidate => candidate.Id)
+            .Select(candidate => ToResponse(candidate))
+            .ToListAsync(cancellationToken);
+        return TypedResults.Ok(clients);
     }
 
-    private static async Task<bool> UserHasAnyProfile(
-        long userId,
+    private static async Task<IResult> GetClient(
+        long id,
+        BlueprintDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var client = await dbContext.Clients.AsNoTracking()
+            .SingleOrDefaultAsync(candidate => candidate.Id == id, cancellationToken);
+        return client is null
+            ? TypedResults.NotFound()
+            : TypedResults.Ok(ToResponse(client));
+    }
+
+    private static async Task<IResult> CreateClient(
+        CreateClientRequest? request,
+        BlueprintDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var errors = ValidateCredentials(request?.Username, request?.Password, true);
+        ValidateProfile(request, errors);
+        if (errors.Count > 0)
+        {
+            return TypedResults.ValidationProblem(errors);
+        }
+
+        var validRequest = request!;
+        if (validRequest.CompanyId is long companyId)
+        {
+            var companyResult = await RequireActiveCompany(
+                companyId, dbContext, cancellationToken);
+            if (companyResult is not null)
+            {
+                return companyResult;
+            }
+        }
+
+        var normalizedUsername = validRequest.Username.Trim();
+        if (await UsernameExists(normalizedUsername, null, dbContext, cancellationToken))
+        {
+            return Conflict("A user with this username already exists.");
+        }
+
+        var user = NewUser(normalizedUsername, validRequest.Password);
+        user.UserRoles.Add(new UserRole { RoleId = RoleIds.Client });
+        var client = new Client
+        {
+            User = user,
+            CompanyId = validRequest.CompanyId,
+            DisplayName = validRequest.DisplayName.Trim(),
+            FullName = validRequest.FullName.Trim(),
+            Nif = validRequest.Nif.Trim(),
+            Email = validRequest.Email.Trim(),
+            PhoneNumber = validRequest.PhoneNumber.Trim(),
+            Address = validRequest.Address.Trim()
+        };
+        dbContext.Clients.Add(client);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return TypedResults.Created($"/api/admin/clients/{client.Id}", ToResponse(client));
+    }
+
+    private static async Task<IResult> UpdateClient(
+        long id,
+        UpdateClientRequest? request,
+        BlueprintDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var errors = new Dictionary<string, string[]>();
+        ValidateProfile(request, errors);
+        if (errors.Count > 0)
+        {
+            return TypedResults.ValidationProblem(errors);
+        }
+
+        var client = await dbContext.Clients
+            .SingleOrDefaultAsync(candidate => candidate.Id == id, cancellationToken);
+        if (client is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        if (client.CompanyId != request!.CompanyId &&
+            request.CompanyId is long companyId)
+        {
+            var companyResult = await RequireActiveCompany(
+                companyId, dbContext, cancellationToken);
+            if (companyResult is not null)
+            {
+                return companyResult;
+            }
+        }
+
+        Apply(client, request);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return TypedResults.Ok(ToResponse(client));
+    }
+
+    private static async Task<IResult> DeleteClient(
+        long id,
+        BlueprintDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var client = await dbContext.Clients
+            .SingleOrDefaultAsync(candidate => candidate.Id == id, cancellationToken);
+        if (client is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var user = await dbContext.Users.FindAsync([client.UserId], cancellationToken);
+        dbContext.Users.Remove(user!);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return TypedResults.NoContent();
+    }
+
+    private static async Task<IResult> GetCompanies(
+        BlueprintDbContext dbContext,
+        CancellationToken cancellationToken,
+        bool includeInactive = false)
+    {
+        var query = dbContext.Companies.AsNoTracking();
+        if (!includeInactive)
+        {
+            query = query.Where(candidate => candidate.IsActive);
+        }
+
+        var companies = await query
+            .OrderBy(candidate => candidate.Id)
+            .Select(candidate => ToResponse(candidate))
+            .ToListAsync(cancellationToken);
+        return TypedResults.Ok(companies);
+    }
+
+    private static async Task<IResult> GetCompany(
+        long id,
+        BlueprintDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var company = await dbContext.Companies.AsNoTracking()
+            .SingleOrDefaultAsync(candidate => candidate.Id == id, cancellationToken);
+        return company is null
+            ? TypedResults.NotFound()
+            : TypedResults.Ok(ToResponse(company));
+    }
+
+    private static async Task<IResult> CreateCompany(
+        CreateCompanyRequest? request,
+        BlueprintDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var errors = ValidateCompany(request);
+        if (errors.Count > 0)
+        {
+            return TypedResults.ValidationProblem(errors);
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var company = new Company
+        {
+            Name = request!.Name.Trim(),
+            LegalName = request.LegalName.Trim(),
+            Nif = request.Nif.Trim(),
+            Email = request.Email.Trim(),
+            PhoneNumber = request.PhoneNumber.Trim(),
+            Address = request.Address.Trim(),
+            IsActive = true,
+            CreatedAt = now,
+            CreatedBy = AuditActors.System,
+            UpdatedAt = now,
+            UpdatedBy = AuditActors.System
+        };
+        dbContext.Companies.Add(company);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return TypedResults.Created(
+            $"/api/admin/companies/{company.Id}",
+            ToResponse(company));
+    }
+
+    private static async Task<IResult> UpdateCompany(
+        long id,
+        UpdateCompanyRequest? request,
+        BlueprintDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var errors = ValidateCompany(request);
+        if (errors.Count > 0)
+        {
+            return TypedResults.ValidationProblem(errors);
+        }
+
+        var company = await dbContext.Companies
+            .SingleOrDefaultAsync(candidate => candidate.Id == id, cancellationToken);
+        if (company is null)
+        {
+            return TypedResults.NotFound();
+        }
+        if (!company.IsActive)
+        {
+            return Conflict("Inactive companies cannot be updated.");
+        }
+
+        company.Name = request!.Name.Trim();
+        company.LegalName = request.LegalName.Trim();
+        company.Nif = request.Nif.Trim();
+        company.Email = request.Email.Trim();
+        company.PhoneNumber = request.PhoneNumber.Trim();
+        company.Address = request.Address.Trim();
+        company.UpdatedAt = DateTimeOffset.UtcNow;
+        company.UpdatedBy = AuditActors.System;
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return TypedResults.Ok(ToResponse(company));
+    }
+
+    private static async Task<IResult> DeleteCompany(
+        long id,
+        BlueprintDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var company = await dbContext.Companies
+            .SingleOrDefaultAsync(candidate => candidate.Id == id, cancellationToken);
+        if (company is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        if (company.IsActive)
+        {
+            company.IsActive = false;
+            company.UpdatedAt = DateTimeOffset.UtcNow;
+            company.UpdatedBy = AuditActors.System;
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        return TypedResults.NoContent();
+    }
+
+    private static IQueryable<User> UserQuery(BlueprintDbContext dbContext) =>
+        dbContext.Users
+            .AsNoTracking()
+            .Include(candidate => candidate.UserRoles)
+                .ThenInclude(candidate => candidate.Role);
+
+    private static async Task LoadUserRoles(
+        User user,
+        BlueprintDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        await dbContext.Entry(user)
+            .Collection(candidate => candidate.UserRoles)
+            .Query()
+            .Include(candidate => candidate.Role)
+            .LoadAsync(cancellationToken);
+    }
+
+    private static User NewUser(string username, string password)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var user = new User
+        {
+            Username = username,
+            Password = string.Empty,
+            CreatedAt = now,
+            CreatedBy = AuditActors.System,
+            UpdatedAt = now,
+            UpdatedBy = AuditActors.System
+        };
+        user.Password = new PasswordHasher<User>().HashPassword(user, password);
+        return user;
+    }
+
+    private static async Task<bool> UsernameExists(
+        string username,
+        long? excludedUserId,
         BlueprintDbContext dbContext,
         CancellationToken cancellationToken) =>
-        await dbContext.Clients.AnyAsync(
-            candidate => candidate.UserId == userId,
-            cancellationToken) ||
-        await dbContext.Companies.AnyAsync(
-            candidate => candidate.UserId == userId,
-            cancellationToken) ||
-        await dbContext.Architects.AnyAsync(
-            candidate => candidate.UserId == userId,
+        await dbContext.Users.AnyAsync(
+            candidate => candidate.Username == username &&
+                (!excludedUserId.HasValue || candidate.Id != excludedUserId.Value),
             cancellationToken);
 
-    private static Dictionary<string, string[]> ValidateUser(
-        long? roleId,
+    private static bool RolesMatchProfile(User user, IReadOnlyCollection<long> roleIds)
+    {
+        var roles = roleIds.Order().ToArray();
+        if (user.Employee is not null)
+        {
+            return roles.SequenceEqual([RoleIds.Employee]) ||
+                roles.SequenceEqual([RoleIds.Employee, RoleIds.Architect]);
+        }
+        if (user.Client is not null)
+        {
+            return roles.SequenceEqual([RoleIds.Client]);
+        }
+
+        return roles.SequenceEqual([RoleIds.PlatformAdmin]);
+    }
+
+    private static async Task<IResult?> RequireActiveCompany(
+        long companyId,
+        BlueprintDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var company = await dbContext.Companies.AsNoTracking()
+            .Where(candidate => candidate.Id == companyId)
+            .Select(candidate => new { candidate.IsActive })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (company is null)
+        {
+            return TypedResults.NotFound(
+                new AdministrationErrorResponse("The selected company does not exist."));
+        }
+        if (!company.IsActive)
+        {
+            return Conflict("The selected company is inactive.");
+        }
+
+        return null;
+    }
+
+    private static Dictionary<string, string[]> ValidateCredentials(
         string? username,
         string? password,
         bool passwordRequired)
     {
         var errors = new Dictionary<string, string[]>();
-        if (roleId is null || roleId <= 0)
-        {
-            errors["roleId"] = ["Role is required."];
-        }
-
-        ValidateRequiredText(errors, "username", username, 256, "Username");
+        ValidateRequired(errors, "username", username, "Username", 256);
 
         if (passwordRequired && string.IsNullOrWhiteSpace(password))
         {
             errors["password"] = ["Password is required."];
         }
-        else if (!passwordRequired &&
-            password is not null &&
-            password.Length > 0 &&
-            string.IsNullOrWhiteSpace(password))
-        {
-            errors["password"] = ["Password must not contain only whitespace."];
-        }
         else if (password is not null && password.Length > MaximumPasswordLength)
         {
-            errors["password"] = [$"Password must not exceed {MaximumPasswordLength} characters."];
+            errors["password"] = [
+                $"Password must not exceed {MaximumPasswordLength} characters."
+            ];
         }
 
         return errors;
     }
 
-    private static Dictionary<string, string[]> ValidateProfile(CreateProfileRequest? request)
+    private static void ValidateRoleIds(
+        IReadOnlyList<long>? roleIds,
+        Dictionary<string, string[]> errors)
+    {
+        if (roleIds is null || roleIds.Count == 0)
+        {
+            errors["roleIds"] = ["At least one role is required."];
+            return;
+        }
+        if (roleIds.Any(candidate => candidate <= 0) ||
+            roleIds.Count != roleIds.Distinct().Count())
+        {
+            errors["roleIds"] = ["Role IDs must be positive and unique."];
+        }
+    }
+
+    private static void ValidateEmployeeRoles(
+        IReadOnlyList<long>? roleIds,
+        Dictionary<string, string[]> errors)
+    {
+        ValidateRoleIds(roleIds, errors);
+        if (errors.ContainsKey("roleIds"))
+        {
+            return;
+        }
+
+        var roles = roleIds!.Order().ToArray();
+        if (!roles.SequenceEqual([RoleIds.Employee]) &&
+            !roles.SequenceEqual([RoleIds.Employee, RoleIds.Architect]))
+        {
+            errors["roleIds"] = [
+                "Employees require the employee role and may additionally have the architect role."
+            ];
+        }
+    }
+
+    private static void ValidateProfile(
+        object? request,
+        Dictionary<string, string[]> errors)
+    {
+        if (request is null)
+        {
+            errors["request"] = ["A JSON request body is required."];
+            return;
+        }
+
+        var values = request switch
+        {
+            CreateEmployeeRequest value => (
+                value.DisplayName, value.FullName, value.Nif, value.Email,
+                value.PhoneNumber, value.Address),
+            UpdateEmployeeRequest value => (
+                value.DisplayName, value.FullName, value.Nif, value.Email,
+                value.PhoneNumber, value.Address),
+            CreateClientRequest value => (
+                value.DisplayName, value.FullName, value.Nif, value.Email,
+                value.PhoneNumber, value.Address),
+            UpdateClientRequest value => (
+                value.DisplayName, value.FullName, value.Nif, value.Email,
+                value.PhoneNumber, value.Address),
+            _ => throw new InvalidOperationException("Unsupported profile request.")
+        };
+
+        ValidateRequired(errors, "displayName", values.Item1, "Display name", 256);
+        ValidateRequired(errors, "fullName", values.Item2, "Full name", 512);
+        ValidateRequired(errors, "nif", values.Item3, "NIF", 32);
+        ValidateRequired(errors, "email", values.Item4, "Email", 320);
+        ValidateRequired(errors, "phoneNumber", values.Item5, "Phone number", 64);
+        ValidateRequired(errors, "address", values.Item6, "Address", 1024);
+    }
+
+    private static Dictionary<string, string[]> ValidateCompany(object? request)
     {
         var errors = new Dictionary<string, string[]>();
         if (request is null)
@@ -558,117 +861,117 @@ public static class AdministrationEndpoints
             return errors;
         }
 
-        if (request.UserId <= 0)
+        var values = request switch
         {
-            errors["userId"] = ["User is required."];
-        }
-
-        ValidateProfileText(
-            errors,
-            request.DisplayName,
-            request.FullName,
-            request.Nif,
-            request.Email,
-            request.PhoneNumber,
-            request.Address);
+            CreateCompanyRequest value => (
+                value.Name, value.LegalName, value.Nif, value.Email,
+                value.PhoneNumber, value.Address),
+            UpdateCompanyRequest value => (
+                value.Name, value.LegalName, value.Nif, value.Email,
+                value.PhoneNumber, value.Address),
+            _ => throw new InvalidOperationException("Unsupported company request.")
+        };
+        ValidateRequired(errors, "name", values.Item1, "Name", 256);
+        ValidateRequired(errors, "legalName", values.Item2, "Legal name", 512);
+        ValidateRequired(errors, "nif", values.Item3, "NIF", 32);
+        ValidateRequired(errors, "email", values.Item4, "Email", 320);
+        ValidateRequired(errors, "phoneNumber", values.Item5, "Phone number", 64);
+        ValidateRequired(errors, "address", values.Item6, "Address", 1024);
         return errors;
     }
 
-    private static Dictionary<string, string[]> ValidateProfile(UpdateProfileRequest? request)
-    {
-        var errors = new Dictionary<string, string[]>();
-        if (request is null)
-        {
-            errors["request"] = ["A JSON request body is required."];
-            return errors;
-        }
-
-        ValidateProfileText(
-            errors,
-            request.DisplayName,
-            request.FullName,
-            request.Nif,
-            request.Email,
-            request.PhoneNumber,
-            request.Address);
-        return errors;
-    }
-
-    private static void ValidateProfileText(
-        Dictionary<string, string[]> errors,
-        string? displayName,
-        string? fullName,
-        string? nif,
-        string? email,
-        string? phoneNumber,
-        string? address)
-    {
-        ValidateRequiredText(errors, "displayName", displayName, 256, "Display name");
-        ValidateRequiredText(errors, "fullName", fullName, 512, "Full name");
-        ValidateRequiredText(errors, "nif", nif, 32, "NIF");
-        ValidateRequiredText(errors, "email", email, 320, "Email");
-        ValidateRequiredText(errors, "phoneNumber", phoneNumber, 64, "Phone number");
-        ValidateRequiredText(errors, "address", address, 1024, "Address");
-    }
-
-    private static void ValidateRequiredText(
+    private static void ValidateRequired(
         Dictionary<string, string[]> errors,
         string key,
         string? value,
-        int maximumLength,
-        string displayName)
+        string label,
+        int maximumLength)
     {
         if (string.IsNullOrWhiteSpace(value))
         {
-            errors[key] = [$"{displayName} is required."];
+            errors[key] = [$"{label} is required."];
         }
         else if (value.Length > maximumLength)
         {
-            errors[key] = [$"{displayName} must not exceed {maximumLength} characters."];
+            errors[key] = [$"{label} must not exceed {maximumLength} characters."];
         }
     }
 
-    private static void Apply(IUserProfile profile, CreateProfileRequest request)
+    private static void Apply(Employee employee, UpdateEmployeeRequest request)
     {
-        profile.DisplayName = request.DisplayName.Trim();
-        profile.FullName = request.FullName.Trim();
-        profile.Nif = request.Nif.Trim();
-        profile.Email = request.Email.Trim();
-        profile.PhoneNumber = request.PhoneNumber.Trim();
-        profile.Address = request.Address.Trim();
+        employee.CompanyId = request.CompanyId;
+        employee.DisplayName = request.DisplayName.Trim();
+        employee.FullName = request.FullName.Trim();
+        employee.Nif = request.Nif.Trim();
+        employee.Email = request.Email.Trim();
+        employee.PhoneNumber = request.PhoneNumber.Trim();
+        employee.Address = request.Address.Trim();
     }
 
-    private static void Apply(IUserProfile profile, UpdateProfileRequest request)
+    private static void Apply(Client client, UpdateClientRequest request)
     {
-        profile.DisplayName = request.DisplayName.Trim();
-        profile.FullName = request.FullName.Trim();
-        profile.Nif = request.Nif.Trim();
-        profile.Email = request.Email.Trim();
-        profile.PhoneNumber = request.PhoneNumber.Trim();
-        profile.Address = request.Address.Trim();
+        client.CompanyId = request.CompanyId;
+        client.DisplayName = request.DisplayName.Trim();
+        client.FullName = request.FullName.Trim();
+        client.Nif = request.Nif.Trim();
+        client.Email = request.Email.Trim();
+        client.PhoneNumber = request.PhoneNumber.Trim();
+        client.Address = request.Address.Trim();
     }
 
     private static UserResponse ToResponse(User user) =>
         new(
             user.Id,
-            user.RoleId,
-            user.Role!.Role,
             user.Username,
+            user.UserRoles
+                .OrderBy(candidate => candidate.RoleId)
+                .Select(candidate => new RoleResponse(
+                    candidate.RoleId,
+                    candidate.Role!.Name))
+                .ToArray(),
             user.CreatedAt,
             user.CreatedBy,
             user.UpdatedAt,
             user.UpdatedBy);
 
-    private static ProfileResponse ToResponse(IUserProfile profile) =>
+    private static EmployeeResponse ToResponse(Employee employee) =>
         new(
-            profile.Id,
-            profile.UserId,
-            profile.DisplayName,
-            profile.FullName,
-            profile.Nif,
-            profile.Email,
-            profile.PhoneNumber,
-            profile.Address);
+            employee.Id,
+            employee.UserId,
+            employee.CompanyId,
+            employee.DisplayName,
+            employee.FullName,
+            employee.Nif,
+            employee.Email,
+            employee.PhoneNumber,
+            employee.Address);
+
+    private static ClientResponse ToResponse(Client client) =>
+        new(
+            client.Id,
+            client.UserId,
+            client.CompanyId,
+            client.DisplayName,
+            client.FullName,
+            client.Nif,
+            client.Email,
+            client.PhoneNumber,
+            client.Address);
+
+    private static CompanyResponse ToResponse(Company company) =>
+        new(
+            company.Id,
+            company.Name,
+            company.LegalName,
+            company.Nif,
+            company.Email,
+            company.PhoneNumber,
+            company.Address,
+            company.IsActive,
+            company.CreatedAt,
+            company.CreatedBy,
+            company.UpdatedAt,
+            company.UpdatedBy);
 
     private static IResult Conflict(string error) =>
         TypedResults.Conflict(new AdministrationErrorResponse(error));

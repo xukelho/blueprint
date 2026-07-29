@@ -9,7 +9,7 @@ import {
   User,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { clearAuthenticatedRole, setAuthenticatedRole } from "../auth";
+import { setAuthenticatedRoles } from "../auth";
 
 type FieldErrors = {
   username?: string;
@@ -18,7 +18,7 @@ type FieldErrors = {
 
 type LoginResponse = {
   status: string;
-  role?: string;
+  roles?: string[];
 };
 
 function LoginPage() {
@@ -61,10 +61,7 @@ function LoginPage() {
       if (response.ok) {
         const result = (await response.json()) as LoginResponse;
         if (result.status === "success") {
-          clearAuthenticatedRole();
-          if (result.role) {
-            setAuthenticatedRole(result.role);
-          }
+          setAuthenticatedRoles(result.roles ?? []);
           navigate("/dashboard", { replace: true });
           return;
         }

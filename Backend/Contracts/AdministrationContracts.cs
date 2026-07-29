@@ -2,28 +2,31 @@ namespace Blueprint.Api.Contracts;
 
 public sealed record AdministrationErrorResponse(string Error);
 
+public sealed record RoleResponse(long Id, string Name);
+
 public sealed record CreateUserRequest(
-    long RoleId,
     string Username,
     string Password);
 
 public sealed record UpdateUserRequest(
-    long RoleId,
     string Username,
-    string? Password);
+    string? Password,
+    IReadOnlyList<long> RoleIds);
 
 public sealed record UserResponse(
     long Id,
-    long RoleId,
-    string Role,
     string Username,
+    IReadOnlyList<RoleResponse> Roles,
     DateTimeOffset CreatedAt,
     long CreatedBy,
     DateTimeOffset UpdatedAt,
     long UpdatedBy);
 
-public sealed record CreateProfileRequest(
-    long UserId,
+public sealed record CreateEmployeeRequest(
+    string Username,
+    string Password,
+    IReadOnlyList<long> RoleIds,
+    long CompanyId,
     string DisplayName,
     string FullName,
     string Nif,
@@ -31,7 +34,8 @@ public sealed record CreateProfileRequest(
     string PhoneNumber,
     string Address);
 
-public sealed record UpdateProfileRequest(
+public sealed record UpdateEmployeeRequest(
+    long CompanyId,
     string DisplayName,
     string FullName,
     string Nif,
@@ -39,12 +43,74 @@ public sealed record UpdateProfileRequest(
     string PhoneNumber,
     string Address);
 
-public sealed record ProfileResponse(
+public sealed record EmployeeResponse(
     long Id,
     long UserId,
+    long CompanyId,
     string DisplayName,
     string FullName,
     string Nif,
     string Email,
     string PhoneNumber,
     string Address);
+
+public sealed record CreateClientRequest(
+    string Username,
+    string Password,
+    long? CompanyId,
+    string DisplayName,
+    string FullName,
+    string Nif,
+    string Email,
+    string PhoneNumber,
+    string Address);
+
+public sealed record UpdateClientRequest(
+    long? CompanyId,
+    string DisplayName,
+    string FullName,
+    string Nif,
+    string Email,
+    string PhoneNumber,
+    string Address);
+
+public sealed record ClientResponse(
+    long Id,
+    long UserId,
+    long? CompanyId,
+    string DisplayName,
+    string FullName,
+    string Nif,
+    string Email,
+    string PhoneNumber,
+    string Address);
+
+public sealed record CreateCompanyRequest(
+    string Name,
+    string LegalName,
+    string Nif,
+    string Email,
+    string PhoneNumber,
+    string Address);
+
+public sealed record UpdateCompanyRequest(
+    string Name,
+    string LegalName,
+    string Nif,
+    string Email,
+    string PhoneNumber,
+    string Address);
+
+public sealed record CompanyResponse(
+    long Id,
+    string Name,
+    string LegalName,
+    string Nif,
+    string Email,
+    string PhoneNumber,
+    string Address,
+    bool IsActive,
+    DateTimeOffset CreatedAt,
+    long CreatedBy,
+    DateTimeOffset UpdatedAt,
+    long UpdatedBy);

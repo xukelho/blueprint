@@ -1,10 +1,12 @@
 namespace Blueprint.Api.Data;
 
-public sealed class Architect : IUserProfile
+public sealed class Employee
 {
     public long Id { get; set; }
 
     public long UserId { get; set; }
+
+    public long CompanyId { get; set; }
 
     public required string DisplayName { get; set; }
 
@@ -19,4 +21,6 @@ public sealed class Architect : IUserProfile
     public required string Address { get; set; }
 
     public User? User { get; set; }
+
+    public Company? Company { get; set; }
 }

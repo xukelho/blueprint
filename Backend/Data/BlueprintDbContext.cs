@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace Blueprint.Api.Data;
 
@@ -6,40 +7,42 @@ public sealed class BlueprintDbContext(DbContextOptions<BlueprintDbContext> opti
     : DbContext(options)
 {
     public DbSet<User> Users => Set<User>();
+    public DbSet<Role> Roles => Set<Role>();
     public DbSet<UserRole> UserRoles => Set<UserRole>();
     public DbSet<Client> Clients => Set<Client>();
+    public DbSet<Employee> Employees => Set<Employee>();
     public DbSet<Company> Companies => Set<Company>();
-    public DbSet<Architect> Architects => Set<Architect>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        ConfigureUserRoles(modelBuilder);
+        ConfigureRoles(modelBuilder);
         ConfigureUsers(modelBuilder);
-        ConfigureClients(modelBuilder);
+        ConfigureUserRoles(modelBuilder);
         ConfigureCompanies(modelBuilder);
-        ConfigureArchitects(modelBuilder);
+        ConfigureEmployees(modelBuilder);
+        ConfigureClients(modelBuilder);
     }
 
-    private static void ConfigureUserRoles(ModelBuilder modelBuilder)
+    private static void ConfigureRoles(ModelBuilder modelBuilder)
     {
-        var role = modelBuilder.Entity<UserRole>();
+        var role = modelBuilder.Entity<Role>();
 
-        role.ToTable("user_roles");
+        role.ToTable("roles");
         role.HasKey(candidate => candidate.Id);
         role.Property(candidate => candidate.Id)
             .HasColumnName("id")
             .ValueGeneratedOnAdd();
-        role.Property(candidate => candidate.Role)
-            .HasColumnName("role")
+        role.Property(candidate => candidate.Name)
+            .HasColumnName("name")
             .HasMaxLength(64)
             .IsRequired();
-        role.HasIndex(candidate => candidate.Role)
+        role.HasIndex(candidate => candidate.Name)
             .IsUnique();
         role.HasData(
-            new UserRole { Id = UserRoleIds.PlatformAdmin, Role = "platform admin" },
-            new UserRole { Id = UserRoleIds.Client, Role = "client" },
-            new UserRole { Id = UserRoleIds.Company, Role = "company" },
-            new UserRole { Id = UserRoleIds.Architect, Role = "architect" });
+            new Role { Id = RoleIds.PlatformAdmin, Name = "platform admin" },
+            new Role { Id = RoleIds.Client, Name = "client" },
+            new Role { Id = RoleIds.Employee, Name = "employee" },
+            new Role { Id = RoleIds.Architect, Name = "architect" });
     }
 
     private static void ConfigureUsers(ModelBuilder modelBuilder)
@@ -51,13 +54,6 @@ public sealed class BlueprintDbContext(DbContextOptions<BlueprintDbContext> opti
         user.Property(candidate => candidate.Id)
             .HasColumnName("id")
             .ValueGeneratedOnAdd();
-        user.Property(candidate => candidate.RoleId)
-            .HasColumnName("role_id")
-            .IsRequired();
-        user.HasOne(candidate => candidate.Role)
-            .WithMany(candidate => candidate.Users)
-            .HasForeignKey(candidate => candidate.RoleId)
-            .OnDelete(DeleteBehavior.Restrict);
         user.Property(candidate => candidate.Username)
             .HasColumnName("username")
             .HasMaxLength(256)
@@ -84,6 +80,92 @@ public sealed class BlueprintDbContext(DbContextOptions<BlueprintDbContext> opti
             .IsRequired();
     }
 
+    private static void ConfigureUserRoles(ModelBuilder modelBuilder)
+    {
+        var userRole = modelBuilder.Entity<UserRole>();
+
+        userRole.ToTable("user_roles");
+        userRole.HasKey(candidate => new { candidate.UserId, candidate.RoleId });
+        userRole.Property(candidate => candidate.UserId)
+            .HasColumnName("user_id");
+        userRole.Property(candidate => candidate.RoleId)
+            .HasColumnName("role_id");
+        userRole.HasOne(candidate => candidate.User)
+            .WithMany(candidate => candidate.UserRoles)
+            .HasForeignKey(candidate => candidate.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+        userRole.HasOne(candidate => candidate.Role)
+            .WithMany(candidate => candidate.UserRoles)
+            .HasForeignKey(candidate => candidate.RoleId)
+            .OnDelete(DeleteBehavior.Restrict);
+    }
+
+    private static void ConfigureCompanies(ModelBuilder modelBuilder)
+    {
+        var company = modelBuilder.Entity<Company>();
+
+        company.ToTable("companies");
+        company.HasKey(candidate => candidate.Id);
+        company.Property(candidate => candidate.Id)
+            .HasColumnName("id")
+            .ValueGeneratedOnAdd();
+        company.Property(candidate => candidate.Name)
+            .HasColumnName("name")
+            .HasMaxLength(256)
+            .IsRequired();
+        company.Property(candidate => candidate.LegalName)
+            .HasColumnName("legal_name")
+            .HasMaxLength(512)
+            .IsRequired();
+        ConfigureContactProperties(company);
+        company.Property(candidate => candidate.IsActive)
+            .HasColumnName("is_active")
+            .HasDefaultValue(true)
+            .IsRequired();
+        company.Property(candidate => candidate.CreatedAt)
+            .HasColumnName("created_at")
+            .HasColumnType("timestamp with time zone")
+            .IsRequired();
+        company.Property(candidate => candidate.CreatedBy)
+            .HasColumnName("created_by")
+            .IsRequired();
+        company.Property(candidate => candidate.UpdatedAt)
+            .HasColumnName("updated_at")
+            .HasColumnType("timestamp with time zone")
+            .IsRequired();
+        company.Property(candidate => candidate.UpdatedBy)
+            .HasColumnName("updated_by")
+            .IsRequired();
+    }
+
+    private static void ConfigureEmployees(ModelBuilder modelBuilder)
+    {
+        var employee = modelBuilder.Entity<Employee>();
+
+        employee.ToTable("employees");
+        employee.HasKey(candidate => candidate.Id);
+        employee.Property(candidate => candidate.Id)
+            .HasColumnName("id")
+            .ValueGeneratedOnAdd();
+        employee.Property(candidate => candidate.UserId)
+            .HasColumnName("user_id")
+            .IsRequired();
+        employee.HasIndex(candidate => candidate.UserId)
+            .IsUnique();
+        employee.HasOne(candidate => candidate.User)
+            .WithOne(candidate => candidate.Employee)
+            .HasForeignKey<Employee>(candidate => candidate.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+        employee.Property(candidate => candidate.CompanyId)
+            .HasColumnName("company_id")
+            .IsRequired();
+        employee.HasOne(candidate => candidate.Company)
+            .WithMany(candidate => candidate.Employees)
+            .HasForeignKey(candidate => candidate.CompanyId)
+            .OnDelete(DeleteBehavior.Restrict);
+        ConfigureProfileProperties(employee);
+    }
+
     private static void ConfigureClients(ModelBuilder modelBuilder)
     {
         var client = modelBuilder.Entity<Client>();
@@ -102,99 +184,37 @@ public sealed class BlueprintDbContext(DbContextOptions<BlueprintDbContext> opti
             .WithOne(candidate => candidate.Client)
             .HasForeignKey<Client>(candidate => candidate.UserId)
             .OnDelete(DeleteBehavior.Cascade);
-        ConfigureClientProperties(client);
+        client.Property(candidate => candidate.CompanyId)
+            .HasColumnName("company_id");
+        client.HasOne(candidate => candidate.Company)
+            .WithMany(candidate => candidate.Clients)
+            .HasForeignKey(candidate => candidate.CompanyId)
+            .OnDelete(DeleteBehavior.Restrict);
+        ConfigureProfileProperties(client);
     }
 
-    private static void ConfigureCompanies(ModelBuilder modelBuilder)
+    private static void ConfigureProfileProperties<TProfile>(
+        EntityTypeBuilder<TProfile> profile)
+        where TProfile : class
     {
-        var company = modelBuilder.Entity<Company>();
-
-        company.ToTable("companies");
-        company.HasKey(candidate => candidate.Id);
-        company.Property(candidate => candidate.Id)
-            .HasColumnName("id")
-            .ValueGeneratedOnAdd();
-        company.Property(candidate => candidate.UserId)
-            .HasColumnName("user_id")
-            .IsRequired();
-        company.HasIndex(candidate => candidate.UserId)
-            .IsUnique();
-        company.HasOne(candidate => candidate.User)
-            .WithOne(candidate => candidate.Company)
-            .HasForeignKey<Company>(candidate => candidate.UserId)
-            .OnDelete(DeleteBehavior.Cascade);
-        ConfigureCompanyProperties(company);
-    }
-
-    private static void ConfigureArchitects(ModelBuilder modelBuilder)
-    {
-        var architect = modelBuilder.Entity<Architect>();
-
-        architect.ToTable("architects");
-        architect.HasKey(candidate => candidate.Id);
-        architect.Property(candidate => candidate.Id)
-            .HasColumnName("id")
-            .ValueGeneratedOnAdd();
-        architect.Property(candidate => candidate.UserId)
-            .HasColumnName("user_id")
-            .IsRequired();
-        architect.HasIndex(candidate => candidate.UserId)
-            .IsUnique();
-        architect.HasOne(candidate => candidate.User)
-            .WithOne(candidate => candidate.Architect)
-            .HasForeignKey<Architect>(candidate => candidate.UserId)
-            .OnDelete(DeleteBehavior.Cascade);
-        ConfigureArchitectProperties(architect);
-    }
-
-    private static void ConfigureClientProperties(
-        Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<Client> profile)
-    {
-        profile.Property(candidate => candidate.DisplayName)
+        profile.Property<string>(nameof(Client.DisplayName))
             .HasColumnName("display_name").HasMaxLength(256).IsRequired();
-        profile.Property(candidate => candidate.FullName)
+        profile.Property<string>(nameof(Client.FullName))
             .HasColumnName("full_name").HasMaxLength(512).IsRequired();
-        profile.Property(candidate => candidate.Nif)
-            .HasColumnName("nif").HasMaxLength(32).IsRequired();
-        profile.Property(candidate => candidate.Email)
-            .HasColumnName("email").HasMaxLength(320).IsRequired();
-        profile.Property(candidate => candidate.PhoneNumber)
-            .HasColumnName("phone_number").HasMaxLength(64).IsRequired();
-        profile.Property(candidate => candidate.Address)
-            .HasColumnName("address").HasMaxLength(1024).IsRequired();
+        ConfigureContactProperties(profile);
     }
 
-    private static void ConfigureCompanyProperties(
-        Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<Company> profile)
+    private static void ConfigureContactProperties<TEntity>(
+        EntityTypeBuilder<TEntity> entity)
+        where TEntity : class
     {
-        profile.Property(candidate => candidate.DisplayName)
-            .HasColumnName("display_name").HasMaxLength(256).IsRequired();
-        profile.Property(candidate => candidate.FullName)
-            .HasColumnName("full_name").HasMaxLength(512).IsRequired();
-        profile.Property(candidate => candidate.Nif)
+        entity.Property<string>(nameof(Client.Nif))
             .HasColumnName("nif").HasMaxLength(32).IsRequired();
-        profile.Property(candidate => candidate.Email)
+        entity.Property<string>(nameof(Client.Email))
             .HasColumnName("email").HasMaxLength(320).IsRequired();
-        profile.Property(candidate => candidate.PhoneNumber)
+        entity.Property<string>(nameof(Client.PhoneNumber))
             .HasColumnName("phone_number").HasMaxLength(64).IsRequired();
-        profile.Property(candidate => candidate.Address)
-            .HasColumnName("address").HasMaxLength(1024).IsRequired();
-    }
-
-    private static void ConfigureArchitectProperties(
-        Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<Architect> profile)
-    {
-        profile.Property(candidate => candidate.DisplayName)
-            .HasColumnName("display_name").HasMaxLength(256).IsRequired();
-        profile.Property(candidate => candidate.FullName)
-            .HasColumnName("full_name").HasMaxLength(512).IsRequired();
-        profile.Property(candidate => candidate.Nif)
-            .HasColumnName("nif").HasMaxLength(32).IsRequired();
-        profile.Property(candidate => candidate.Email)
-            .HasColumnName("email").HasMaxLength(320).IsRequired();
-        profile.Property(candidate => candidate.PhoneNumber)
-            .HasColumnName("phone_number").HasMaxLength(64).IsRequired();
-        profile.Property(candidate => candidate.Address)
+        entity.Property<string>(nameof(Client.Address))
             .HasColumnName("address").HasMaxLength(1024).IsRequired();
     }
 }

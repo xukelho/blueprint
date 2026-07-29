@@ -2314,6 +2314,7 @@ input:focus-visible { outline: 3px solid rgba(201, 87, 59, .22); outline-offset:
   gap: 3px;
   padding: 0 24px;
   overflow-x: auto;
+  overflow-y: hidden;
   border-bottom: 1px solid #e7e7e3;
 }
 
@@ -2393,6 +2394,7 @@ input:focus-visible { outline: 3px solid rgba(201, 87, 59, .22); outline-offset:
 
 .admin-record:hover { background: #fff; }
 .admin-record.is-selected { background: #fff; box-shadow: inset 3px 0 #c9573b; }
+.admin-record.is-inactive { opacity: .62; }
 
 .admin-record__avatar {
   width: 38px;
@@ -2490,6 +2492,11 @@ input:focus-visible { outline: 3px solid rgba(201, 87, 59, .22); outline-offset:
 .admin-linked-user span { grid-column: 1 / -1; color: #92959a; font-size: 9px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
 .admin-linked-user strong { color: #303236; font-size: 12px; }
 .admin-linked-user small { color: #686b70; font-size: 10px; }
+.admin-role-badges { display: flex; flex-wrap: wrap; gap: 5px; }
+.admin-role-badge { padding: 3px 7px; color: #7a3e31; background: #f8eae6; border-radius: 999px; font-size: 9px; font-weight: 700; }
+.admin-check { display: flex; align-items: center; gap: 8px; color: #4f5257; font-size: 11px; font-weight: 600; }
+.admin-check input { width: 16px; height: 16px; }
+.admin-filter { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 10px 16px; color: #4f5257; border-bottom: 1px solid #e7e7e3; font-size: 11px; }
 
 .admin-audit { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 2px 0 0; overflow: hidden; background: #fafaf8; border: 1px solid #e7e7e3; border-radius: 8px; }
 .admin-audit div { display: grid; gap: 3px; padding: 11px 13px; border-right: 1px solid #e7e7e3; border-bottom: 1px solid #e7e7e3; }

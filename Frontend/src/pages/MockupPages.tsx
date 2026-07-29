@@ -14,11 +14,9 @@ import {
   FileCheck2,
   FileText,
   FolderOpen,
-  Globe2,
   GripVertical,
   Headphones,
   Image,
-  KeyRound,
   Link2,
   Mail,
   MapPin,
@@ -526,30 +524,6 @@ export function HelpPage() {
         <section className="mock-surface mock-contact-card"><h2>2Rivr</h2><p>Equipa responsável pelo Blueprint.</p><a href="mailto:suporte@2rivr.com"><Mail size={17} />suporte@2rivr.com</a><a href="tel:+351210000000"><Phone size={17} />+351 210 000 000</a><span><Clock3 size={17} />Dias úteis, 09:00–18:00</span></section>
       </div>
       {ticketOpen && <div className="mock-modal-backdrop" role="presentation"><section className="mock-modal" role="dialog" aria-modal="true" aria-labelledby="support-title"><button className="mock-modal-close" type="button" aria-label="Fechar" onClick={() => setTicketOpen(false)}><X size={19} /></button><h2 id="support-title">Novo pedido de suporte</h2><p>Descreve o que aconteceu e inclui o contexto necessário.</p><label className="mock-field">Assunto<input placeholder="Resumo do pedido" /></label><label className="mock-field">Categoria<select><option>Problema técnico</option><option>Dúvida de utilização</option><option>Faturação</option></select></label><label className="mock-field">Descrição<textarea placeholder="O que estavas a tentar fazer?" /></label><div className="mock-form-actions"><button className="secondary-action" type="button" onClick={() => setTicketOpen(false)}>Cancelar</button><button className="primary-action" type="button" onClick={() => { setSent(true); window.setTimeout(() => { setTicketOpen(false); setSent(false); }, 900); }}>{sent ? <><Check size={17} />Pedido enviado</> : "Enviar pedido"}</button></div></section></div>}
-    </PortalShell>
-  );
-}
-
-export function ProfilePage() {
-  const [section, setSection] = useState("Dados pessoais");
-  const [saved, setSaved] = useState(false);
-  const sections = ["Dados pessoais", "Contactos", "Segurança", "Notificações", "Dados financeiros"];
-  return (
-    <PortalShell>
-      <PageHeader eyebrow="Conta" title="Perfil de utilizador" description="Gere os teus dados pessoais, segurança e preferências." actions={<button className="primary-action" type="button" onClick={() => { setSaved(true); window.setTimeout(() => setSaved(false), 2000); }}>{saved ? <><Check size={17} />Guardado</> : "Guardar alterações"}</button>} />
-      <div className="mock-profile-hero mock-surface">
-        <span className="mock-profile-avatar">AM</span>
-        <div><h2>Ana Martins</h2><p>Arquiteta · Forma Norte</p></div>
-        <button className="secondary-action" type="button">Alterar fotografia</button>
-      </div>
-      <div className="mock-settings-layout">
-        <nav className="mock-settings-nav" aria-label="Secções do perfil">{sections.map((item) => <button className={section === item ? "is-active" : ""} type="button" key={item} onClick={() => setSection(item)}>{item}<ChevronRight size={16} /></button>)}</nav>
-        <section className="mock-surface mock-settings-content">
-          <div className="mock-section-title"><div><h2>{section}</h2><p>Informação associada à tua conta Blueprint.</p></div></div>
-          {section === "Dados pessoais" ? <div className="mock-form-grid"><label className="mock-field">Nome completo<input defaultValue="Ana Sofia Martins" /></label><label className="mock-field">Nome de apresentação<input defaultValue="Ana Martins" /></label><label className="mock-field mock-field--wide">Email de acesso<input type="email" defaultValue="ana.martins@formanorte.pt" /><small>A alteração deste email requer verificação.</small></label><label className="mock-field">Telefone<input defaultValue="+351 916 204 885" /></label><label className="mock-field">Website<input defaultValue="https://anamartins.pt" /></label><label className="mock-field mock-field--wide">Morada<input defaultValue="Rua do Alecrim, 45 · 1200-014 Lisboa" /></label><label className="mock-field">LinkedIn<input defaultValue="linkedin.com/in/anamartins" /></label><label className="mock-field">Instagram<input defaultValue="@ana.martins.arq" /></label></div> : section === "Segurança" ? <div className="mock-security-list"><div><span><KeyRound size={20} /></span><div><strong>Palavra-passe</strong><small>Alterada há 3 meses</small></div><button className="secondary-action" type="button">Alterar</button></div><div><span><ShieldCheck size={20} /></span><div><strong>Autenticação multifator</strong><small>Protege a conta com um segundo fator</small></div><StatusPill tone="success">Ativa</StatusPill></div><div><span><Globe2 size={20} /></span><div><strong>Sessões ativas</strong><small>2 dispositivos com sessão iniciada</small></div><button className="secondary-action" type="button">Gerir</button></div></div> : <div className="mock-settings-placeholder"><UserRound size={28} /><h3>{section}</h3><p>As opções desta área estão prontas para personalização.</p><button className="secondary-action" type="button">Configurar</button></div>}
-          <div className="mock-danger-zone"><div><strong>Desativar conta</strong><p>O acesso fica suspenso até um administrador reativar a conta.</p></div><button type="button">Desativar conta</button></div>
-        </section>
-      </div>
     </PortalShell>
   );
 }

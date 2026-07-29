@@ -19,7 +19,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { clearAuthenticatedRole, isPlatformAdmin } from "../auth";
+import { clearAuthenticatedRoles, isPlatformAdmin } from "../auth";
 
 type Project = {
   id: number;
@@ -170,7 +170,7 @@ function DashboardPage() {
     try {
       await fetch("/api/auth/logout", { method: "POST" });
     } finally {
-      clearAuthenticatedRole();
+      clearAuthenticatedRoles();
       navigate("/", { replace: true });
     }
   };

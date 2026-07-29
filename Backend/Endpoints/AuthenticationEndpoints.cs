@@ -41,13 +41,13 @@ public static class AuthenticationEndpoints
             return TypedResults.ValidationProblem(errors);
         }
 
-        var role = await credentialValidator.GetRoleForValidCredentialsAsync(
+        var roles = await credentialValidator.GetRolesForValidCredentialsAsync(
             request!.Username,
             request.Password,
             cancellationToken);
 
-        return role is not null
-            ? TypedResults.Ok(new LoginResponse("success", role))
+        return roles is not null
+            ? TypedResults.Ok(new LoginResponse("success", roles))
             : TypedResults.Json(
                 new LoginResponse("fail"),
                 statusCode: StatusCodes.Status401Unauthorized);

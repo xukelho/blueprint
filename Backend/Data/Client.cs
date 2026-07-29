@@ -1,10 +1,12 @@
 namespace Blueprint.Api.Data;
 
-public sealed class Client : IUserProfile
+public sealed class Client
 {
     public long Id { get; set; }
 
     public long UserId { get; set; }
+
+    public long? CompanyId { get; set; }
 
     public required string DisplayName { get; set; }
 
@@ -19,4 +21,6 @@ public sealed class Client : IUserProfile
     public required string Address { get; set; }
 
     public User? User { get; set; }
+
+    public Company? Company { get; set; }
 }
