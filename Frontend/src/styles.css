@@ -2601,3 +2601,18 @@ input:focus-visible { outline: 3px solid rgba(0, 109, 119, .22); outline-offset:
   .admin-dialog-backdrop { align-items: end; padding: 0; }
   .admin-confirm-dialog { max-height: 94vh; border-radius: 12px 12px 0 0; }
 }
+
+.mock-profile-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  color: #4f5257;
+  font-size: 11px;
+}
+
+.mock-profile-check input { width: 16px; height: 16px; accent-color: #006d77; }
+.mock-profile-check span { display: flex; flex-direction: column; gap: 2px; }
+.mock-profile-check strong { color: #303236; font-size: 11px; }
+.mock-profile-check small { color: #92959a; font-size: 10px; }
+.profile-form-error { margin: 18px 0 0; color: #ad4f3f; font-size: 11px; }

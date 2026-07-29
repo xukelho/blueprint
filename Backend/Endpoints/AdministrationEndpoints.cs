@@ -1,5 +1,6 @@
 using Blueprint.Api.Contracts;
 using Blueprint.Api.Data;
+using Blueprint.Api.Validation;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -844,12 +845,14 @@ public static class AdministrationEndpoints
             _ => throw new InvalidOperationException("Unsupported profile request.")
         };
 
-        ValidateRequired(errors, "displayName", values.Item1, "Display name", 256);
-        ValidateRequired(errors, "fullName", values.Item2, "Full name", 512);
-        ValidateRequired(errors, "nif", values.Item3, "NIF", 32);
-        ValidateRequired(errors, "email", values.Item4, "Email", 320);
-        ValidateRequired(errors, "phoneNumber", values.Item5, "Phone number", 64);
-        ValidateRequired(errors, "address", values.Item6, "Address", 1024);
+        AdministrationValidation.ValidateProfile(
+            errors,
+            values.Item1,
+            values.Item2,
+            values.Item3,
+            values.Item4,
+            values.Item5,
+            values.Item6);
     }
 
     private static Dictionary<string, string[]> ValidateCompany(object? request)
@@ -887,14 +890,8 @@ public static class AdministrationEndpoints
         string label,
         int maximumLength)
     {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            errors[key] = [$"{label} is required."];
-        }
-        else if (value.Length > maximumLength)
-        {
-            errors[key] = [$"{label} must not exceed {maximumLength} characters."];
-        }
+        AdministrationValidation.ValidateRequired(
+            errors, key, value, label, maximumLength);
     }
 
     private static void Apply(Employee employee, UpdateEmployeeRequest request)

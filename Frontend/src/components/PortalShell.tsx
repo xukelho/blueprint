@@ -17,6 +17,11 @@ import {
 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { clearAuthenticatedRoles, isPlatformAdmin } from "../auth";
+import {
+  profileInitials,
+  profileRoleLabel,
+  useOptionalProfile,
+} from "../profile/ProfileContext";
 import { BlueprintLogoMark } from "./BlueprintLogoMark";
 
 const primaryNav = [
@@ -43,6 +48,10 @@ export default function PortalShell({ children, wide = false }: PortalShellProps
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const profile = useOptionalProfile()?.profile ?? null;
+  const profileName = profile?.displayName ?? "Ana Martins";
+  const profileRole = profile ? profileRoleLabel(profile) : "Arquiteta";
+  const profileCompany = profile?.companyName ?? "Forma Norte";
   const visiblePrimaryNav = primaryNav.filter(
     (item) => item.path !== "/administration" || isPlatformAdmin(),
   );
@@ -111,7 +120,7 @@ export default function PortalShell({ children, wide = false }: PortalShellProps
           <span className="atelier-context__icon" aria-hidden="true"><Building2 size={17} /></span>
           <span className="sidebar-label">
             <small>Atelier ativo</small>
-            <strong>Forma Norte</strong>
+            <strong>{profileCompany}</strong>
           </span>
         </div>
 
@@ -161,20 +170,21 @@ export default function PortalShell({ children, wide = false }: PortalShellProps
                 </button>
               );
             })}
-            <button
-              className={`user-menu ${location.pathname === "/profile" ? "user-menu--active" : ""}`}
-              type="button"
-              title={sidebarCollapsed ? "Perfil de utilizador — Mock" : undefined}
-              onClick={() => goTo("/profile")}
-            >
-              <span className="user-avatar">AM</span>
-              <span className="sidebar-label user-menu__copy">
-                <strong>Ana Martins</strong>
-                <small>Arquiteta</small>
-              </span>
-              <span className="nav-status nav-status--mock" aria-hidden="true">Mock</span>
-              <MoreHorizontal className="sidebar-label" size={18} aria-hidden="true" />
-            </button>
+            {!isPlatformAdmin() && (
+              <button
+                className={`user-menu ${location.pathname === "/profile" ? "user-menu--active" : ""}`}
+                type="button"
+                title={sidebarCollapsed ? "Perfil de utilizador" : undefined}
+                onClick={() => goTo("/profile")}
+              >
+                <span className="user-avatar">{profileInitials(profileName)}</span>
+                <span className="sidebar-label user-menu__copy">
+                  <strong>{profileName}</strong>
+                  <small>{profileRole}</small>
+                </span>
+                <MoreHorizontal className="sidebar-label" size={18} aria-hidden="true" />
+              </button>
+            )}
             <button
               className="nav-item logout-button"
               type="button"

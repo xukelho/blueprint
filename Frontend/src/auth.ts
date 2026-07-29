@@ -19,11 +19,13 @@ export function getAuthenticatedRoles(): string[] {
 export function setAuthenticatedRoles(roles: string[]) {
   sessionStorage.setItem(AUTH_ROLES_KEY, JSON.stringify([...new Set(roles)]));
   sessionStorage.removeItem(LEGACY_AUTH_ROLE_KEY);
+  window.dispatchEvent(new Event("blueprint:auth-changed"));
 }
 
 export function clearAuthenticatedRoles() {
   sessionStorage.removeItem(AUTH_ROLES_KEY);
   sessionStorage.removeItem(LEGACY_AUTH_ROLE_KEY);
+  window.dispatchEvent(new Event("blueprint:auth-changed"));
 }
 
 export function hasRole(role: string) {

@@ -20,6 +20,11 @@ import {
 } from "lucide-react";
 import { clearAuthenticatedRoles, isPlatformAdmin } from "../auth";
 import { BlueprintLogoMark } from "../components/BlueprintLogoMark";
+import {
+  profileInitials,
+  profileRoleLabel,
+  useProfile,
+} from "../profile/ProfileContext";
 
 type Project = {
   id: number;
@@ -139,6 +144,11 @@ function PlanPreview({ variant }: { variant: Project["plan"] }) {
 
 function DashboardPage() {
   const navigate = useNavigate();
+  const { profile } = useProfile();
+  const profileName = profile?.displayName ?? "Ana Martins";
+  const profileRole = profile ? profileRoleLabel(profile) : "Arquiteta";
+  const profileCompany = profile?.companyName ?? "Forma Norte";
+  const firstName = profileName.trim().split(/\s+/)[0] || "Ana";
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -219,7 +229,7 @@ function DashboardPage() {
           </span>
           <span className="sidebar-label">
             <small>Atelier ativo</small>
-            <strong>Forma Norte</strong>
+            <strong>{profileCompany}</strong>
           </span>
         </div>
 
@@ -266,20 +276,21 @@ function DashboardPage() {
                 </button>
               );
             })}
-            <button
-              className="user-menu"
-              type="button"
-              title={sidebarCollapsed ? "Menu de utilizador — Mock" : undefined}
-              onClick={() => navigate("/profile")}
-            >
-              <span className="user-avatar">AM</span>
-              <span className="sidebar-label user-menu__copy">
-                <strong>Ana Martins</strong>
-                <small>Arquiteta</small>
-              </span>
-              <span className="nav-status nav-status--mock" aria-hidden="true">Mock</span>
-              <MoreHorizontal className="sidebar-label" size={18} aria-hidden="true" />
-            </button>
+            {!isPlatformAdmin() && (
+              <button
+                className="user-menu"
+                type="button"
+                title={sidebarCollapsed ? "Perfil de utilizador" : undefined}
+                onClick={() => navigate("/profile")}
+              >
+                <span className="user-avatar">{profileInitials(profileName)}</span>
+                <span className="sidebar-label user-menu__copy">
+                  <strong>{profileName}</strong>
+                  <small>{profileRole}</small>
+                </span>
+                <MoreHorizontal className="sidebar-label" size={18} aria-hidden="true" />
+              </button>
+            )}
             <button
               className="nav-item logout-button"
               type="button"
@@ -311,7 +322,7 @@ function DashboardPage() {
           <header className="dashboard-header">
             <div>
               <p className="dashboard-kicker">Segunda-feira, 27 de julho</p>
-              <h1>Bom dia, Ana</h1>
+              <h1>Bom dia, {firstName}</h1>
               <p>Acompanha os projetos ativos e o que requer a tua atenção.</p>
             </div>
             <button className="primary-action" type="button" onClick={() => navigate("/projects/new")}>

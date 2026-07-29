@@ -1,5 +1,8 @@
 using Blueprint.Api.Authentication;
 using Blueprint.Api.Contracts;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using System.Security.Claims;
 
 namespace Blueprint.Api.Endpoints;
 
@@ -23,16 +26,20 @@ public static class AuthenticationEndpoints
         return endpoints;
     }
 
-    private static IResult Logout()
+    private static async Task<IResult> Logout(
+        HttpContext httpContext,
+        CancellationToken cancellationToken)
     {
-        // This is the single logout contract. Session revocation can be added
-        // here when the application starts issuing persistent sessions.
+        cancellationToken.ThrowIfCancellationRequested();
+        await httpContext.SignOutAsync(
+            CookieAuthenticationDefaults.AuthenticationScheme);
         return TypedResults.Ok(new LoginResponse("success"));
     }
 
     private static async Task<IResult> Login(
         LoginRequest? request,
         ICredentialValidator credentialValidator,
+        HttpContext httpContext,
         CancellationToken cancellationToken)
     {
         var errors = Validate(request);
@@ -41,16 +48,32 @@ public static class AuthenticationEndpoints
             return TypedResults.ValidationProblem(errors);
         }
 
-        var roles = await credentialValidator.GetRolesForValidCredentialsAsync(
+        var user = await credentialValidator.GetUserForValidCredentialsAsync(
             request!.Username,
             request.Password,
             cancellationToken);
 
-        return roles is not null
-            ? TypedResults.Ok(new LoginResponse("success", roles))
-            : TypedResults.Json(
+        if (user is null)
+        {
+            return TypedResults.Json(
                 new LoginResponse("fail"),
                 statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.NameIdentifier, user.Id.ToString()),
+            new(ClaimTypes.Name, user.Username)
+        };
+        claims.AddRange(user.Roles.Select(role => new Claim(ClaimTypes.Role, role)));
+        var identity = new ClaimsIdentity(
+            claims,
+            CookieAuthenticationDefaults.AuthenticationScheme);
+        await httpContext.SignInAsync(
+            CookieAuthenticationDefaults.AuthenticationScheme,
+            new ClaimsPrincipal(identity));
+
+        return TypedResults.Ok(new LoginResponse("success", user.Roles));
     }
 
     private static Dictionary<string, string[]> Validate(LoginRequest? request)

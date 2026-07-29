@@ -18,6 +18,36 @@ function renderApp(initialPath = "/") {
   );
 }
 
+const profileResponse = (
+  profileType: "client" | "employee",
+  architect = false,
+) => ({
+  profileType,
+  userId: profileType === "client" ? 3 : 2,
+  username: profileType === "client" ? "marta" : "ana",
+  displayName: profileType === "client" ? "Marta Silva" : "Ana Martins",
+  fullName: profileType === "client" ? "Marta Isabel Silva" : "Ana Sofia Martins",
+  nif: "123456789",
+  email: profileType === "client" ? "marta@example.test" : "ana@example.test",
+  phoneNumber: "910000000",
+  address: "Lisboa",
+  companyId: profileType === "client" ? null : 10,
+  companyName: profileType === "client" ? null : "Forma Norte",
+  roles: profileType === "client"
+    ? ["client"]
+    : architect ? ["employee", "architect"] : ["employee"],
+  availableCompanies: [{ id: 10, name: "Forma Norte" }],
+});
+
+function mockProfile(profileType: "client" | "employee", architect = false) {
+  return vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(JSON.stringify(profileResponse(profileType, architect)), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }),
+  );
+}
+
 async function completeLoginForm() {
   const user = userEvent.setup();
   renderApp();
@@ -42,7 +72,7 @@ describe("login", () => {
   it("posts credentials and navigates after a successful login", async () => {
     sessionStorage.setItem("blueprint.auth.roles", JSON.stringify(["client"]));
     sessionStorage.setItem("blueprint.auth.role", "company");
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
       new Response(JSON.stringify({ status: "success", roles: ["platform admin"] }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -183,7 +213,24 @@ describe("mockup navigation", () => {
     renderApp("/dashboard");
 
     expect(screen.getByRole("button", { name: "Administração" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Ana Martins/ })).not.toBeInTheDocument();
     expect(screen.queryByText("Mock parcial")).not.toBeInTheDocument();
+  });
+
+  it("hides the profile button from platform admins on shared portal navigation", async () => {
+    sessionStorage.setItem("blueprint.auth.roles", JSON.stringify(["platform admin"]));
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("[]", {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    renderApp("/administration");
+
+    expect(await screen.findByRole("heading", { name: "Administração", level: 1 }))
+      .toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Ana Martins/ })).not.toBeInTheDocument();
   });
 
   it("hides administration from users who are not platform admins", () => {
@@ -204,27 +251,29 @@ describe("mockup navigation", () => {
     ["/notifications", "Notificações"],
     ["/help", "Como podemos ajudar?"],
     ["/profile", "Perfil de colaboradora"],
-  ])("renders %s", (path, heading) => {
+  ])("renders %s", async (path, heading) => {
     if (path === "/administration") {
       sessionStorage.setItem("blueprint.auth.roles", JSON.stringify(["platform admin"]));
     }
     if (path === "/profile") {
       sessionStorage.setItem("blueprint.auth.roles", JSON.stringify(["employee", "architect"]));
+      mockProfile("employee", true);
     }
     renderApp(path);
-    expect(screen.getByRole("heading", { name: heading, level: 1 })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: heading, level: 1 })).toBeInTheDocument();
   });
 
   it.each([
     [["employee"], "Perfil de colaboradora", "Ana Martins"],
     [["employee", "architect"], "Perfil de colaboradora", "Ana Martins"],
     [["client"], "Perfil de cliente", "Marta Silva"],
-  ])("renders the %s page for the authenticated roles", (roles, heading, name) => {
+  ])("renders the %s page for the authenticated roles", async (roles, heading, name) => {
     sessionStorage.setItem("blueprint.auth.roles", JSON.stringify(roles));
+    mockProfile(roles.includes("client") ? "client" : "employee", roles.includes("architect"));
     renderApp("/profile");
 
     expect(screen.getByRole("heading", { name: heading, level: 1 })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name, level: 2 })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name, level: 2 })).toBeInTheDocument();
   });
 
   it("keeps platform admins out of the client-facing profile route", () => {
@@ -235,10 +284,11 @@ describe("mockup navigation", () => {
     expect(screen.queryByText("Perfil de utilizador")).not.toBeInTheDocument();
   });
 
-  it("shows architect as an additional employee role", () => {
+  it("shows architect as an additional employee role", async () => {
     sessionStorage.setItem("blueprint.auth.roles", JSON.stringify(["employee", "architect"]));
+    mockProfile("employee", true);
     renderApp("/profile");
-    expect(screen.getByText(/Colaboradora · Arquiteta · Forma Norte/)).toBeInTheDocument();
+    expect(await screen.findByText(/Colaboradora · Arquiteta · Forma Norte/)).toBeInTheDocument();
   });
 
   it("does not route the removed company role to a company profile", () => {

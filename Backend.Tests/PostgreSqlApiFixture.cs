@@ -57,7 +57,7 @@ public sealed class PostgreSqlApiFixture : IAsyncLifetime
         startInfo.ArgumentList.Add(baseAddress.ToString());
         startInfo.Environment["ConnectionStrings__DefaultConnection"] =
             ConnectionString;
-        startInfo.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
+        startInfo.Environment["ASPNETCORE_ENVIRONMENT"] = "Testing";
         startInfo.Environment["Logging__EventLog__LogLevel__Default"] = "None";
 
         _apiProcess = Process.Start(startInfo)
