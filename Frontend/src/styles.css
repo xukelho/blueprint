@@ -74,6 +74,12 @@ button { cursor: pointer; }
   border-radius: 10px;
 }
 
+.brand__mark svg {
+  width: 25px;
+  height: 25px;
+  display: block;
+}
+
 .brand__name {
   font: 700 22px/1 "Manrope", sans-serif;
   letter-spacing: -.7px;
@@ -1926,6 +1932,12 @@ button { cursor: pointer; }
   color: #fff;
   background: #006d77;
   border-radius: 9px;
+}
+
+.sidebar-brand__mark svg {
+  width: 24px;
+  height: 24px;
+  display: block;
 }
 
 .sidebar-brand__name {

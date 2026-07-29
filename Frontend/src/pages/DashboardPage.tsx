@@ -8,7 +8,6 @@ import {
   CircleHelp,
   FolderKanban,
   LayoutDashboard,
-  Layers3,
   LogOut,
   MapPin,
   Menu,
@@ -20,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { clearAuthenticatedRoles, isPlatformAdmin } from "../auth";
+import { BlueprintLogoMark } from "../components/BlueprintLogoMark";
 
 type Project = {
   id: number;
@@ -199,7 +199,7 @@ function DashboardPage() {
         <div className="sidebar__header">
           <div className="sidebar-brand" aria-label="Blueprint">
             <span className="sidebar-brand__mark" aria-hidden="true">
-              <Layers3 size={20} strokeWidth={1.8} />
+              <BlueprintLogoMark />
             </span>
             <span className="sidebar-label sidebar-brand__name">blueprint</span>
           </div>

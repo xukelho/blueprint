@@ -4,12 +4,12 @@ import {
   Check,
   Eye,
   EyeOff,
-  Layers3,
   LockKeyhole,
   User,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { setAuthenticatedRoles } from "../auth";
+import { BlueprintLogoMark } from "../components/BlueprintLogoMark";
 
 type FieldErrors = {
   username?: string;
@@ -85,7 +85,7 @@ function LoginPage() {
         <div className="brand-panel__grid" aria-hidden="true" />
         <header className="brand">
           <span className="brand__mark" aria-hidden="true">
-            <Layers3 size={22} strokeWidth={1.8} />
+            <BlueprintLogoMark />
           </span>
           <span className="brand__name">blueprint</span>
         </header>
@@ -128,7 +128,7 @@ function LoginPage() {
       <section className="form-panel">
         <div className="mobile-brand brand">
           <span className="brand__mark" aria-hidden="true">
-            <Layers3 size={20} strokeWidth={1.8} />
+            <BlueprintLogoMark />
           </span>
           <span className="brand__name">blueprint</span>
         </div>

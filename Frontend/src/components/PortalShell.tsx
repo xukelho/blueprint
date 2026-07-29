@@ -6,7 +6,6 @@ import {
   ChevronRight,
   CircleHelp,
   FolderKanban,
-  Layers3,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -18,6 +17,7 @@ import {
 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { clearAuthenticatedRoles, isPlatformAdmin } from "../auth";
+import { BlueprintLogoMark } from "./BlueprintLogoMark";
 
 const primaryNav = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard", mockStatus: "mock" },
@@ -93,7 +93,7 @@ export default function PortalShell({ children, wide = false }: PortalShellProps
         <div className="sidebar__header">
           <button className="sidebar-brand sidebar-brand--button" type="button" onClick={() => goTo("/dashboard")}>
             <span className="sidebar-brand__mark" aria-hidden="true">
-              <Layers3 size={20} strokeWidth={1.8} />
+              <BlueprintLogoMark />
             </span>
             <span className="sidebar-label sidebar-brand__name">blueprint</span>
           </button>
