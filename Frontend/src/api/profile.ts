@@ -19,6 +19,8 @@ export type CurrentProfile = {
   companyName: string | null;
   roles: string[];
   availableCompanies: ProfileCompanyOption[];
+  companyRole?: "owner" | "employee";
+  isArchitect?: boolean;
 };
 
 export type UpdateCurrentProfile = {
@@ -86,4 +88,8 @@ export function saveCurrentProfile(payload: UpdateCurrentProfile) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
+}
+
+export function changeCurrentPassword(currentPassword: string, newPassword: string) {
+  return profileRequest<void>({ method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ currentPassword, newPassword }) });
 }

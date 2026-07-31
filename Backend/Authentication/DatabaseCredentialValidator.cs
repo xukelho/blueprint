@@ -22,7 +22,7 @@ public sealed class DatabaseCredentialValidator(BlueprintDbContext dbContext)
                 candidate => candidate.Username == username,
                 cancellationToken);
 
-        if (user is null ||
+        if (user is null || !user.IsActive ||
             _passwordHasher.VerifyHashedPassword(user, user.Password, password) ==
                 PasswordVerificationResult.Failed)
         {

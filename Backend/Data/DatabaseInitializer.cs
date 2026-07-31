@@ -27,6 +27,7 @@ public static class DatabaseInitializer
         {
             Username = InitialAdminUsername,
             Password = string.Empty,
+            IsActive = true,
             CreatedAt = now,
             CreatedBy = AuditActors.System,
             UpdatedAt = now,

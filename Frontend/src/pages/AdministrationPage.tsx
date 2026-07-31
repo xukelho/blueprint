@@ -40,7 +40,7 @@ const emptyProfile = (): ProfileFormValue => ({
   displayName: "", fullName: "", nif: "", email: "", phoneNumber: "", address: "",
 });
 const emptyCompany = (): CompanyFormValue => ({
-  name: "", legalName: "", nif: "", email: "", phoneNumber: "", address: "",
+  name: "", legalName: "", nif: "", email: "", phoneNumber: "", address: "", website: "",
 });
 const normalize = (value: object) => JSON.stringify(value);
 const titleCase = (value: string) => value.charAt(0).toLocaleUpperCase("pt-PT") + value.slice(1);
@@ -73,6 +73,7 @@ function validateCompany(value: CompanyFormValue) {
   validateRequired(errors, "email", value.email, "Email", 320);
   validateRequired(errors, "phoneNumber", value.phoneNumber, "Telefone", 64);
   validateRequired(errors, "address", value.address, "Morada", 1024);
+  if (value.website.length > 2048) errors.website = "Website não pode exceder 2048 caracteres.";
   return errors;
 }
 
@@ -169,6 +170,7 @@ export default function AdministrationPage() {
       const next = selectedCompany ? {
         name: selectedCompany.name, legalName: selectedCompany.legalName, nif: selectedCompany.nif,
         email: selectedCompany.email, phoneNumber: selectedCompany.phoneNumber, address: selectedCompany.address,
+        website: selectedCompany.website ?? "",
       } : emptyCompany();
       setCompanyForm(next);
       setBaseline(normalize(next));

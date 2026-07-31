@@ -15,4 +15,5 @@ public static class RoleIds
     public const long Client = 2;
     public const long Employee = 3;
     public const long Architect = 4;
+    public const long CompanyOwner = 5;
 }

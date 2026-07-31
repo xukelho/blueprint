@@ -29,6 +29,13 @@ RUN set -eu; \
 FROM mcr.microsoft.com/dotnet/aspnet:${DOTNET_VERSION} AS final
 WORKDIR /app
 
+# Npgsql can use GSSAPI/Kerberos authentication. The ASP.NET runtime image does
+# not include its native library, so install it explicitly to avoid a startup
+# loader failure when PostgreSQL advertises GSSAPI.
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends libgssapi-krb5-2 \
+    && rm -rf /var/lib/apt/lists/*
+
 # ASP.NET Core listens on port 1818 by default in .NET 8+ container images.
 ENV ASPNETCORE_URLS=http://+:1818 \
     DOTNET_RUNNING_IN_CONTAINER=true \

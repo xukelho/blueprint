@@ -91,7 +91,8 @@ public sealed record CreateCompanyRequest(
     string Nif,
     string Email,
     string PhoneNumber,
-    string Address);
+    string Address,
+    string? Website);
 
 public sealed record UpdateCompanyRequest(
     string Name,
@@ -99,7 +100,8 @@ public sealed record UpdateCompanyRequest(
     string Nif,
     string Email,
     string PhoneNumber,
-    string Address);
+    string Address,
+    string? Website);
 
 public sealed record CompanyResponse(
     long Id,
@@ -109,6 +111,7 @@ public sealed record CompanyResponse(
     string Email,
     string PhoneNumber,
     string Address,
+    string? Website,
     bool IsActive,
     DateTimeOffset CreatedAt,
     long CreatedBy,

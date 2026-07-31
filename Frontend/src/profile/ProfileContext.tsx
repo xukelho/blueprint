@@ -33,7 +33,7 @@ const hasProfileRole = () => {
 
 export function ProfileProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<CurrentProfile | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(hasProfileRole);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
@@ -110,7 +110,7 @@ export function profileInitials(name: string) {
 
 export function profileRoleLabel(profile: CurrentProfile) {
   if (profile.profileType === "client") return "Cliente";
-  return profile.roles?.includes("architect")
+  return profile.isArchitect
     ? "Colaboradora · Arquiteta"
     : "Colaboradora";
 }

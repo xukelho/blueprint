@@ -12,6 +12,7 @@ public sealed class BlueprintDbContext(DbContextOptions<BlueprintDbContext> opti
     public DbSet<Client> Clients => Set<Client>();
     public DbSet<Employee> Employees => Set<Employee>();
     public DbSet<Company> Companies => Set<Company>();
+    public DbSet<CompanyEmployee> CompanyEmployees => Set<CompanyEmployee>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -20,6 +21,7 @@ public sealed class BlueprintDbContext(DbContextOptions<BlueprintDbContext> opti
         ConfigureUserRoles(modelBuilder);
         ConfigureCompanies(modelBuilder);
         ConfigureEmployees(modelBuilder);
+        ConfigureCompanyEmployees(modelBuilder);
         ConfigureClients(modelBuilder);
     }
 
@@ -42,7 +44,8 @@ public sealed class BlueprintDbContext(DbContextOptions<BlueprintDbContext> opti
             new Role { Id = RoleIds.PlatformAdmin, Name = "platform admin" },
             new Role { Id = RoleIds.Client, Name = "client" },
             new Role { Id = RoleIds.Employee, Name = "employee" },
-            new Role { Id = RoleIds.Architect, Name = "architect" });
+            new Role { Id = RoleIds.Architect, Name = "architect" },
+            new Role { Id = RoleIds.CompanyOwner, Name = "company owner" });
     }
 
     private static void ConfigureUsers(ModelBuilder modelBuilder)
@@ -78,6 +81,9 @@ public sealed class BlueprintDbContext(DbContextOptions<BlueprintDbContext> opti
         user.Property(candidate => candidate.UpdatedBy)
             .HasColumnName("updated_by")
             .IsRequired();
+        user.Property(candidate => candidate.IsActive).HasColumnName("is_active").HasDefaultValue(true).IsRequired();
+        user.Property(candidate => candidate.DeactivatedAt).HasColumnName("deactivated_at").HasColumnType("timestamp with time zone");
+        user.Property(candidate => candidate.DeactivatedBy).HasColumnName("deactivated_by");
     }
 
     private static void ConfigureUserRoles(ModelBuilder modelBuilder)
@@ -118,6 +124,9 @@ public sealed class BlueprintDbContext(DbContextOptions<BlueprintDbContext> opti
             .HasMaxLength(512)
             .IsRequired();
         ConfigureContactProperties(company);
+        company.Property(candidate => candidate.Website)
+            .HasColumnName("website")
+            .HasMaxLength(2048);
         company.Property(candidate => candidate.IsActive)
             .HasColumnName("is_active")
             .HasDefaultValue(true)
@@ -156,14 +165,23 @@ public sealed class BlueprintDbContext(DbContextOptions<BlueprintDbContext> opti
             .WithOne(candidate => candidate.Employee)
             .HasForeignKey<Employee>(candidate => candidate.UserId)
             .OnDelete(DeleteBehavior.Cascade);
-        employee.Property(candidate => candidate.CompanyId)
-            .HasColumnName("company_id")
-            .IsRequired();
-        employee.HasOne(candidate => candidate.Company)
-            .WithMany(candidate => candidate.Employees)
-            .HasForeignKey(candidate => candidate.CompanyId)
-            .OnDelete(DeleteBehavior.Restrict);
-        ConfigureProfileProperties(employee);
+        ConfigureEmployeeProfileProperties(employee);
+    }
+
+    private static void ConfigureCompanyEmployees(ModelBuilder modelBuilder)
+    {
+        var membership = modelBuilder.Entity<CompanyEmployee>();
+        membership.ToTable("company_employees");
+        membership.HasKey(candidate => new { candidate.CompanyId, candidate.EmployeeId });
+        membership.Property(candidate => candidate.CompanyId).HasColumnName("company_id");
+        membership.Property(candidate => candidate.EmployeeId).HasColumnName("employee_id");
+        membership.HasIndex(candidate => candidate.EmployeeId).IsUnique();
+        membership.Property(candidate => candidate.CompanyRole).HasColumnName("company_role").HasMaxLength(16).IsRequired();
+        membership.Property(candidate => candidate.IsArchitect).HasColumnName("is_architect").HasDefaultValue(false).IsRequired();
+        membership.HasOne(candidate => candidate.Company).WithMany(candidate => candidate.CompanyEmployees)
+            .HasForeignKey(candidate => candidate.CompanyId).OnDelete(DeleteBehavior.Restrict);
+        membership.HasOne(candidate => candidate.Employee).WithOne(candidate => candidate.CompanyEmployee)
+            .HasForeignKey<CompanyEmployee>(candidate => candidate.EmployeeId).OnDelete(DeleteBehavior.Cascade);
     }
 
     private static void ConfigureClients(ModelBuilder modelBuilder)
@@ -202,6 +220,16 @@ public sealed class BlueprintDbContext(DbContextOptions<BlueprintDbContext> opti
         profile.Property<string>(nameof(Client.FullName))
             .HasColumnName("full_name").HasMaxLength(512).IsRequired();
         ConfigureContactProperties(profile);
+    }
+
+    private static void ConfigureEmployeeProfileProperties(EntityTypeBuilder<Employee> profile)
+    {
+        profile.Property(candidate => candidate.DisplayName).HasColumnName("display_name").HasMaxLength(256).IsRequired();
+        profile.Property(candidate => candidate.FullName).HasColumnName("full_name").HasMaxLength(512).IsRequired();
+        profile.Property(candidate => candidate.Nif).HasColumnName("nif").HasMaxLength(32);
+        profile.Property(candidate => candidate.Email).HasColumnName("email").HasMaxLength(320);
+        profile.Property(candidate => candidate.PhoneNumber).HasColumnName("phone_number").HasMaxLength(64);
+        profile.Property(candidate => candidate.Address).HasColumnName("address").HasMaxLength(1024);
     }
 
     private static void ConfigureContactProperties<TEntity>(

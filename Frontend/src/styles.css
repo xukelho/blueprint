@@ -229,6 +229,7 @@ button { cursor: pointer; }
   font-weight: 700;
 }
 .text-button:hover { color: var(--forest-dark); text-decoration: underline; }
+.forgot-password { display: block; margin: 7px 0 0; }
 
 .input-wrap {
   height: 54px;
@@ -821,6 +822,75 @@ button { cursor: pointer; }
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 19px;
+}
+
+.members-settings {
+  display: grid;
+  gap: 24px;
+}
+
+.members-settings__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.members-create-dialog { width: min(680px, 100%); }
+.members-create-dialog__form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; }
+.members-create-dialog__form .admin-form-error,
+.members-create-dialog__actions { grid-column: 1 / -1; }
+.members-create-dialog__actions { margin-top: 6px; }
+.members-deactivate-dialog { width: min(470px, 100%); }
+.members-deactivate-dialog__icon { width: 40px; height: 40px; display: grid; place-items: center; margin-bottom: 15px; color: #a64032; background: #fdf0ed; border-radius: 9px; }
+.members-deactivate-dialog > p { max-width: 370px; line-height: 18px; }
+.members-deactivate-dialog .admin-form-error { margin-top: 16px; }
+.members-deactivate-dialog__actions { margin-top: 22px; }
+
+.members-settings table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.members-settings th,
+.members-settings td {
+  padding: 12px 10px;
+  text-align: left;
+  border-bottom: 1px solid #d5e6eb;
+}
+
+.members-settings th {
+  color: #4f5257;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.members-settings td select {
+  min-height: 34px;
+  padding: 0 8px;
+  border: 1px solid #d5e6eb;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.members-settings__delete {
+  width: 34px;
+  height: 34px;
+  display: inline-grid;
+  place-items: center;
+  color: #fff;
+  background: #c94b45;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.members-settings__delete:hover:not(:disabled) {
+  background: #aa3833;
+}
+
+.members-settings__delete:disabled {
+  cursor: wait;
+  opacity: .65;
 }
 
 .mock-field {
@@ -1570,6 +1640,7 @@ button { cursor: pointer; }
 .mock-settings-nav button:hover { background: #edf6f9; }
 .mock-settings-nav button.is-active { color: #005864; background: #e3f5fa; font-weight: 600; }
 .mock-settings-nav button svg:last-child { margin-left: auto; }
+.mock-settings-nav button .nav-status + svg { margin-left: 0; }
 
 .mock-settings-content {
   min-height: 520px;

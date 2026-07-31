@@ -8,6 +8,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { ProfileType, UpdateCurrentProfile } from "../api/profile";
+import { changeCurrentPassword } from "../api/profile";
 import PortalShell from "../components/PortalShell";
 import {
   profileInitials,
@@ -113,7 +114,7 @@ export default function UserPage({
       phoneNumber: profile.phoneNumber,
       address: profile.address,
       companyId: profile.companyId,
-      isArchitect: profile.roles.includes("architect"),
+      isArchitect: profile.isArchitect ?? false,
     }));
   }, [profile]);
 
@@ -173,6 +174,14 @@ export default function UserPage({
       }
     />
   );
+
+  const changePassword = async () => {
+    const currentPassword = window.prompt("Palavra-passe atual");
+    const newPassword = window.prompt("Nova palavra-passe");
+    if (!currentPassword || !newPassword) return;
+    try { await changeCurrentPassword(currentPassword, newPassword); setSaved(true); }
+    catch { /* Profile error state remains the source for profile edits. */ }
+  };
 
   if (isLoading && !profile) {
     return (
@@ -369,7 +378,7 @@ export default function UserPage({
                     <strong>Palavra-passe</strong>
                     <small>Alterada há 3 meses</small>
                   </div>
-                  <button className="secondary-action" type="button">Alterar</button>
+                      <button className="secondary-action" type="button" onClick={() => void changePassword()}>Alterar</button>
                 </div>
                 {!simplifiedSecurity && (
                   <>

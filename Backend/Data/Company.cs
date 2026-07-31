@@ -16,6 +16,8 @@ public sealed class Company
 
     public required string Address { get; set; }
 
+    public string? Website { get; set; }
+
     public bool IsActive { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
@@ -26,7 +28,7 @@ public sealed class Company
 
     public long UpdatedBy { get; set; }
 
-    public ICollection<Employee> Employees { get; set; } = [];
+    public ICollection<CompanyEmployee> CompanyEmployees { get; set; } = [];
 
     public ICollection<Client> Clients { get; set; } = [];
 }

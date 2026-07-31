@@ -3,7 +3,6 @@ import {
   Activity,
   ArrowLeft,
   Bell,
-  Building2,
   CalendarDays,
   Check,
   ChevronDown,
@@ -17,7 +16,6 @@ import {
   GripVertical,
   Headphones,
   Image,
-  Link2,
   Mail,
   MapPin,
   MessageSquare,
@@ -26,12 +24,8 @@ import {
   Phone,
   Plus,
   Search,
-  Settings,
-  ShieldCheck,
   SlidersHorizontal,
   Trash2,
-  UserRound,
-  Users,
   X,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -433,46 +427,6 @@ export function ClientPage() {
           <section className="mock-surface mock-client-identity"><span className="mock-client-avatar mock-client-avatar--coral">MS</span><button type="button">Alterar fotografia</button><dl><div><dt>Estado</dt><dd><StatusPill tone="success">Ativo</StatusPill></dd></div><div><dt>Último acesso</dt><dd>Hoje, 08:54</dd></div><div><dt>Convite aceite</dt><dd>12 mar. 2026</dd></div></dl></section>
           <section className="mock-surface"><div className="mock-section-title"><div><h2>Atividade</h2></div></div><div className="mock-mini-activity"><p>Respondeu ao assunto #18<small>Ontem, 16:18</small></p><p>Consultou a revisão R07<small>Ontem, 15:52</small></p><p>Aprovou a revisão R05<small>30 jun., 10:14</small></p></div></section>
         </aside>
-      </div>
-    </PortalShell>
-  );
-}
-
-const settingsNav = [
-  { label: "Perfil e conta", icon: UserRound },
-  { label: "Atelier", icon: Building2 },
-  { label: "Membros e permissões", icon: Users },
-  { label: "Faturação e subscrição", icon: CreditCard },
-  { label: "Integrações", icon: Link2 },
-  { label: "Segurança e sessões", icon: ShieldCheck },
-  { label: "Preferências gerais", icon: Settings },
-];
-
-export function SettingsPage() {
-  const [section, setSection] = useState("Atelier");
-  const [saved, setSaved] = useState(false);
-  return (
-    <PortalShell>
-      <PageHeader eyebrow="Administração" title="Definições" description="Gere o atelier, a subscrição e as regras de acesso." />
-      <div className="mock-settings-layout">
-        <nav className="mock-settings-nav" aria-label="Secções de definições">{settingsNav.map((item) => { const Icon = item.icon; return <button className={section === item.label ? "is-active" : ""} type="button" key={item.label} onClick={() => setSection(item.label)}><Icon size={18} />{item.label}<ChevronRight size={16} /></button>; })}</nav>
-        <section className="mock-surface mock-settings-content">
-          <div className="mock-section-title"><div><h2>{section}</h2><p>{section === "Atelier" ? "Informação visível nos projetos e comunicações do atelier." : `Configura as opções de ${section.toLocaleLowerCase("pt-PT")}.`}</p></div></div>
-          {section === "Atelier" ? (
-            <div className="mock-form-grid">
-              <label className="mock-field mock-field--wide">Nome do atelier<input defaultValue="Forma Norte — Arquitetura" /></label>
-              <label className="mock-field">Email geral<input defaultValue="geral@formanorte.pt" /></label>
-              <label className="mock-field">Telefone<input defaultValue="+351 213 445 890" /></label>
-              <label className="mock-field mock-field--wide">Morada<input defaultValue="Rua das Flores, 28 · 1200-195 Lisboa" /></label>
-              <label className="mock-field">NIF<input defaultValue="517 403 920" /></label>
-              <label className="mock-field">Website<input defaultValue="https://formanorte.pt" /></label>
-              <label className="mock-field mock-field--wide">Idioma do atelier<select defaultValue="Português (Portugal)"><option>Português (Portugal)</option><option>English</option></select></label>
-            </div>
-          ) : (
-            <div className="mock-settings-placeholder"><Settings size={28} /><h3>{section}</h3><p>As opções desta área foram organizadas para manter cada decisão clara e contextual.</p><button className="secondary-action" type="button">Configurar</button></div>
-          )}
-          <div className="mock-form-actions"><button className="primary-action" type="button" onClick={() => { setSaved(true); window.setTimeout(() => setSaved(false), 2000); }}>{saved ? <><Check size={17} />Alterações guardadas</> : "Guardar alterações"}</button></div>
-        </section>
       </div>
     </PortalShell>
   );
