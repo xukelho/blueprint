@@ -61,7 +61,8 @@ function LoginPage() {
       if (response.ok) {
         const result = (await response.json()) as LoginResponse;
         if (result.status === "success") {
-          setAuthenticatedRoles(result.roles ?? []);
+          const roles = result.roles ?? [];
+          setAuthenticatedRoles(roles);
           navigate("/dashboard", { replace: true });
           return;
         }
@@ -167,7 +168,6 @@ function LoginPage() {
             <div className="field">
               <div className="label-row">
                 <label htmlFor="password">Password</label>
-                <button className="text-button" type="button">Forgot password?</button>
               </div>
               <div className={`input-wrap ${errors.password ? "input-wrap--error" : ""}`}>
                 <LockKeyhole size={18} aria-hidden="true" />
@@ -195,6 +195,7 @@ function LoginPage() {
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
+              <button className="text-button forgot-password" type="button">Forgot password?</button>
               {errors.password && <p className="field-error" id="password-error">{errors.password}</p>}
             </div>
 

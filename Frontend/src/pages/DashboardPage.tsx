@@ -18,7 +18,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { clearAuthenticatedRoles, isPlatformAdmin } from "../auth";
+import { clearAuthenticatedRoles, isEmployee, isPlatformAdmin } from "../auth";
 import { BlueprintLogoMark } from "../components/BlueprintLogoMark";
 import {
   profileInitials,
@@ -119,7 +119,7 @@ const primaryNav = [
   { label: "Projetos", icon: FolderKanban, path: "/projects", mockStatus: "mock" },
   { label: "Clientes", icon: Users, path: "/clients", mockStatus: "mock" },
   { label: "Administração", icon: ShieldCheck, path: "/administration", mockStatus: undefined },
-  { label: "Definições", icon: Settings, path: "/settings", mockStatus: "mock" },
+  { label: "Definições", icon: Settings, path: "/settings", mockStatus: undefined },
 ];
 
 const secondaryNav = [
@@ -155,7 +155,9 @@ function DashboardPage() {
   const [query, setQuery] = useState("");
   const [openMenu, setOpenMenu] = useState<number | null>(null);
   const visiblePrimaryNav = primaryNav.filter(
-    (item) => item.path !== "/administration" || isPlatformAdmin(),
+    (item) =>
+      (item.path !== "/administration" || isPlatformAdmin()) &&
+      (item.path !== "/settings" || isEmployee() && profile?.companyRole === "owner"),
   );
 
   const filteredProjects = useMemo(() => {

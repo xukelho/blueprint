@@ -349,15 +349,11 @@ public static class AdministrationEndpoints
         }
 
         var user = NewUser(normalizedUsername, validRequest.Password);
-        foreach (var roleId in validRequest.RoleIds.Distinct())
-        {
-            user.UserRoles.Add(new UserRole { RoleId = roleId });
-        }
+        user.UserRoles.Add(new UserRole { RoleId = RoleIds.Employee });
 
         var employee = new Employee
         {
             User = user,
-            CompanyId = validRequest.CompanyId,
             DisplayName = validRequest.DisplayName.Trim(),
             FullName = validRequest.FullName.Trim(),
             Nif = validRequest.Nif.Trim(),
@@ -366,6 +362,13 @@ public static class AdministrationEndpoints
             Address = validRequest.Address.Trim()
         };
         dbContext.Employees.Add(employee);
+        dbContext.CompanyEmployees.Add(new CompanyEmployee
+        {
+            CompanyId = validRequest.CompanyId,
+            Employee = employee,
+            CompanyRole = CompanyRoles.Employee,
+            IsArchitect = validRequest.RoleIds.Contains(RoleIds.Architect)
+        });
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return TypedResults.Created(
@@ -395,16 +398,6 @@ public static class AdministrationEndpoints
         if (employee is null)
         {
             return TypedResults.NotFound();
-        }
-
-        if (employee.CompanyId != request!.CompanyId)
-        {
-            var companyResult = await RequireActiveCompany(
-                request.CompanyId, dbContext, cancellationToken);
-            if (companyResult is not null)
-            {
-                return companyResult;
-            }
         }
 
         Apply(employee, request);
@@ -605,6 +598,7 @@ public static class AdministrationEndpoints
             Email = request.Email.Trim(),
             PhoneNumber = request.PhoneNumber.Trim(),
             Address = request.Address.Trim(),
+            Website = NormalizeOptional(request.Website),
             IsActive = true,
             CreatedAt = now,
             CreatedBy = AuditActors.System,
@@ -648,6 +642,7 @@ public static class AdministrationEndpoints
         company.Email = request.Email.Trim();
         company.PhoneNumber = request.PhoneNumber.Trim();
         company.Address = request.Address.Trim();
+        company.Website = NormalizeOptional(request.Website);
         company.UpdatedAt = DateTimeOffset.UtcNow;
         company.UpdatedBy = AuditActors.System;
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -703,6 +698,7 @@ public static class AdministrationEndpoints
         {
             Username = username,
             Password = string.Empty,
+            IsActive = true,
             CreatedAt = now,
             CreatedBy = AuditActors.System,
             UpdatedAt = now,
@@ -868,20 +864,26 @@ public static class AdministrationEndpoints
         {
             CreateCompanyRequest value => (
                 value.Name, value.LegalName, value.Nif, value.Email,
-                value.PhoneNumber, value.Address),
+                value.PhoneNumber, value.Address, value.Website),
             UpdateCompanyRequest value => (
                 value.Name, value.LegalName, value.Nif, value.Email,
-                value.PhoneNumber, value.Address),
+                value.PhoneNumber, value.Address, value.Website),
             _ => throw new InvalidOperationException("Unsupported company request.")
         };
-        ValidateRequired(errors, "name", values.Item1, "Name", 256);
-        ValidateRequired(errors, "legalName", values.Item2, "Legal name", 512);
-        ValidateRequired(errors, "nif", values.Item3, "NIF", 32);
-        ValidateRequired(errors, "email", values.Item4, "Email", 320);
-        ValidateRequired(errors, "phoneNumber", values.Item5, "Phone number", 64);
-        ValidateRequired(errors, "address", values.Item6, "Address", 1024);
+        AdministrationValidation.ValidateCompany(
+            errors,
+            values.Item1,
+            values.Item2,
+            values.Item3,
+            values.Item4,
+            values.Item5,
+            values.Item6,
+            values.Item7);
         return errors;
     }
+
+    private static string? NormalizeOptional(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static void ValidateRequired(
         Dictionary<string, string[]> errors,
@@ -896,7 +898,6 @@ public static class AdministrationEndpoints
 
     private static void Apply(Employee employee, UpdateEmployeeRequest request)
     {
-        employee.CompanyId = request.CompanyId;
         employee.DisplayName = request.DisplayName.Trim();
         employee.FullName = request.FullName.Trim();
         employee.Nif = request.Nif.Trim();
@@ -935,13 +936,13 @@ public static class AdministrationEndpoints
         new(
             employee.Id,
             employee.UserId,
-            employee.CompanyId,
+            employee.CompanyEmployee?.CompanyId ?? 0,
             employee.DisplayName,
             employee.FullName,
-            employee.Nif,
-            employee.Email,
-            employee.PhoneNumber,
-            employee.Address);
+            employee.Nif ?? string.Empty,
+            employee.Email ?? string.Empty,
+            employee.PhoneNumber ?? string.Empty,
+            employee.Address ?? string.Empty);
 
     private static ClientResponse ToResponse(Client client) =>
         new(
@@ -964,6 +965,7 @@ public static class AdministrationEndpoints
             company.Email,
             company.PhoneNumber,
             company.Address,
+            company.Website,
             company.IsActive,
             company.CreatedAt,
             company.CreatedBy,

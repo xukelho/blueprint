@@ -53,6 +53,8 @@ app.MapHealthEndpoints();
 app.MapAuthenticationEndpoints();
 app.MapAdministrationEndpoints();
 app.MapProfileEndpoints();
+app.MapCompanyEndpoints();
+app.MapCompanyMemberEndpoints();
 
 app.Run();
 

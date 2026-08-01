@@ -3,6 +3,7 @@ using System;
 using Blueprint.Api.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Blueprint.Api.Data.Migrations
 {
     [DbContext(typeof(BlueprintDbContext))]
-    partial class BlueprintDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260729230131_AddCompanyWebsite")]
+    partial class AddCompanyWebsite
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -162,36 +165,6 @@ namespace Blueprint.Api.Data.Migrations
                     b.ToTable("companies", (string)null);
                 });
 
-            modelBuilder.Entity("Blueprint.Api.Data.CompanyEmployee", b =>
-                {
-                    b.Property<long>("CompanyId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("company_id");
-
-                    b.Property<long>("EmployeeId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("employee_id");
-
-                    b.Property<string>("CompanyRole")
-                        .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)")
-                        .HasColumnName("company_role");
-
-                    b.Property<bool>("IsArchitect")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("is_architect");
-
-                    b.HasKey("CompanyId", "EmployeeId");
-
-                    b.HasIndex("EmployeeId")
-                        .IsUnique();
-
-                    b.ToTable("company_employees", (string)null);
-                });
-
             modelBuilder.Entity("Blueprint.Api.Data.Employee", b =>
                 {
                     b.Property<long>("Id")
@@ -202,9 +175,14 @@ namespace Blueprint.Api.Data.Migrations
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
                     b.Property<string>("Address")
+                        .IsRequired()
                         .HasMaxLength(1024)
                         .HasColumnType("character varying(1024)")
                         .HasColumnName("address");
+
+                    b.Property<long>("CompanyId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("company_id");
 
                     b.Property<string>("DisplayName")
                         .IsRequired()
@@ -213,6 +191,7 @@ namespace Blueprint.Api.Data.Migrations
                         .HasColumnName("display_name");
 
                     b.Property<string>("Email")
+                        .IsRequired()
                         .HasMaxLength(320)
                         .HasColumnType("character varying(320)")
                         .HasColumnName("email");
@@ -224,11 +203,13 @@ namespace Blueprint.Api.Data.Migrations
                         .HasColumnName("full_name");
 
                     b.Property<string>("Nif")
+                        .IsRequired()
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
                         .HasColumnName("nif");
 
                     b.Property<string>("PhoneNumber")
+                        .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
                         .HasColumnName("phone_number");
@@ -238,6 +219,8 @@ namespace Blueprint.Api.Data.Migrations
                         .HasColumnName("user_id");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CompanyId");
 
                     b.HasIndex("UserId")
                         .IsUnique();
@@ -287,11 +270,6 @@ namespace Blueprint.Api.Data.Migrations
                         {
                             Id = 4L,
                             Name = "architect"
-                        },
-                        new
-                        {
-                            Id = 5L,
-                            Name = "company owner"
                         });
                 });
 
@@ -311,20 +289,6 @@ namespace Blueprint.Api.Data.Migrations
                     b.Property<long>("CreatedBy")
                         .HasColumnType("bigint")
                         .HasColumnName("created_by");
-
-                    b.Property<DateTimeOffset?>("DeactivatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("deactivated_at");
-
-                    b.Property<long?>("DeactivatedBy")
-                        .HasColumnType("bigint")
-                        .HasColumnName("deactivated_by");
-
-                    b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true)
-                        .HasColumnName("is_active");
 
                     b.Property<string>("Password")
                         .IsRequired()
@@ -389,32 +353,21 @@ namespace Blueprint.Api.Data.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("Blueprint.Api.Data.CompanyEmployee", b =>
+            modelBuilder.Entity("Blueprint.Api.Data.Employee", b =>
                 {
                     b.HasOne("Blueprint.Api.Data.Company", "Company")
-                        .WithMany("CompanyEmployees")
+                        .WithMany("Employees")
                         .HasForeignKey("CompanyId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("Blueprint.Api.Data.Employee", "Employee")
-                        .WithOne("CompanyEmployee")
-                        .HasForeignKey("Blueprint.Api.Data.CompanyEmployee", "EmployeeId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Company");
-
-                    b.Navigation("Employee");
-                });
-
-            modelBuilder.Entity("Blueprint.Api.Data.Employee", b =>
-                {
                     b.HasOne("Blueprint.Api.Data.User", "User")
                         .WithOne("Employee")
                         .HasForeignKey("Blueprint.Api.Data.Employee", "UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("Company");
 
                     b.Navigation("User");
                 });
@@ -442,12 +395,7 @@ namespace Blueprint.Api.Data.Migrations
                 {
                     b.Navigation("Clients");
 
-                    b.Navigation("CompanyEmployees");
-                });
-
-            modelBuilder.Entity("Blueprint.Api.Data.Employee", b =>
-                {
-                    b.Navigation("CompanyEmployee");
+                    b.Navigation("Employees");
                 });
 
             modelBuilder.Entity("Blueprint.Api.Data.Role", b =>

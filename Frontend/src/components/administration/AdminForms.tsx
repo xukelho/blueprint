@@ -30,6 +30,7 @@ export type CompanyFormValue = {
   email: string;
   phoneNumber: string;
   address: string;
+  website: string;
 };
 
 type CommonProps<T> = {
@@ -281,6 +282,11 @@ export function CompanyForm({
             Morada
             <textarea value={value.address} onChange={(event) => onChange("address", event.target.value)} aria-invalid={Boolean(errors.address)} />
             <ErrorText errors={errors} name="address" />
+          </label>
+          <label className="admin-form-grid__wide">
+            Website
+            <input value={value.website} onChange={(event) => onChange("website", event.target.value)} aria-invalid={Boolean(errors.website)} />
+            <ErrorText errors={errors} name="website" />
           </label>
         </div>
       </fieldset>

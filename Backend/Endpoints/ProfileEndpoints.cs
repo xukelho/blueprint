@@ -4,6 +4,7 @@ using Blueprint.Api.Data;
 using Blueprint.Api.Validation;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
 namespace Blueprint.Api.Endpoints;
@@ -29,6 +30,11 @@ public static class ProfileEndpoints
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status404NotFound)
             .Produces<AdministrationErrorResponse>(StatusCodes.Status409Conflict)
+            .ProducesValidationProblem();
+        profile.MapPut("/password", ChangePassword)
+            .Accepts<ChangePasswordRequest>("application/json")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status401Unauthorized)
             .ProducesValidationProblem();
 
         return endpoints;
@@ -106,42 +112,9 @@ public static class ProfileEndpoints
                     "A user with this username already exists."));
         }
 
-        ProfileCompanyOption? company = null;
-        if (validRequest.CompanyId is long companyId)
-        {
-            company = companies.SingleOrDefault(
-                candidate => candidate.Id == companyId);
-            if (company is null)
-            {
-                return TypedResults.Conflict(
-                    new AdministrationErrorResponse(
-                        "The selected company does not exist or is inactive."));
-            }
-        }
-
-        if (employee is not null && company is null)
-        {
-            return TypedResults.ValidationProblem(
-                new Dictionary<string, string[]>
-                {
-                    ["companyId"] = ["Company is required for employees."]
-                });
-        }
-        if (client is not null && validRequest.IsArchitect)
-        {
-            return TypedResults.ValidationProblem(
-                new Dictionary<string, string[]>
-                {
-                    ["isArchitect"] = ["Only employees can have the architect role."]
-                });
-        }
-
         user.Username = username;
         user.UpdatedAt = DateTimeOffset.UtcNow;
         user.UpdatedBy = user.Id;
-        var hadArchitectRole = user.UserRoles.Any(
-            candidate => candidate.RoleId == RoleIds.Architect);
-
         if (employee is not null)
         {
             Apply(employee, validRequest);
@@ -151,38 +124,40 @@ public static class ProfileEndpoints
             Apply(client!, validRequest);
         }
 
-        if (employee is not null)
-        {
-            if (hadArchitectRole && !validRequest.IsArchitect)
-            {
-                var architectRole = user.UserRoles.Single(
-                    candidate => candidate.RoleId == RoleIds.Architect);
-                dbContext.UserRoles.Remove(architectRole);
-            }
-            else if (!hadArchitectRole && validRequest.IsArchitect)
-            {
-                dbContext.UserRoles.Add(new UserRole
-                {
-                    UserId = userId,
-                    RoleId = RoleIds.Architect
-                });
-            }
-        }
-
         await dbContext.SaveChangesAsync(cancellationToken);
         user.Employee = employee;
         user.Client = client;
         var roles = employee is not null
-            ? validRequest.IsArchitect
-                ? new[] { "employee", "architect" }
-                : ["employee"]
+            ? new[] { "employee" }
             : ["client"];
         await RefreshSessionAsync(httpContext, user, roles);
         return TypedResults.Ok(ToResponse(
             user,
             companies,
-            company?.Name,
+            null,
             roles));
+    }
+
+    private static async Task<IResult> ChangePassword(
+        ChangePasswordRequest? request,
+        ClaimsPrincipal principal,
+        BlueprintDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(principal, out var userId)) return TypedResults.Unauthorized();
+        var errors = new Dictionary<string, string[]>();
+        AdministrationValidation.ValidateRequired(errors, "currentPassword", request?.CurrentPassword, "Current password", 1024);
+        AdministrationValidation.ValidateRequired(errors, "newPassword", request?.NewPassword, "New password", 1024);
+        if (errors.Count > 0) return TypedResults.ValidationProblem(errors);
+        var user = await dbContext.Users.SingleOrDefaultAsync(x => x.Id == userId && x.IsActive, cancellationToken);
+        if (user is null) return TypedResults.Unauthorized();
+        var hasher = new PasswordHasher<User>();
+        if (hasher.VerifyHashedPassword(user, user.Password, request!.CurrentPassword) == PasswordVerificationResult.Failed)
+            return TypedResults.Unauthorized();
+        user.Password = hasher.HashPassword(user, request.NewPassword);
+        user.UpdatedAt = DateTimeOffset.UtcNow; user.UpdatedBy = userId;
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return TypedResults.NoContent();
     }
 
     private static Dictionary<string, string[]> Validate(
@@ -197,18 +172,8 @@ public static class ProfileEndpoints
 
         AdministrationValidation.ValidateRequired(
             errors, "username", request.Username, "Username", 256);
-        AdministrationValidation.ValidateProfile(
-            errors,
-            request.DisplayName,
-            request.FullName,
-            request.Nif,
-            request.Email,
-            request.PhoneNumber,
-            request.Address);
-        if (request.CompanyId is <= 0)
-        {
-            errors["companyId"] = ["Company ID must be positive."];
-        }
+        AdministrationValidation.ValidateRequired(errors, "displayName", request.DisplayName, "Display name", 256);
+        AdministrationValidation.ValidateRequired(errors, "fullName", request.FullName, "Full name", 512);
         return errors;
     }
 
@@ -219,7 +184,8 @@ public static class ProfileEndpoints
             .Include(candidate => candidate.Client)
                 .ThenInclude(candidate => candidate!.Company)
             .Include(candidate => candidate.Employee)
-                .ThenInclude(candidate => candidate!.Company);
+                .ThenInclude(candidate => candidate!.CompanyEmployee)
+                    .ThenInclude(candidate => candidate!.Company);
 
     private static Task<ProfileCompanyOption[]> LoadCompanyOptions(
         BlueprintDbContext dbContext,
@@ -257,14 +223,16 @@ public static class ProfileEndpoints
                 user.Username,
                 employee.DisplayName,
                 employee.FullName,
-                employee.Nif,
-                employee.Email,
-                employee.PhoneNumber,
-                employee.Address,
-                employee.CompanyId,
-                companyName ?? employee.Company?.Name,
+                employee.Nif ?? string.Empty,
+                employee.Email ?? string.Empty,
+                employee.PhoneNumber ?? string.Empty,
+                employee.Address ?? string.Empty,
+                employee.CompanyEmployee?.CompanyId,
+                companyName ?? employee.CompanyEmployee?.Company?.Name,
                 roles,
-                companies);
+                companies,
+                employee.CompanyEmployee?.CompanyRole,
+                employee.CompanyEmployee?.IsArchitect ?? false);
         }
 
         var client = user.Client!;
@@ -288,13 +256,12 @@ public static class ProfileEndpoints
         Employee employee,
         UpdateCurrentProfileRequest request)
     {
-        employee.CompanyId = request.CompanyId!.Value;
         employee.DisplayName = request.DisplayName.Trim();
         employee.FullName = request.FullName.Trim();
-        employee.Nif = request.Nif.Trim();
-        employee.Email = request.Email.Trim();
-        employee.PhoneNumber = request.PhoneNumber.Trim();
-        employee.Address = request.Address.Trim();
+        employee.Nif = string.IsNullOrWhiteSpace(request.Nif) ? null : request.Nif.Trim();
+        employee.Email = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email.Trim();
+        employee.PhoneNumber = string.IsNullOrWhiteSpace(request.PhoneNumber) ? null : request.PhoneNumber.Trim();
+        employee.Address = string.IsNullOrWhiteSpace(request.Address) ? null : request.Address.Trim();
     }
 
     private static void Apply(

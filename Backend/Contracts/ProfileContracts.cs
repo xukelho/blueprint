@@ -15,7 +15,9 @@ public sealed record CurrentProfileResponse(
     long? CompanyId,
     string? CompanyName,
     IReadOnlyList<string> Roles,
-    IReadOnlyList<ProfileCompanyOption> AvailableCompanies);
+    IReadOnlyList<ProfileCompanyOption> AvailableCompanies,
+    string? CompanyRole = null,
+    bool IsArchitect = false);
 
 public sealed record UpdateCurrentProfileRequest(
     string Username,
@@ -27,3 +29,5 @@ public sealed record UpdateCurrentProfileRequest(
     string Address,
     long? CompanyId,
     bool IsArchitect);
+
+public sealed record ChangePasswordRequest(string CurrentPassword, string NewPassword);

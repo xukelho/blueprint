@@ -16,8 +16,8 @@ const users = [
   { id: 3, username: "marta", roles: [roles[1]], createdAt: "2026-01-01", createdBy: 0, updatedAt: "2026-01-01", updatedBy: 0 },
 ];
 const companies = [
-  { id: 10, name: "Forma Norte", legalName: "Forma Norte, Lda.", nif: "501", email: "geral@forma.pt", phoneNumber: "210", address: "Lisboa", isActive: true, createdAt: "2026-01-01", createdBy: 0, updatedAt: "2026-01-01", updatedBy: 0 },
-  { id: 20, name: "Arquivo", legalName: "Arquivo, Lda.", nif: "502", email: "arquivo@forma.pt", phoneNumber: "211", address: "Porto", isActive: false, createdAt: "2026-01-01", createdBy: 0, updatedAt: "2026-01-02", updatedBy: 0 },
+  { id: 10, name: "Forma Norte", legalName: "Forma Norte, Lda.", nif: "501", email: "geral@forma.pt", phoneNumber: "210", address: "Lisboa", website: null, isActive: true, createdAt: "2026-01-01", createdBy: 0, updatedAt: "2026-01-01", updatedBy: 0 },
+  { id: 20, name: "Arquivo", legalName: "Arquivo, Lda.", nif: "502", email: "arquivo@forma.pt", phoneNumber: "211", address: "Porto", website: null, isActive: false, createdAt: "2026-01-01", createdBy: 0, updatedAt: "2026-01-02", updatedBy: 0 },
 ];
 const employees = [
   { id: 100, userId: 2, companyId: 20, displayName: "Ana Martins", fullName: "Ana Sofia Martins", nif: "123", email: "ana@forma.pt", phoneNumber: "910", address: "Lisboa" },
@@ -218,7 +218,7 @@ describe("AdministrationPage", () => {
     await user.click(screen.getByRole("button", { name: "Guardar" }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/admin/companies", expect.objectContaining({
       method: "POST",
-      body: JSON.stringify({ name: "Nova Empresa", legalName: "Nova Empresa, Lda.", nif: "509", email: "nova@empresa.pt", phoneNumber: "212", address: "Braga" }),
+      body: JSON.stringify({ name: "Nova Empresa", legalName: "Nova Empresa, Lda.", nif: "509", email: "nova@empresa.pt", phoneNumber: "212", address: "Braga", website: "" }),
     })));
   });
 

@@ -16,6 +16,12 @@ public sealed class User
 
     public long UpdatedBy { get; set; }
 
+    public bool IsActive { get; set; }
+
+    public DateTimeOffset? DeactivatedAt { get; set; }
+
+    public long? DeactivatedBy { get; set; }
+
     public ICollection<UserRole> UserRoles { get; set; } = [];
 
     public Client? Client { get; set; }

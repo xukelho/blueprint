@@ -39,6 +39,7 @@ export type CompanyResponse = {
   email: string;
   phoneNumber: string;
   address: string;
+  website: string | null;
   isActive: boolean;
   createdAt: string;
   createdBy: number;

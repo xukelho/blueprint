@@ -16,7 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { clearAuthenticatedRoles, isPlatformAdmin } from "../auth";
+import { clearAuthenticatedRoles, isEmployee, isPlatformAdmin } from "../auth";
 import {
   profileInitials,
   profileRoleLabel,
@@ -29,7 +29,7 @@ const primaryNav = [
   { label: "Projetos", icon: FolderKanban, path: "/projects", mockStatus: "mock" },
   { label: "Clientes", icon: Users, path: "/clients", mockStatus: "mock" },
   { label: "Administração", icon: ShieldCheck, path: "/administration", mockStatus: undefined },
-  { label: "Definições", icon: Settings, path: "/settings", mockStatus: "mock" },
+  { label: "Definições", icon: Settings, path: "/settings", mockStatus: undefined },
 ];
 
 const secondaryNav = [
@@ -53,7 +53,9 @@ export default function PortalShell({ children, wide = false }: PortalShellProps
   const profileRole = profile ? profileRoleLabel(profile) : "Arquiteta";
   const profileCompany = profile?.companyName ?? "Forma Norte";
   const visiblePrimaryNav = primaryNav.filter(
-    (item) => item.path !== "/administration" || isPlatformAdmin(),
+    (item) =>
+      (item.path !== "/administration" || isPlatformAdmin()) &&
+      (item.path !== "/settings" || isEmployee() && profile?.companyRole === "owner"),
   );
 
   const goTo = (path: string) => {
