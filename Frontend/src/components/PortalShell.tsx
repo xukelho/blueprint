@@ -26,8 +26,8 @@ import { BlueprintLogoMark } from "./BlueprintLogoMark";
 
 const primaryNav = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard", mockStatus: "mock" },
-  { label: "Projetos", icon: FolderKanban, path: "/projects", mockStatus: "mock" },
-  { label: "Clientes", icon: Users, path: "/clients", mockStatus: "mock" },
+  { label: "Projetos", icon: FolderKanban, path: "/projects", mockStatus: undefined },
+  { label: "Clientes", icon: Users, path: "/clients", mockStatus: undefined },
   { label: "Administração", icon: ShieldCheck, path: "/administration", mockStatus: undefined },
   { label: "Definições", icon: Settings, path: "/settings", mockStatus: undefined },
 ];
@@ -53,7 +53,8 @@ export default function PortalShell({ children, wide = false }: PortalShellProps
   const profileRole = profile ? profileRoleLabel(profile) : "Arquiteta";
   const profileCompany = profile?.companyName ?? "Forma Norte";
   const visiblePrimaryNav = primaryNav.filter(
-    (item) =>
+      (item) =>
+      (item.path !== "/clients" || isEmployee()) &&
       (item.path !== "/administration" || isPlatformAdmin()) &&
       (item.path !== "/settings" || isEmployee() && profile?.companyRole === "owner"),
   );
