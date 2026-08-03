@@ -20,7 +20,11 @@ public sealed class Client
 
     public required string Address { get; set; }
 
+    public string InternalNotes { get; set; } = string.Empty;
+
     public User? User { get; set; }
 
     public Company? Company { get; set; }
+
+    public ICollection<Project> Projects { get; set; } = [];
 }

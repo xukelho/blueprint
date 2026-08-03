@@ -8,15 +8,11 @@ import ClientPage from "./pages/ClientPage";
 import CompanySettingsPage from "./pages/CompanySettingsPage";
 import { getAuthenticatedRoles, isClient, isEmployee, isPlatformAdmin } from "./auth";
 import { ProfileProvider, useProfile } from "./profile/ProfileContext";
-import {
-  ClientPage as ClientDetailMockPage,
-  ClientsPage,
-  HelpPage,
-  NotificationsPage,
-  ProjectCreatePage,
-  ProjectPage,
-  ProjectsPage,
-} from "./pages/MockupPages";
+import { HelpPage, NotificationsPage } from "./pages/MockupPages";
+import { ClientsPage, ClientDetailPage } from "./pages/ClientsPage";
+import { CompanyProjectsPage } from "./pages/CompanyProjectsPage";
+import { CompanyProjectsCreatePage } from "./pages/CompanyProjectsCreatePage";
+import { CompanyProjectPage } from "./pages/CompanyProjectPage";
 
 function AdministrationRoute() {
   return isPlatformAdmin()
@@ -66,11 +62,11 @@ function App() {
         <Route path="/" element={<LoginPage />} />
         <Route element={<AuthenticatedRoute />}>
           <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/projects" element={<ProjectsPage />} />
-          <Route path="/projects/new" element={<ProjectCreatePage />} />
-          <Route path="/projects/casa-do-vale" element={<ProjectPage />} />
+          <Route path="/projects" element={<CompanyProjectsPage />} />
+          <Route path="/projects/new" element={<CompanyProjectsCreatePage />} />
+          <Route path="/projects/:id" element={<CompanyProjectPage />} />
           <Route path="/clients" element={<ClientsPage />} />
-          <Route path="/clients/marta-silva" element={<ClientDetailMockPage />} />
+          <Route path="/clients/:id" element={<ClientDetailPage />} />
           <Route
             path="/administration"
             element={<AdministrationRoute />}

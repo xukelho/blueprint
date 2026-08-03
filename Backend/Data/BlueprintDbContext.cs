@@ -13,6 +13,9 @@ public sealed class BlueprintDbContext(DbContextOptions<BlueprintDbContext> opti
     public DbSet<Employee> Employees => Set<Employee>();
     public DbSet<Company> Companies => Set<Company>();
     public DbSet<CompanyEmployee> CompanyEmployees => Set<CompanyEmployee>();
+    public DbSet<Project> Projects => Set<Project>();
+    public DbSet<ProjectMember> ProjectMembers => Set<ProjectMember>();
+    public DbSet<ProjectPhase> ProjectPhases => Set<ProjectPhase>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -23,6 +26,7 @@ public sealed class BlueprintDbContext(DbContextOptions<BlueprintDbContext> opti
         ConfigureEmployees(modelBuilder);
         ConfigureCompanyEmployees(modelBuilder);
         ConfigureClients(modelBuilder);
+        ConfigureProjects(modelBuilder);
     }
 
     private static void ConfigureRoles(ModelBuilder modelBuilder)
@@ -209,6 +213,49 @@ public sealed class BlueprintDbContext(DbContextOptions<BlueprintDbContext> opti
             .HasForeignKey(candidate => candidate.CompanyId)
             .OnDelete(DeleteBehavior.Restrict);
         ConfigureProfileProperties(client);
+        client.Property(candidate => candidate.InternalNotes).HasColumnName("internal_notes").HasMaxLength(4000).HasDefaultValue(string.Empty).IsRequired();
+    }
+
+    private static void ConfigureProjects(ModelBuilder modelBuilder)
+    {
+        var project = modelBuilder.Entity<Project>();
+        project.ToTable("projects");
+        project.HasKey(candidate => candidate.Id);
+        project.Property(candidate => candidate.Id).HasColumnName("id").ValueGeneratedOnAdd();
+        project.Property(candidate => candidate.CompanyId).HasColumnName("company_id").IsRequired();
+        project.Property(candidate => candidate.ClientId).HasColumnName("client_id");
+        project.Property(candidate => candidate.Title).HasColumnName("title").HasMaxLength(256).IsRequired();
+        project.Property(candidate => candidate.Code).HasColumnName("code").HasMaxLength(64).IsRequired();
+        project.Property(candidate => candidate.Address).HasColumnName("address").HasMaxLength(1024).IsRequired();
+        project.Property(candidate => candidate.GoogleMapsUrl).HasColumnName("google_maps_url").HasMaxLength(2048);
+        project.Property(candidate => candidate.IsArchived).HasColumnName("is_archived").HasDefaultValue(false).IsRequired();
+        project.Property(candidate => candidate.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone").IsRequired();
+        project.Property(candidate => candidate.CreatedBy).HasColumnName("created_by").IsRequired();
+        project.Property(candidate => candidate.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone").IsRequired();
+        project.Property(candidate => candidate.UpdatedBy).HasColumnName("updated_by").IsRequired();
+        project.HasIndex(candidate => new { candidate.CompanyId, candidate.Code }).IsUnique();
+        project.HasOne(candidate => candidate.Company).WithMany(candidate => candidate.Projects).HasForeignKey(candidate => candidate.CompanyId).OnDelete(DeleteBehavior.Restrict);
+        project.HasOne(candidate => candidate.Client).WithMany(candidate => candidate.Projects).HasForeignKey(candidate => candidate.ClientId).OnDelete(DeleteBehavior.SetNull);
+
+        var member = modelBuilder.Entity<ProjectMember>();
+        member.ToTable("project_members");
+        member.HasKey(candidate => new { candidate.ProjectId, candidate.EmployeeId });
+        member.Property(candidate => candidate.ProjectId).HasColumnName("project_id");
+        member.Property(candidate => candidate.EmployeeId).HasColumnName("employee_id");
+        member.HasOne(candidate => candidate.Project).WithMany(candidate => candidate.Members).HasForeignKey(candidate => candidate.ProjectId).OnDelete(DeleteBehavior.Cascade);
+        member.HasOne(candidate => candidate.Employee).WithMany(candidate => candidate.ProjectMemberships).HasForeignKey(candidate => candidate.EmployeeId).OnDelete(DeleteBehavior.Cascade);
+
+        var phase = modelBuilder.Entity<ProjectPhase>();
+        phase.ToTable("project_phases");
+        phase.HasKey(candidate => candidate.Id);
+        phase.Property(candidate => candidate.Id).HasColumnName("id").ValueGeneratedOnAdd();
+        phase.Property(candidate => candidate.ProjectId).HasColumnName("project_id").IsRequired();
+        phase.Property(candidate => candidate.PhaseCode).HasColumnName("phase_code").HasMaxLength(96).IsRequired();
+        phase.Property(candidate => candidate.Position).HasColumnName("position").IsRequired();
+        phase.Property(candidate => candidate.IsCurrent).HasColumnName("is_current").HasDefaultValue(false).IsRequired();
+        phase.HasIndex(candidate => new { candidate.ProjectId, candidate.Position }).IsUnique();
+        phase.HasIndex(candidate => candidate.ProjectId).HasFilter("is_current").IsUnique();
+        phase.HasOne(candidate => candidate.Project).WithMany(candidate => candidate.Phases).HasForeignKey(candidate => candidate.ProjectId).OnDelete(DeleteBehavior.Cascade);
     }
 
     private static void ConfigureProfileProperties<TProfile>(

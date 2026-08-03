@@ -21,4 +21,6 @@ public sealed class Employee
     public User? User { get; set; }
 
     public CompanyEmployee? CompanyEmployee { get; set; }
+
+    public ICollection<ProjectMember> ProjectMemberships { get; set; } = [];
 }

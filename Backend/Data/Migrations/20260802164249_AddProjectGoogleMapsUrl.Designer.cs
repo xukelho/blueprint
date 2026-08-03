@@ -3,6 +3,7 @@ using System;
 using Blueprint.Api.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Blueprint.Api.Data.Migrations
 {
     [DbContext(typeof(BlueprintDbContext))]
-    partial class BlueprintDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260802164249_AddProjectGoogleMapsUrl")]
+    partial class AddProjectGoogleMapsUrl
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -301,6 +304,12 @@ namespace Blueprint.Api.Data.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("is_archived");
 
+                    b.Property<string>("Phase")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("phase");
+
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasMaxLength(256)
@@ -340,47 +349,6 @@ namespace Blueprint.Api.Data.Migrations
                     b.HasIndex("EmployeeId");
 
                     b.ToTable("project_members", (string)null);
-                });
-
-            modelBuilder.Entity("Blueprint.Api.Data.ProjectPhase", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<bool>("IsCurrent")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("is_current");
-
-                    b.Property<string>("PhaseCode")
-                        .IsRequired()
-                        .HasMaxLength(96)
-                        .HasColumnType("character varying(96)")
-                        .HasColumnName("phase_code");
-
-                    b.Property<int>("Position")
-                        .HasColumnType("integer")
-                        .HasColumnName("position");
-
-                    b.Property<long>("ProjectId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("project_id");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ProjectId")
-                        .IsUnique()
-                        .HasFilter("is_current");
-
-                    b.HasIndex("ProjectId", "Position")
-                        .IsUnique();
-
-                    b.ToTable("project_phases", (string)null);
                 });
 
             modelBuilder.Entity("Blueprint.Api.Data.Role", b =>
@@ -594,17 +562,6 @@ namespace Blueprint.Api.Data.Migrations
                     b.Navigation("Project");
                 });
 
-            modelBuilder.Entity("Blueprint.Api.Data.ProjectPhase", b =>
-                {
-                    b.HasOne("Blueprint.Api.Data.Project", "Project")
-                        .WithMany("Phases")
-                        .HasForeignKey("ProjectId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Project");
-                });
-
             modelBuilder.Entity("Blueprint.Api.Data.UserRole", b =>
                 {
                     b.HasOne("Blueprint.Api.Data.Role", "Role")
@@ -648,8 +605,6 @@ namespace Blueprint.Api.Data.Migrations
             modelBuilder.Entity("Blueprint.Api.Data.Project", b =>
                 {
                     b.Navigation("Members");
-
-                    b.Navigation("Phases");
                 });
 
             modelBuilder.Entity("Blueprint.Api.Data.Role", b =>

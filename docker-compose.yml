@@ -11,6 +11,7 @@ services:
     environment:
       WATCHPACK_POLLING: "true"
       VITE_API_PROXY_TARGET: "http://blueprint-api:1818"
+      VITE_GOOGLE_MAPS_API_KEY: "${VITE_GOOGLE_MAPS_API_KEY:-}"
 
   blueprint-api:
     build:

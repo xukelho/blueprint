@@ -55,6 +55,8 @@ app.MapAdministrationEndpoints();
 app.MapProfileEndpoints();
 app.MapCompanyEndpoints();
 app.MapCompanyMemberEndpoints();
+app.MapProjectEndpoints();
+app.MapClientManagementEndpoints();
 
 app.Run();
 
