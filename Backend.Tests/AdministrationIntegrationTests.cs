@@ -45,19 +45,24 @@ public sealed class AdministrationIntegrationTests(
                     SELECT 1 FROM information_schema.columns
                     WHERE table_name = 'users' AND column_name = 'role_id'
                 ),
+                EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'projects' AND column_name = 'client_id'
+                ),
                 (
                     SELECT COUNT(*) FROM information_schema.tables
                     WHERE table_schema = 'public'
                       AND table_name IN (
                           'users', 'roles', 'user_roles', 'companies',
-                          'employees', 'clients'
+                          'employees', 'clients', 'project_clients'
                       )
                 );
             """;
         await using var reader = await command.ExecuteReaderAsync();
         Assert.True(await reader.ReadAsync());
         Assert.False(reader.GetBoolean(0));
-        Assert.Equal(6, reader.GetInt64(1));
+        Assert.False(reader.GetBoolean(1));
+        Assert.Equal(7, reader.GetInt64(2));
     }
 
     [Fact]

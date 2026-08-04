@@ -13,6 +13,7 @@ import { CompanyClientPage, CompanyClientDetailPage } from "./pages/CompanyClien
 import { CompanyProjectsPage } from "./pages/CompanyProjectsPage";
 import { CompanyProjectsCreatePage } from "./pages/CompanyProjectsCreatePage";
 import { CompanyProjectPage } from "./pages/CompanyProjectPage";
+import { ClientNotificationsPage } from "./pages/ClientNotificationsPage";
 
 function AdministrationRoute() {
   return isPlatformAdmin()
@@ -34,6 +35,14 @@ function CompanySettingsRoute() {
   return profile?.profileType === "employee" && profile.companyRole === "owner"
     ? <CompanySettingsPage />
     : <Navigate to="/dashboard" replace />;
+}
+
+function NotificationsRoute() {
+  const { profile, isLoading } = useProfile();
+  if (isLoading) return null;
+  return profile?.profileType === "client"
+    ? <ClientNotificationsPage />
+    : <NotificationsPage />;
 }
 
 function subscribeToAuthenticationChanges(onStoreChange: () => void) {
@@ -72,7 +81,7 @@ function App() {
             element={<AdministrationRoute />}
           />
           <Route path="/settings" element={<CompanySettingsRoute />} />
-          <Route path="/notifications" element={<NotificationsPage />} />
+          <Route path="/notifications" element={<NotificationsRoute />} />
           <Route path="/help" element={<HelpPage />} />
           <Route path="/profile" element={<ProfileRoute />} />
         </Route>

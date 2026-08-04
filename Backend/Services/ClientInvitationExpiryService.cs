@@ -14,7 +14,7 @@ public static class ClientInvitationExpiry
     {
         var cutoff = timeProvider.GetUtcNow() - Lifetime;
         return await db.ClientInvitations
-            .Where(invitation => invitation.SentAt <= cutoff)
+            .Where(invitation => invitation.SentAt <= cutoff || !invitation.Company!.IsActive)
             .ExecuteDeleteAsync(cancellationToken);
     }
 }

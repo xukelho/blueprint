@@ -128,6 +128,10 @@ describe("editable profile", () => {
     renderApp("/profile");
 
     const username = await screen.findByLabelText("Nome de utilizador");
+    expect(screen.queryByLabelText("Empresa")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Empresas associadas")).toHaveLength(2);
+    expect(screen.getByText("Forma Norte")).toBeInTheDocument();
+    expect(screen.getByText("Atelier Sul")).toBeInTheDocument();
     await user.clear(username);
     await user.click(screen.getByRole("button", { name: "Guardar alterações" }));
 

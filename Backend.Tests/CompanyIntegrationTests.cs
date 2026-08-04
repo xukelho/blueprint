@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Npgsql;
 
 namespace Blueprint.Api.IntegrationTests;
 
@@ -28,6 +29,7 @@ public sealed class CompanyIntegrationTests(
         await CreateEmployeeAsync("company.employee", companyId);
         await LoginAsync("company.employee");
 
+        await PromoteToOwnerAsync("company.employee");
         var company = await fixture.Client.GetFromJsonAsync<JsonElement>("/api/company");
         Assert.Equal(companyId, company.GetProperty("id").GetInt64());
         Assert.Equal(JsonValueKind.Null, company.GetProperty("website").ValueKind);
@@ -82,6 +84,16 @@ public sealed class CompanyIntegrationTests(
                 address = "Porto"
             });
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+    }
+
+    private async Task PromoteToOwnerAsync(string username)
+    {
+        await using var connection = new NpgsqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE company_employees SET company_role = 'owner' WHERE employee_id = (SELECT e.id FROM employees e JOIN users u ON u.id = e.user_id WHERE u.username = @username)";
+        command.Parameters.AddWithValue("username", username);
+        await command.ExecuteNonQueryAsync();
     }
 
     private async Task CreateClientAsync(string username)

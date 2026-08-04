@@ -24,18 +24,36 @@ public static class ProjectEndpoints
     private static async Task<IResult> List(ClaimsPrincipal principal, BlueprintDbContext db, CancellationToken ct)
     {
         var access = await Access.ForUser(principal, db, ct);
-        if (access is null) return TypedResults.NotFound();
-        var query = db.Projects.AsNoTracking().Where(x => x.CompanyId == access.CompanyId);
-        if (!access.IsOwner) query = query.Where(x => x.Members.Any(m => m.EmployeeId == access.EmployeeId));
-        var items = await query.OrderBy(x => x.IsArchived).ThenBy(x => x.Title).Select(x => new ProjectSummaryResponse(x.Id, x.Title, x.Code, x.Address, x.GoogleMapsUrl, x.Phases.Where(phase => phase.IsCurrent).Select(phase => phase.PhaseCode).FirstOrDefault(), x.IsArchived, x.Client == null ? null : new ProjectClientResponse(x.Client.Id, x.Client.DisplayName), x.Members.OrderBy(m => m.Employee!.DisplayName).Select(m => new ProjectMemberResponse(m.EmployeeId, m.Employee!.DisplayName, m.Employee.Email ?? string.Empty)).ToArray())).ToArrayAsync(ct);
+        IQueryable<Project> query;
+        if (access is not null)
+        {
+            query = VisibleProjects(access, db).AsNoTracking();
+        }
+        else
+        {
+            var clientId = await CurrentClientId(principal, db, ct);
+            if (clientId is null) return TypedResults.NotFound();
+            query = VisibleClientProjects(clientId.Value, db).AsNoTracking();
+        }
+        var items = await query.OrderBy(x => x.Company!.Name).ThenBy(x => x.IsArchived).ThenBy(x => x.Title).Select(x => new ProjectSummaryResponse(x.Id, x.CompanyId, x.Company!.Name, x.Title, x.Code, x.Address, x.GoogleMapsUrl, x.Phases.Where(phase => phase.IsCurrent).Select(phase => phase.PhaseCode).FirstOrDefault(), x.IsArchived, x.ProjectClients.Select(projectClient => new ProjectClientResponse(projectClient.ClientId, projectClient.Client!.DisplayName)).SingleOrDefault(), x.Members.OrderBy(m => m.Employee!.DisplayName).Select(m => new ProjectMemberResponse(m.EmployeeId, m.Employee!.DisplayName, m.Employee.Email ?? string.Empty)).ToArray())).ToArrayAsync(ct);
         return TypedResults.Ok(items);
     }
 
     private static async Task<IResult> Get(long id, ClaimsPrincipal principal, BlueprintDbContext db, CancellationToken ct)
     {
         var access = await Access.ForUser(principal, db, ct);
-        if (access is null) return TypedResults.NotFound();
-        var project = await VisibleProjects(access, db).Include(x => x.Client).Include(x => x.Members).ThenInclude(x => x.Employee).Include(x => x.Phases).SingleOrDefaultAsync(x => x.Id == id, ct);
+        IQueryable<Project> query;
+        if (access is not null)
+        {
+            query = VisibleProjects(access, db);
+        }
+        else
+        {
+            var clientId = await CurrentClientId(principal, db, ct);
+            if (clientId is null) return TypedResults.NotFound();
+            query = VisibleClientProjects(clientId.Value, db);
+        }
+        var project = await query.Include(x => x.Company).Include(x => x.ProjectClients).ThenInclude(x => x.Client).Include(x => x.Members).ThenInclude(x => x.Employee).Include(x => x.Phases).SingleOrDefaultAsync(x => x.Id == id, ct);
         return project is null ? TypedResults.NotFound() : TypedResults.Ok(ToResponse(project, access));
     }
 
@@ -51,11 +69,12 @@ public static class ProjectEndpoints
         if (!await ValidClient(request!.ClientId, access.CompanyId, db, ct) || !await ValidEmployees(request.EmployeeIds, access.CompanyId, db, ct)) return TypedResults.ValidationProblem(new Dictionary<string, string[]> { ["association"] = ["The selected client or members do not belong to this company."] });
         if (await db.Projects.AnyAsync(x => x.CompanyId == access.CompanyId && x.Code == request.Code.Trim(), ct)) return TypedResults.Conflict(new AdministrationErrorResponse("A project with this code already exists."));
         var now = DateTimeOffset.UtcNow;
-        var project = new Project { CompanyId = access.CompanyId, ClientId = request.ClientId, Title = request.Title.Trim(), Code = request.Code.Trim(), Address = request.Address.Trim(), GoogleMapsUrl = NormalizeGoogleMapsUrl(request.GoogleMapsUrl), CreatedAt = now, UpdatedAt = now, CreatedBy = access.UserId, UpdatedBy = access.UserId };
+        var project = new Project { CompanyId = access.CompanyId, Title = request.Title.Trim(), Code = request.Code.Trim(), Address = request.Address.Trim(), GoogleMapsUrl = NormalizeGoogleMapsUrl(request.GoogleMapsUrl), CreatedAt = now, UpdatedAt = now, CreatedBy = access.UserId, UpdatedBy = access.UserId };
+        ReplaceClient(project, request.ClientId);
         project.Members = request.EmployeeIds.Distinct().Select(id => new ProjectMember { EmployeeId = id }).ToList();
         project.Phases = BuildPhases(phaseCodes, request.CurrentPhaseIndex);
         db.Projects.Add(project); await db.SaveChangesAsync(ct);
-        await db.Entry(project).Reference(x => x.Client).LoadAsync(ct); await db.Entry(project).Collection(x => x.Members).Query().Include(x => x.Employee).LoadAsync(ct); await db.Entry(project).Collection(x => x.Phases).LoadAsync(ct);
+        await db.Entry(project).Reference(x => x.Company).LoadAsync(ct); await db.Entry(project).Collection(x => x.ProjectClients).Query().Include(x => x.Client).LoadAsync(ct); await db.Entry(project).Collection(x => x.Members).Query().Include(x => x.Employee).LoadAsync(ct); await db.Entry(project).Collection(x => x.Phases).LoadAsync(ct);
         return TypedResults.Created($"/api/projects/{project.Id}", ToResponse(project, access));
     }
 
@@ -64,19 +83,21 @@ public static class ProjectEndpoints
         var access = await Access.ForUser(principal, db, ct);
         if (access is null || !access.IsOwner) return TypedResults.NotFound();
         var errors = Validate(request?.Title, request?.Code, request?.Address, request?.GoogleMapsUrl); if (errors.Count > 0) return TypedResults.ValidationProblem(errors);
-        var project = await db.Projects.Include(x => x.Members).ThenInclude(x => x.Employee).Include(x => x.Client).Include(x => x.Phases).SingleOrDefaultAsync(x => x.Id == id && x.CompanyId == access.CompanyId, ct);
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        if (!await LockProject(id, access.CompanyId, db, ct)) return TypedResults.NotFound();
+        var project = await db.Projects.Include(x => x.Company).Include(x => x.Members).ThenInclude(x => x.Employee).Include(x => x.ProjectClients).ThenInclude(x => x.Client).Include(x => x.Phases).SingleOrDefaultAsync(x => x.Id == id && x.CompanyId == access.CompanyId, ct);
         if (project is null) return TypedResults.NotFound();
         if (!await ValidClient(request!.ClientId, access.CompanyId, db, ct)) return TypedResults.ValidationProblem(new Dictionary<string, string[]> { ["clientId"] = ["The selected client does not belong to this company."] });
         if (await db.Projects.AnyAsync(x => x.Id != id && x.CompanyId == access.CompanyId && x.Code == request.Code.Trim(), ct)) return TypedResults.Conflict(new AdministrationErrorResponse("A project with this code already exists."));
-        project.Title = request.Title.Trim(); project.Code = request.Code.Trim(); project.Address = request.Address.Trim(); project.GoogleMapsUrl = NormalizeGoogleMapsUrl(request.GoogleMapsUrl); project.ClientId = request.ClientId; project.UpdatedAt = DateTimeOffset.UtcNow; project.UpdatedBy = access.UserId;
-        await db.SaveChangesAsync(ct); await db.Entry(project).Reference(x => x.Client).LoadAsync(ct); return TypedResults.Ok(ToResponse(project, access));
+        project.Title = request.Title.Trim(); project.Code = request.Code.Trim(); project.Address = request.Address.Trim(); project.GoogleMapsUrl = NormalizeGoogleMapsUrl(request.GoogleMapsUrl); ReplaceClient(project, request.ClientId); project.UpdatedAt = DateTimeOffset.UtcNow; project.UpdatedBy = access.UserId;
+        await db.SaveChangesAsync(ct); await db.Entry(project).Collection(x => x.ProjectClients).Query().Include(x => x.Client).LoadAsync(ct); await transaction.CommitAsync(ct); return TypedResults.Ok(ToResponse(project, access));
     }
 
     private static async Task<IResult> UpdateMembers(long id, UpdateProjectMembersRequest? request, ClaimsPrincipal principal, BlueprintDbContext db, CancellationToken ct)
     {
         var access = await Access.ForUser(principal, db, ct); if (access is null || !access.IsOwner) return TypedResults.NotFound();
         if (request?.EmployeeIds is null || !await ValidEmployees(request.EmployeeIds, access.CompanyId, db, ct)) return TypedResults.ValidationProblem(new Dictionary<string, string[]> { ["employeeIds"] = ["Select valid company members."] });
-        var project = await db.Projects.Include(x => x.Members).ThenInclude(x => x.Employee).Include(x => x.Client).Include(x => x.Phases).SingleOrDefaultAsync(x => x.Id == id && x.CompanyId == access.CompanyId, ct); if (project is null) return TypedResults.NotFound();
+        var project = await db.Projects.Include(x => x.Company).Include(x => x.Members).ThenInclude(x => x.Employee).Include(x => x.ProjectClients).ThenInclude(x => x.Client).Include(x => x.Phases).SingleOrDefaultAsync(x => x.Id == id && x.CompanyId == access.CompanyId, ct); if (project is null) return TypedResults.NotFound();
         project.Members.Clear(); foreach (var employeeId in request.EmployeeIds.Distinct()) project.Members.Add(new ProjectMember { ProjectId = project.Id, EmployeeId = employeeId });
         project.UpdatedAt = DateTimeOffset.UtcNow; project.UpdatedBy = access.UserId; await db.SaveChangesAsync(ct); await db.Entry(project).Collection(x => x.Members).Query().Include(x => x.Employee).LoadAsync(ct); return TypedResults.Ok(ToResponse(project, access));
     }
@@ -91,7 +112,7 @@ public static class ProjectEndpoints
         if (request is null) errors["request"] = ["A JSON request body is required."];
         if (errors.Count > 0) return TypedResults.ValidationProblem(errors);
 
-        var project = await db.Projects.Include(x => x.Client).Include(x => x.Members).ThenInclude(x => x.Employee).Include(x => x.Phases).SingleOrDefaultAsync(x => x.Id == id && x.CompanyId == access.CompanyId, ct);
+        var project = await db.Projects.Include(x => x.Company).Include(x => x.ProjectClients).ThenInclude(x => x.Client).Include(x => x.Members).ThenInclude(x => x.Employee).Include(x => x.Phases).SingleOrDefaultAsync(x => x.Id == id && x.CompanyId == access.CompanyId, ct);
         if (project is null || !CanEditTimeline(project, access)) return TypedResults.NotFound();
 
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
@@ -119,7 +140,38 @@ public static class ProjectEndpoints
     }
 
     internal static IQueryable<Project> VisibleProjects(Access access, BlueprintDbContext db) => db.Projects.Where(x => x.CompanyId == access.CompanyId && (access.IsOwner || x.Members.Any(m => m.EmployeeId == access.EmployeeId)));
-    private static ProjectResponse ToResponse(Project x, Access access) => new(x.Id, x.Title, x.Code, x.Address, x.GoogleMapsUrl, x.IsArchived, x.Client is null ? null : new ProjectClientResponse(x.Client.Id, x.Client.DisplayName), x.Members.OrderBy(m => m.Employee!.DisplayName).Select(m => new ProjectMemberResponse(m.EmployeeId, m.Employee!.DisplayName, m.Employee.Email ?? string.Empty)).ToArray(), x.Phases.OrderBy(phase => phase.Position).Select(phase => new ProjectPhaseResponse(phase.Id, phase.PhaseCode, ProjectPhaseCatalog.Labels[phase.PhaseCode], phase.Position, phase.IsCurrent)).ToArray(), CanEditTimeline(x, access));
+    private static IQueryable<Project> VisibleClientProjects(long clientId, BlueprintDbContext db) =>
+        db.Projects.Where(project => project.Company!.IsActive &&
+            project.ProjectClients.Any(projectClient => projectClient.ClientId == clientId && projectClient.Client!.CompanyClients.Any(membership => membership.CompanyId == project.CompanyId)));
+    private static async Task<long?> CurrentClientId(ClaimsPrincipal principal, BlueprintDbContext db, CancellationToken ct)
+    {
+        if (!principal.IsInRole("client") || !long.TryParse(principal.FindFirstValue(ClaimTypes.NameIdentifier), out var userId)) return null;
+        return await db.Clients.AsNoTracking().Where(client => client.UserId == userId && client.User!.IsActive).Select(client => (long?)client.Id).SingleOrDefaultAsync(ct);
+    }
+    private static ProjectResponse ToResponse(Project x, Access? access) => new(x.Id, x.CompanyId, x.Company!.Name, x.Title, x.Code, x.Address, x.GoogleMapsUrl, x.IsArchived, x.ProjectClients.Select(projectClient => new ProjectClientResponse(projectClient.ClientId, projectClient.Client!.DisplayName)).SingleOrDefault(), x.Members.OrderBy(m => m.Employee!.DisplayName).Select(m => new ProjectMemberResponse(m.EmployeeId, m.Employee!.DisplayName, m.Employee.Email ?? string.Empty)).ToArray(), x.Phases.OrderBy(phase => phase.Position).Select(phase => new ProjectPhaseResponse(phase.Id, phase.PhaseCode, ProjectPhaseCatalog.Labels[phase.PhaseCode], phase.Position, phase.IsCurrent)).ToArray(), access is not null && CanEditTimeline(x, access));
+    internal static void ReplaceClient(Project project, long? clientId)
+    {
+        var retained = clientId is long value
+            ? project.ProjectClients.FirstOrDefault(projectClient => projectClient.ClientId == value)
+            : null;
+        foreach (var projectClient in project.ProjectClients.Where(projectClient => projectClient != retained).ToArray())
+        {
+            project.ProjectClients.Remove(projectClient);
+        }
+        if (clientId is long selectedClientId && retained is null)
+        {
+            project.ProjectClients.Add(new ProjectClient { ProjectId = project.Id, ClientId = selectedClientId });
+        }
+    }
+    internal static bool RemoveClient(Project project, long clientId)
+    {
+        var projectClient = project.ProjectClients.SingleOrDefault(candidate => candidate.ClientId == clientId);
+        if (projectClient is null) return false;
+        project.ProjectClients.Remove(projectClient);
+        return true;
+    }
+    internal static async Task<bool> LockProject(long projectId, long companyId, BlueprintDbContext db, CancellationToken ct) =>
+        await db.Database.SqlQuery<long>($"SELECT id AS \"Value\" FROM projects WHERE id = {projectId} AND company_id = {companyId} FOR UPDATE").SingleOrDefaultAsync(ct) != 0;
     private static bool CanEditTimeline(Project project, Access access) => access.IsOwner || project.Members.Any(member => member.EmployeeId == access.EmployeeId);
     private static List<ProjectPhase> BuildPhases(IReadOnlyList<string> phaseCodes, int? currentPhaseIndex) => phaseCodes.Select((code, position) => new ProjectPhase { PhaseCode = code, Position = position, IsCurrent = position == currentPhaseIndex }).ToList();
     private static void ValidatePhases(IReadOnlyList<string> phaseCodes, int? currentPhaseIndex, Dictionary<string, string[]> errors)

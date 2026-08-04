@@ -15,7 +15,109 @@ public static class ClientInvitationEndpoints
             .RequireAuthorization();
         invitations.MapGet("/", List);
         invitations.MapPost("/", Create);
+        invitations.MapGet("/received", ListReceived);
+        invitations.MapPost("/{id:long}/accept", Accept);
+        invitations.MapPost("/{id:long}/reject", Reject);
         return endpoints;
+    }
+
+    private static async Task<IResult> ListReceived(
+        ClaimsPrincipal principal,
+        BlueprintDbContext db,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var client = await CurrentClient(principal, db, cancellationToken);
+        if (client is null) return TypedResults.Forbid();
+
+        await ClientInvitationExpiry.DeleteExpiredAsync(db, timeProvider, cancellationToken);
+        var invitations = await db.ClientInvitations.AsNoTracking()
+            .Where(invitation => invitation.Email == client.Email)
+            .OrderByDescending(invitation => invitation.SentAt)
+            .Select(invitation => new ReceivedClientInvitationResponse(
+                invitation.Id,
+                invitation.CompanyId,
+                invitation.Company!.Name,
+                invitation.SentAt,
+                invitation.SentAt + ClientInvitationExpiry.Lifetime))
+            .ToArrayAsync(cancellationToken);
+        return TypedResults.Ok(invitations);
+    }
+
+    private static async Task<IResult> Accept(
+        long id,
+        ClaimsPrincipal principal,
+        BlueprintDbContext db,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var client = await CurrentClient(principal, db, cancellationToken);
+        if (client is null) return TypedResults.Forbid();
+
+        await ClientInvitationExpiry.DeleteExpiredAsync(db, timeProvider, cancellationToken);
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        var invitation = await db.ClientInvitations.AsNoTracking()
+            .Where(candidate => candidate.Id == id && candidate.Email == client.Email)
+            .Select(candidate => new { candidate.CompanyId })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (invitation is null)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return TypedResults.NotFound();
+        }
+
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+            INSERT INTO company_clients (company_id, client_id, internal_notes)
+            VALUES ({invitation.CompanyId}, {client.Id}, '')
+            ON CONFLICT (company_id, client_id) DO NOTHING
+            """,
+            cancellationToken);
+        var deleted = await db.ClientInvitations
+            .Where(candidate => candidate.Id == id && candidate.Email == client.Email)
+            .ExecuteDeleteAsync(cancellationToken);
+        if (deleted == 0)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return TypedResults.NotFound();
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+        return TypedResults.NoContent();
+    }
+
+    private static async Task<IResult> Reject(
+        long id,
+        ClaimsPrincipal principal,
+        BlueprintDbContext db,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var client = await CurrentClient(principal, db, cancellationToken);
+        if (client is null) return TypedResults.Forbid();
+
+        await ClientInvitationExpiry.DeleteExpiredAsync(db, timeProvider, cancellationToken);
+        var deleted = await db.ClientInvitations
+            .Where(candidate => candidate.Id == id && candidate.Email == client.Email)
+            .ExecuteDeleteAsync(cancellationToken);
+        return deleted == 0 ? TypedResults.NotFound() : TypedResults.NoContent();
+    }
+
+    private static async Task<Client?> CurrentClient(
+        ClaimsPrincipal principal,
+        BlueprintDbContext db,
+        CancellationToken cancellationToken)
+    {
+        if (!principal.IsInRole("client") ||
+            !long.TryParse(principal.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
+        {
+            return null;
+        }
+
+        return await db.Clients.AsNoTracking()
+            .SingleOrDefaultAsync(
+                candidate => candidate.UserId == userId && candidate.User!.IsActive,
+                cancellationToken);
     }
 
     private static async Task<IResult> List(

@@ -500,7 +500,6 @@ public static class AdministrationEndpoints
         var client = new Client
         {
             User = user,
-            ActiveCompanyId = companyIds.FirstOrDefault() is var activeCompanyId && activeCompanyId > 0 ? activeCompanyId : null,
             DisplayName = validRequest.DisplayName.Trim(),
             FullName = validRequest.FullName.Trim(),
             Nif = validRequest.Nif.Trim(),
@@ -570,7 +569,7 @@ public static class AdministrationEndpoints
             return Conflict("Clients cannot be associated with an inactive company.");
         }
         var removedCompanyIds = currentCompanyIds.Where(companyId => !companyIds.Contains(companyId)).ToArray();
-        if (await dbContext.Projects.AnyAsync(project => project.ClientId == id && removedCompanyIds.Contains(project.CompanyId), cancellationToken))
+        if (await dbContext.ProjectClients.AnyAsync(projectClient => projectClient.ClientId == id && removedCompanyIds.Contains(projectClient.Project!.CompanyId), cancellationToken))
         {
             return TypedResults.Conflict(new AdministrationErrorResponse(
                 "Remove this client from the company's projects before removing the company membership."));
@@ -590,14 +589,6 @@ public static class AdministrationEndpoints
         foreach (var companyId in addedCompanyIds)
         {
             client.CompanyClients.Add(new CompanyClient { CompanyId = companyId, ClientId = client.Id });
-        }
-        if (client.ActiveCompanyId is long activeCompanyId && !companyIds.Contains(activeCompanyId))
-        {
-            client.ActiveCompanyId = companyIds.FirstOrDefault() is var fallbackCompanyId && fallbackCompanyId > 0 ? fallbackCompanyId : null;
-        }
-        else if (client.ActiveCompanyId is null && companyIds.Length > 0)
-        {
-            client.ActiveCompanyId = companyIds[0];
         }
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         await RemoveMatchingInvitations(companyIds, email, dbContext, cancellationToken);

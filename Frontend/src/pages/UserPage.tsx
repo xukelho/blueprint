@@ -220,8 +220,7 @@ export default function UserPage({
           <h2>{profile.displayName}</h2>
           <p>
             {profileRoleLabel(profile)}
-            {" · "}
-            {profile.companyName ?? "Independente"}
+            {profile.profileType === "employee" && <> {" · "} {profile.companyName ?? "Independente"}</>}
           </p>
         </div>
         <button className="secondary-action" type="button">
@@ -289,28 +288,23 @@ export default function UserPage({
                     onChange={(event) => setField("displayName", event.target.value)}
                   />
                 </ProfileField>
-                <ProfileField
-                  label="Empresa"
-                  wide
-                  error={fieldErrors.companyId}
-                >
+                {expectedProfileType === "employee" ? (
+                  <ProfileField label="Empresa" wide error={fieldErrors.companyId}>
                     <select
                       value={form.companyId ?? ""}
-                      onChange={(event) => setField(
-                        "companyId",
-                        event.target.value ? Number(event.target.value) : null,
-                      )}
+                      onChange={(event) => setField("companyId", event.target.value ? Number(event.target.value) : null)}
                     >
-                      {expectedProfileType === "client" && profile.availableCompanies.length === 0 && (
-                        <option value="">Sem empresa</option>
-                      )}
-                      {profile.availableCompanies.map((company) => (
-                        <option value={company.id} key={company.id}>
-                          {company.name}
-                        </option>
-                      ))}
+                      {profile.availableCompanies.map((company) => <option value={company.id} key={company.id}>{company.name}</option>)}
                     </select>
-                </ProfileField>
+                  </ProfileField>
+                ) : (
+                  <div className="mock-field mock-field--wide client-associated-companies">
+                    <span>Empresas associadas</span>
+                    {profile.availableCompanies.length > 0
+                      ? <ul>{profile.availableCompanies.map((company) => <li key={company.id}>{company.name}</li>)}</ul>
+                      : <p>Sem empresas associadas.</p>}
+                  </div>
+                )}
                 {expectedProfileType === "employee" && (
                   <label className="mock-profile-check mock-field--wide">
                     <input

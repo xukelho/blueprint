@@ -74,7 +74,7 @@ export function CompanyProjectPage() {
   if (!project && !error) return <PortalShell><p>A carregar…</p></PortalShell>;
   return <PortalShell>
     <button className="mock-back-link" onClick={() => navigate("/projects")}><ArrowLeft size={17} />Projetos</button>
-    <header className="mock-page-header"><div><h1>{project?.title}</h1><p>Informação essencial, participantes e fases do projeto.</p></div>{owner && !isEditing && <button className="secondary-action" type="button" onClick={startEditing}><Pencil size={17} />Editar</button>}</header>
+    <header className="mock-page-header"><div><h1>{project?.title}</h1><p>{project?.companyName ? `${project.companyName} · ` : ""}Informação essencial, participantes e fases do projeto.</p></div>{owner && !isEditing && <button className="secondary-action" type="button" onClick={startEditing}><Pencil size={17} />Editar</button>}</header>
     {error && <p role="alert">{error}</p>}
     {notice && <p className={`mock-project-notice mock-project-notice--${notice.type}`} role={notice.type === "error" ? "alert" : "status"}>{notice.message}</p>}
     {project && <form className="mock-form-column" onSubmit={submit}>

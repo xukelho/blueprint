@@ -1,10 +1,11 @@
 export type ClientOption = { id: number; displayName: string };
 export type ProjectMember = { employeeId: number; displayName: string; email: string };
 export type ProjectPhase = { id: number; code: string; label: string; position: number; isCurrent: boolean };
-export type Project = { id: number; title: string; code: string; address: string; googleMapsUrl: string | null; isArchived: boolean; client: ClientOption | null; members?: ProjectMember[]; phases?: ProjectPhase[]; canEditTimeline?: boolean; currentPhaseCode?: string | null };
+export type Project = { id: number; companyId: number; companyName: string; title: string; code: string; address: string; googleMapsUrl: string | null; isArchived: boolean; client: ClientOption | null; members?: ProjectMember[]; phases?: ProjectPhase[]; canEditTimeline?: boolean; currentPhaseCode?: string | null };
 export type ClientListItem = { id: number; displayName: string; email: string; projectCount: number };
 export type ClientDetail = ClientListItem & { fullName: string; nif: string; phoneNumber: string; address: string; internalNotes: string; projects: Array<Pick<Project, "id" | "title" | "code" | "currentPhaseCode" | "isArchived">>; canManageProjects: boolean };
 export type ClientInvitation = { id: number; email: string; sentAt: string; expiresAt: string };
+export type ReceivedClientInvitation = { id: number; companyId: number; companyName: string; sentAt: string; expiresAt: string };
 
 export class ClientManagementApiError extends Error {
   constructor(message: string, public status: number, public fieldErrors: Record<string, string> = {}) {
@@ -46,6 +47,9 @@ export const getClients = () => request<ClientListItem[]>("/api/clients/");
 export const getClient = (id: string) => request<ClientDetail>(`/api/clients/${id}`);
 export const getClientInvitations = () => request<ClientInvitation[]>("/api/client-invitations/");
 export const createClientInvitation = (email: string) => request<ClientInvitation>("/api/client-invitations/", json("POST", { email }));
+export const getReceivedClientInvitations = () => request<ReceivedClientInvitation[]>("/api/client-invitations/received");
+export const acceptClientInvitation = (id: number) => request<void>(`/api/client-invitations/${id}/accept`, { method: "POST" });
+export const rejectClientInvitation = (id: number) => request<void>(`/api/client-invitations/${id}/reject`, { method: "POST" });
 export const saveClientNotes = (id: string, internalNotes: string) => request<void>(`/api/clients/${id}/notes`, json("PUT", { internalNotes }));
 export const associateClientProject = (clientId: string, projectId: number) => request<void>(`/api/clients/${clientId}/projects/${projectId}`, { method: "PUT" });
 export const removeClientProject = (clientId: string, projectId: number) => request<void>(`/api/clients/${clientId}/projects/${projectId}`, { method: "DELETE" });

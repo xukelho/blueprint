@@ -28,7 +28,7 @@ public static class ClientManagementEndpoints
                 membership.ClientId,
                 membership.Client!.DisplayName,
                 membership.Client.Email,
-                membership.Client.Projects.Count(project => project.CompanyId == access.CompanyId)))
+                membership.Client.ProjectClients.Count(projectClient => projectClient.Project!.CompanyId == access.CompanyId)))
             .ToArrayAsync(ct);
         return TypedResults.Ok(results);
     }
@@ -41,7 +41,7 @@ public static class ClientManagementEndpoints
             .SingleOrDefaultAsync(value => value.ClientId == id && value.CompanyId == access.CompanyId, ct);
         if (membership?.Client is null) return TypedResults.NotFound();
         var client = membership.Client;
-        var projects = await ProjectEndpoints.VisibleProjects(access, db).Where(x => x.ClientId == id).OrderBy(x => x.Title).Select(x => new ClientProjectResponse(x.Id, x.Title, x.Code, x.Phases.Where(phase => phase.IsCurrent).Select(phase => phase.PhaseCode).FirstOrDefault(), x.IsArchived)).ToArrayAsync(ct);
+        var projects = await ProjectEndpoints.VisibleProjects(access, db).Where(x => x.ProjectClients.Any(projectClient => projectClient.ClientId == id)).OrderBy(x => x.Title).Select(x => new ClientProjectResponse(x.Id, x.Title, x.Code, x.Phases.Where(phase => phase.IsCurrent).Select(phase => phase.PhaseCode).FirstOrDefault(), x.IsArchived)).ToArrayAsync(ct);
         return TypedResults.Ok(new ClientDetailResponse(client.Id, client.DisplayName, client.FullName, client.Nif, client.Email, client.PhoneNumber, client.Address, membership.InternalNotes, projects, access.IsOwner));
     }
 
@@ -59,14 +59,20 @@ public static class ClientManagementEndpoints
     {
         var access = await Access.ForUser(principal, db, ct); if (access is null || !access.IsOwner) return TypedResults.NotFound();
         if (!await db.CompanyClients.AnyAsync(x => x.ClientId == id && x.CompanyId == access.CompanyId, ct)) return TypedResults.NotFound();
-        var project = await db.Projects.SingleOrDefaultAsync(x => x.Id == projectId && x.CompanyId == access.CompanyId && x.ClientId == null, ct); if (project is null) return TypedResults.NotFound();
-        project.ClientId = id; project.UpdatedAt = DateTimeOffset.UtcNow; project.UpdatedBy = access.UserId; await db.SaveChangesAsync(ct); return TypedResults.NoContent();
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        if (!await ProjectEndpoints.LockProject(projectId, access.CompanyId, db, ct)) return TypedResults.NotFound();
+        var project = await db.Projects.Include(candidate => candidate.ProjectClients).SingleOrDefaultAsync(candidate => candidate.Id == projectId && candidate.CompanyId == access.CompanyId, ct);
+        if (project is null || project.ProjectClients.Count != 0) return TypedResults.NotFound();
+        ProjectEndpoints.ReplaceClient(project, id); project.UpdatedAt = DateTimeOffset.UtcNow; project.UpdatedBy = access.UserId; await db.SaveChangesAsync(ct); await transaction.CommitAsync(ct); return TypedResults.NoContent();
     }
 
     private static async Task<IResult> RemoveProject(long id, long projectId, ClaimsPrincipal principal, BlueprintDbContext db, CancellationToken ct)
     {
         var access = await Access.ForUser(principal, db, ct); if (access is null || !access.IsOwner) return TypedResults.NotFound();
-        var project = await db.Projects.SingleOrDefaultAsync(x => x.Id == projectId && x.CompanyId == access.CompanyId && x.ClientId == id, ct); if (project is null) return TypedResults.NotFound();
-        project.ClientId = null; project.UpdatedAt = DateTimeOffset.UtcNow; project.UpdatedBy = access.UserId; await db.SaveChangesAsync(ct); return TypedResults.NoContent();
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        if (!await ProjectEndpoints.LockProject(projectId, access.CompanyId, db, ct)) return TypedResults.NotFound();
+        var project = await db.Projects.Include(candidate => candidate.ProjectClients).SingleOrDefaultAsync(candidate => candidate.Id == projectId && candidate.CompanyId == access.CompanyId, ct);
+        if (project is null || !ProjectEndpoints.RemoveClient(project, id)) return TypedResults.NotFound();
+        project.UpdatedAt = DateTimeOffset.UtcNow; project.UpdatedBy = access.UserId; await db.SaveChangesAsync(ct); await transaction.CommitAsync(ct); return TypedResults.NoContent();
     }
 }

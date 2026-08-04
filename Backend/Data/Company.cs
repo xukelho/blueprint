@@ -30,8 +30,6 @@ public sealed class Company
 
     public ICollection<CompanyEmployee> CompanyEmployees { get; set; } = [];
 
-    public ICollection<Client> ActiveClients { get; set; } = [];
-
     public ICollection<CompanyClient> CompanyClients { get; set; } = [];
 
     public ICollection<ClientInvitation> ClientInvitations { get; set; } = [];
