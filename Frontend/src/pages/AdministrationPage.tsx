@@ -36,7 +36,7 @@ const tabs = [
 const emptyData: AdministrationData = { roles: [], users: [], employees: [], clients: [], companies: [] };
 const emptyUser = (): UserFormValue => ({ username: "", password: "", roleIds: [] });
 const emptyProfile = (): ProfileFormValue => ({
-  username: "", password: "", companyId: null, architect: false,
+  username: "", password: "", companyId: null, companyIds: [], architect: false,
   displayName: "", fullName: "", nif: "", email: "", phoneNumber: "", address: "",
 });
 const emptyCompany = (): CompanyFormValue => ({
@@ -176,7 +176,10 @@ export default function AdministrationPage() {
       setBaseline(normalize(next));
     } else {
       const next = selectedProfile ? {
-        username: "", password: "", companyId: selectedProfile.companyId, architect: false,
+        username: "", password: "",
+        companyId: "companyId" in selectedProfile ? selectedProfile.companyId : null,
+        companyIds: "companyIds" in selectedProfile ? selectedProfile.companyIds : [],
+        architect: false,
         displayName: selectedProfile.displayName, fullName: selectedProfile.fullName, nif: selectedProfile.nif,
         email: selectedProfile.email, phoneNumber: selectedProfile.phoneNumber, address: selectedProfile.address,
       } : emptyProfile();
@@ -249,7 +252,6 @@ export default function AdministrationPage() {
   };
 
   const profileBody = () => ({
-    companyId: profileForm.companyId,
     displayName: profileForm.displayName.trim(), fullName: profileForm.fullName.trim(),
     nif: profileForm.nif.trim(), email: profileForm.email.trim(),
     phoneNumber: profileForm.phoneNumber.trim(), address: profileForm.address.trim(),
@@ -284,16 +286,16 @@ export default function AdministrationPage() {
     const saved = creating
       ? await administrationRequest<EmployeeResponse>("/api/admin/employees", jsonRequest("POST", {
         username: profileForm.username.trim(), password: profileForm.password,
-        roleIds: [employeeRole!.id, ...(profileForm.architect ? [architectRole!.id] : [])], ...body,
+        roleIds: [employeeRole!.id, ...(profileForm.architect ? [architectRole!.id] : [])], companyId: profileForm.companyId, ...body,
       }))
-      : await administrationRequest<EmployeeResponse>(`/api/admin/employees/${selectedEmployee!.id}`, jsonRequest("PUT", body));
+      : await administrationRequest<EmployeeResponse>(`/api/admin/employees/${selectedEmployee!.id}`, jsonRequest("PUT", { companyId: profileForm.companyId, ...body }));
     await reload({ tab: "employees", id: saved.id });
   };
 
   const saveClient = async () => {
     const errors = validateContact(profileForm, creating);
     if (Object.keys(errors).length) throw new AdministrationApiError("Corrija os campos assinalados.", errors);
-    const body = profileBody();
+    const body = { companyIds: profileForm.companyIds, ...profileBody() };
     const saved = creating
       ? await administrationRequest<ClientResponse>("/api/admin/clients", jsonRequest("POST", {
         username: profileForm.username.trim(), password: profileForm.password, ...body,

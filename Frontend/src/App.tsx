@@ -9,7 +9,7 @@ import CompanySettingsPage from "./pages/CompanySettingsPage";
 import { getAuthenticatedRoles, isClient, isEmployee, isPlatformAdmin } from "./auth";
 import { ProfileProvider, useProfile } from "./profile/ProfileContext";
 import { HelpPage, NotificationsPage } from "./pages/MockupPages";
-import { ClientsPage, ClientDetailPage } from "./pages/ClientsPage";
+import { CompanyClientPage, CompanyClientDetailPage } from "./pages/CompanyClientPage";
 import { CompanyProjectsPage } from "./pages/CompanyProjectsPage";
 import { CompanyProjectsCreatePage } from "./pages/CompanyProjectsCreatePage";
 import { CompanyProjectPage } from "./pages/CompanyProjectPage";
@@ -65,8 +65,8 @@ function App() {
           <Route path="/projects" element={<CompanyProjectsPage />} />
           <Route path="/projects/new" element={<CompanyProjectsCreatePage />} />
           <Route path="/projects/:id" element={<CompanyProjectPage />} />
-          <Route path="/clients" element={<ClientsPage />} />
-          <Route path="/clients/:id" element={<ClientDetailPage />} />
+          <Route path="/clients" element={<CompanyClientPage />} />
+          <Route path="/clients/:id" element={<CompanyClientDetailPage />} />
           <Route
             path="/administration"
             element={<AdministrationRoute />}

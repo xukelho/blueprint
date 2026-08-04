@@ -57,7 +57,13 @@ public static class ProfileEndpoints
             return TypedResults.NotFound();
         }
 
-        var companies = await LoadCompanyOptions(dbContext, cancellationToken);
+        var companies = user.Client is null
+            ? await LoadCompanyOptions(dbContext, cancellationToken)
+            : user.Client.CompanyClients
+                .Where(membership => membership.Company?.IsActive == true)
+                .OrderBy(membership => membership.Company!.Name)
+                .Select(membership => new ProfileCompanyOption(membership.CompanyId, membership.Company!.Name))
+                .ToArray();
         return TypedResults.Ok(ToResponse(user, companies));
     }
 
@@ -78,8 +84,6 @@ public static class ProfileEndpoints
             return TypedResults.ValidationProblem(errors);
         }
 
-        var companies = await LoadCompanyOptions(dbContext, cancellationToken);
-
         var user = await dbContext.Users
             .Include(candidate => candidate.UserRoles)
             .SingleOrDefaultAsync(candidate => candidate.Id == userId, cancellationToken);
@@ -88,11 +92,16 @@ public static class ProfileEndpoints
             return TypedResults.NotFound();
         }
         var employee = await dbContext.Employees
+            .Include(candidate => candidate.CompanyEmployee)
+                .ThenInclude(candidate => candidate!.Company)
             .SingleOrDefaultAsync(
                 candidate => candidate.UserId == userId,
                 cancellationToken);
         var client = employee is null
-            ? await dbContext.Clients.SingleOrDefaultAsync(
+            ? await dbContext.Clients
+                .Include(candidate => candidate.CompanyClients)
+                    .ThenInclude(candidate => candidate.Company)
+                .SingleOrDefaultAsync(
                 candidate => candidate.UserId == userId,
                 cancellationToken)
             : null;
@@ -102,6 +111,56 @@ public static class ProfileEndpoints
         }
 
         var validRequest = request!;
+        var companies = employee is not null
+            ? await LoadCompanyOptions(dbContext, cancellationToken)
+            : client!.CompanyClients
+                .Where(membership => membership.Company?.IsActive == true)
+                .OrderBy(membership => membership.Company!.Name)
+                .Select(membership => new ProfileCompanyOption(membership.CompanyId, membership.Company!.Name))
+                .ToArray();
+        if (client is not null)
+        {
+            if (validRequest.IsArchitect)
+            {
+                return TypedResults.ValidationProblem(new Dictionary<string, string[]>
+                {
+                    ["isArchitect"] = ["Only employee profiles can enable the architect role."]
+                });
+            }
+            var validCompanyIds = companies.Select(company => company.Id).ToHashSet();
+            if ((validCompanyIds.Count > 0 && validRequest.CompanyId is null) ||
+                (validRequest.CompanyId is long selectedCompanyId && !validCompanyIds.Contains(selectedCompanyId)))
+            {
+                return TypedResults.Conflict(new AdministrationErrorResponse(
+                    "Clients may only select a company with an accepted membership."));
+            }
+
+            var email = EmailAddress.Normalize(validRequest.Email);
+            if (await dbContext.Clients.AnyAsync(
+                    candidate => candidate.Id != client.Id && candidate.Email == email,
+                    cancellationToken))
+            {
+                return TypedResults.Conflict(new AdministrationErrorResponse(
+                    "A client with this email already exists."));
+            }
+        }
+        else
+        {
+            if (validRequest.CompanyId is not long companyId)
+            {
+                return TypedResults.ValidationProblem(new Dictionary<string, string[]>
+                {
+                    ["companyId"] = ["Company is required."]
+                });
+            }
+            var company = await dbContext.Companies.AsNoTracking()
+                .SingleOrDefaultAsync(candidate => candidate.Id == companyId, cancellationToken);
+            if (company is null || !company.IsActive)
+            {
+                return TypedResults.Conflict(new AdministrationErrorResponse(
+                    "Employees must belong to an active company."));
+            }
+        }
         var username = validRequest.Username.Trim();
         if (await dbContext.Users.AnyAsync(
                 candidate => candidate.Id != userId && candidate.Username == username,
@@ -118,23 +177,59 @@ public static class ProfileEndpoints
         if (employee is not null)
         {
             Apply(employee, validRequest);
+            var membership = employee.CompanyEmployee!;
+            if (membership.CompanyId != validRequest.CompanyId)
+            {
+                dbContext.CompanyEmployees.Remove(membership);
+                membership = new CompanyEmployee
+                {
+                    CompanyId = validRequest.CompanyId!.Value,
+                    EmployeeId = employee.Id,
+                    CompanyRole = membership.CompanyRole,
+                    IsArchitect = validRequest.IsArchitect
+                };
+                dbContext.CompanyEmployees.Add(membership);
+                employee.CompanyEmployee = membership;
+            }
+            else
+            {
+                membership.IsArchitect = validRequest.IsArchitect;
+            }
+            var architectRole = user.UserRoles.SingleOrDefault(role => role.RoleId == RoleIds.Architect);
+            if (validRequest.IsArchitect && architectRole is null)
+            {
+                user.UserRoles.Add(new UserRole { RoleId = RoleIds.Architect });
+            }
+            else if (!validRequest.IsArchitect && architectRole is not null)
+            {
+                dbContext.UserRoles.Remove(architectRole);
+            }
         }
         else
         {
             Apply(client!, validRequest);
         }
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException) when (client is not null)
+        {
+            return TypedResults.Conflict(new AdministrationErrorResponse(
+                "A client with this email already exists."));
+        }
         user.Employee = employee;
         user.Client = client;
-        var roles = employee is not null
-            ? new[] { "employee" }
+        string[] roles = employee is not null
+            ? validRequest.IsArchitect ? ["employee", "architect"] : ["employee"]
             : ["client"];
         await RefreshSessionAsync(httpContext, user, roles);
         return TypedResults.Ok(ToResponse(
             user,
             companies,
-            null,
+            companies.FirstOrDefault(company => company.Id ==
+                (client is null ? employee?.CompanyEmployee?.CompanyId : client.ActiveCompanyId))?.Name,
             roles));
     }
 
@@ -174,6 +269,10 @@ public static class ProfileEndpoints
             errors, "username", request.Username, "Username", 256);
         AdministrationValidation.ValidateRequired(errors, "displayName", request.DisplayName, "Display name", 256);
         AdministrationValidation.ValidateRequired(errors, "fullName", request.FullName, "Full name", 512);
+        if (!EmailAddress.IsValid(request.Email))
+        {
+            errors["email"] = ["Enter a valid email address containing at most 320 characters."];
+        }
         return errors;
     }
 
@@ -182,7 +281,10 @@ public static class ProfileEndpoints
             .Include(candidate => candidate.UserRoles)
                 .ThenInclude(candidate => candidate.Role)
             .Include(candidate => candidate.Client)
-                .ThenInclude(candidate => candidate!.Company)
+                .ThenInclude(candidate => candidate!.ActiveCompany)
+            .Include(candidate => candidate.Client)
+                .ThenInclude(candidate => candidate!.CompanyClients)
+                    .ThenInclude(candidate => candidate.Company)
             .Include(candidate => candidate.Employee)
                 .ThenInclude(candidate => candidate!.CompanyEmployee)
                     .ThenInclude(candidate => candidate!.Company);
@@ -246,8 +348,8 @@ public static class ProfileEndpoints
             client.Email,
             client.PhoneNumber,
             client.Address,
-            client.CompanyId,
-            companyName ?? client.Company?.Name,
+            client.ActiveCompanyId,
+            companyName ?? client.ActiveCompany?.Name,
             roles,
             companies);
     }
@@ -268,11 +370,11 @@ public static class ProfileEndpoints
         Client client,
         UpdateCurrentProfileRequest request)
     {
-        client.CompanyId = request.CompanyId;
+        client.ActiveCompanyId = request.CompanyId;
         client.DisplayName = request.DisplayName.Trim();
         client.FullName = request.FullName.Trim();
         client.Nif = request.Nif.Trim();
-        client.Email = request.Email.Trim();
+        client.Email = EmailAddress.Normalize(request.Email);
         client.PhoneNumber = request.PhoneNumber.Trim();
         client.Address = request.Address.Trim();
     }

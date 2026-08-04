@@ -39,7 +39,7 @@ public sealed class ProfileIntegrationTests(
     public async Task ClientCanEditOwnProfileWithoutChangingItsBaseRole()
     {
         var companyId = await CreateCompanyAsync("Profile Client Company");
-        await CreateClientAsync("profile.client", null);
+        await CreateClientAsync("profile.client", companyId);
         await CreateClientAsync("profile.client.conflict", null);
         await LoginAsync("profile.client");
 
@@ -184,7 +184,7 @@ public sealed class ProfileIntegrationTests(
             {
                 username,
                 password = "secret",
-                companyId,
+                companyIds = companyId is long id ? new[] { id } : Array.Empty<long>(),
                 displayName = "Marta",
                 fullName = "Marta Silva",
                 nif = "123456789",

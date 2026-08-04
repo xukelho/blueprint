@@ -21,6 +21,7 @@ export type ProfileFormValue = ContactFormValue & {
   username: string;
   password: string;
   companyId: number | null;
+  companyIds: number[];
   architect: boolean;
 };
 export type CompanyFormValue = {
@@ -241,11 +242,28 @@ export function ClientForm(props: CommonProps<ProfileFormValue> & {
   companies: CompanyResponse[];
 }) {
   const { value, errors, onChange, companies } = props;
+  const toggleCompany = (companyId: number, checked: boolean) => onChange(
+    "companyIds",
+    checked ? [...value.companyIds, companyId] : value.companyIds.filter((id) => id !== companyId),
+  );
   return (
     <>
       <ProfileAccount {...props} />
       <div className="admin-form-grid">
-        <CompanySelect companies={companies} value={value.companyId} optional errors={errors} onChange={(companyId) => onChange("companyId", companyId)} />
+        <fieldset className="admin-company-memberships admin-form-grid__wide">
+          <legend>Empresas</legend>
+          {companies.map((company) => {
+            const checked = value.companyIds.includes(company.id);
+            return (
+              <label className="admin-check" key={company.id}>
+                <input type="checkbox" checked={checked} disabled={!company.isActive && !checked} onChange={(event) => toggleCompany(company.id, event.target.checked)} />
+                {company.name}{company.isActive ? "" : " — Inativa"}
+              </label>
+            );
+          })}
+          {!companies.length && <small>Não existem empresas.</small>}
+          <ErrorText errors={errors} name="companyIds" />
+        </fieldset>
       </div>
       <ContactFields value={value} errors={errors} onChange={onChange} />
     </>

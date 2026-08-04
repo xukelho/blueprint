@@ -289,12 +289,11 @@ export default function UserPage({
                     onChange={(event) => setField("displayName", event.target.value)}
                   />
                 </ProfileField>
-                {!simplifiedPersonalData && (
-                  <ProfileField
-                    label="Empresa"
-                    wide
-                    error={fieldErrors.companyId}
-                  >
+                <ProfileField
+                  label="Empresa"
+                  wide
+                  error={fieldErrors.companyId}
+                >
                     <select
                       value={form.companyId ?? ""}
                       onChange={(event) => setField(
@@ -302,7 +301,7 @@ export default function UserPage({
                         event.target.value ? Number(event.target.value) : null,
                       )}
                     >
-                      {expectedProfileType === "client" && (
+                      {expectedProfileType === "client" && profile.availableCompanies.length === 0 && (
                         <option value="">Sem empresa</option>
                       )}
                       {profile.availableCompanies.map((company) => (
@@ -311,9 +310,8 @@ export default function UserPage({
                         </option>
                       ))}
                     </select>
-                  </ProfileField>
-                )}
-                {expectedProfileType === "employee" && !simplifiedPersonalData && (
+                </ProfileField>
+                {expectedProfileType === "employee" && (
                   <label className="mock-profile-check mock-field--wide">
                     <input
                       type="checkbox"

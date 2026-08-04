@@ -16,6 +16,8 @@ const employeeProfile = {
   address: "Lisboa",
   companyId: 10,
   companyName: "Forma Norte",
+  companyRole: "employee",
+  isArchitect: true,
   roles: ["employee", "architect"],
   availableCompanies: [
     { id: 10, name: "Forma Norte" },

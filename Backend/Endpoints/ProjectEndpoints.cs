@@ -147,7 +147,7 @@ public static class ProjectEndpoints
         var host = uri.Host.ToLowerInvariant();
         return host is "maps.app.goo.gl" or "goo.gl" || host == "google.com" || host.EndsWith(".google.com", StringComparison.Ordinal);
     }
-    private static async Task<bool> ValidClient(long? id, long companyId, BlueprintDbContext db, CancellationToken ct) => id is null || await db.Clients.AnyAsync(x => x.Id == id && x.CompanyId == companyId, ct);
+    private static async Task<bool> ValidClient(long? id, long companyId, BlueprintDbContext db, CancellationToken ct) => id is null || await db.CompanyClients.AnyAsync(x => x.ClientId == id && x.CompanyId == companyId, ct);
     private static async Task<bool> ValidEmployees(IReadOnlyList<long>? ids, long companyId, BlueprintDbContext db, CancellationToken ct) { if (ids is null || ids.Count != ids.Distinct().Count()) return false; return await db.CompanyEmployees.CountAsync(x => x.CompanyId == companyId && x.IsArchitect && x.Employee!.User!.IsActive && ids.Contains(x.EmployeeId), ct) == ids.Count; }
 }
 

@@ -23,7 +23,7 @@ const employees = [
   { id: 100, userId: 2, companyId: 20, displayName: "Ana Martins", fullName: "Ana Sofia Martins", nif: "123", email: "ana@forma.pt", phoneNumber: "910", address: "Lisboa" },
 ];
 const clients = [
-  { id: 200, userId: 3, companyId: null, displayName: "Marta Silva", fullName: "Marta Silva", nif: "456", email: "marta@email.pt", phoneNumber: "911", address: "Setúbal" },
+  { id: 200, userId: 3, companyIds: [], displayName: "Marta Silva", fullName: "Marta Silva", nif: "456", email: "marta@email.pt", phoneNumber: "911", address: "Setúbal" },
 ];
 
 const jsonResponse = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
@@ -162,12 +162,12 @@ describe("AdministrationPage", () => {
     await user.click(screen.getByRole("button", { name: "Criar cliente" }));
     await user.type(screen.getByLabelText("Nome de utilizador"), "novo-cliente");
     await user.type(screen.getByLabelText("Palavra-passe"), "secret");
-    expect(screen.getByLabelText("Empresa (opcional)")).toHaveValue("");
+    expect(within(screen.getByRole("group", { name: "Empresas" })).getAllByRole("checkbox")).toHaveLength(2);
     await fillContact(user);
     await user.click(screen.getByRole("button", { name: "Guardar" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/admin/clients", expect.objectContaining({
-      method: "POST", body: expect.stringContaining('"companyId":null'),
+      method: "POST", body: expect.stringContaining('"companyIds":[]'),
     })));
   });
 

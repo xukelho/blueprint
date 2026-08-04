@@ -20,7 +20,7 @@ public sealed class AdministrationIntegrationTests(
 
         Assert.NotNull(roles);
         Assert.Equal(
-            ["platform admin", "client", "employee", "architect"],
+            ["platform admin", "client", "employee", "architect", "company owner"],
             roles.Select(candidate => candidate.GetProperty("name").GetString()));
 
         using var login = await fixture.Client.PostAsJsonAsync(
@@ -186,7 +186,7 @@ public sealed class AdministrationIntegrationTests(
             {
                 username = "inactive.company.client",
                 password = "secret",
-                companyId,
+                companyIds = new[] { companyId },
                 displayName = "Client",
                 fullName = "Inactive Company Client",
                 nif = "987654321",
@@ -212,7 +212,7 @@ public sealed class AdministrationIntegrationTests(
             {
                 username = "independent.client",
                 password = "secret",
-                companyId = (long?)null,
+                companyIds = Array.Empty<long>(),
                 displayName = "Marta",
                 fullName = "Marta Silva",
                 nif = "111222333",

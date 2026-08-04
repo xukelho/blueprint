@@ -34,6 +34,8 @@ const profileResponse = (
   address: "Lisboa",
   companyId: profileType === "client" ? null : 10,
   companyName: profileType === "client" ? null : "Forma Norte",
+  companyRole: profileType === "employee" ? "employee" : undefined,
+  isArchitect: profileType === "employee" && architect,
   roles: profileType === "client"
     ? ["client"]
     : architect ? ["employee", "architect"] : ["employee"],
@@ -359,11 +361,54 @@ describe("mockup navigation", () => {
       sessionStorage.setItem("blueprint.auth.roles", JSON.stringify(["employee"]));
       vi.spyOn(globalThis, "fetch").mockImplementation(async (input) =>
         new Response(JSON.stringify(
-          String(input) === "/api/company" ? companyResponse : profileResponse("employee"),
+          String(input) === "/api/company"
+            ? companyResponse
+            : { ...profileResponse("employee"), companyRole: "owner" },
         ), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         }),
+      );
+    }
+    if (path === "/projects/casa-do-vale") {
+      vi.spyOn(globalThis, "fetch").mockImplementation(async (input) =>
+        new Response(JSON.stringify(
+          String(input) === "/api/profile"
+            ? profileResponse("employee")
+            : {
+                id: 1,
+                title: "Casa do Vale",
+                code: "CV-001",
+                address: "",
+                googleMapsUrl: null,
+                isArchived: false,
+                client: null,
+                members: [],
+                phases: [],
+                canEditTimeline: false,
+              },
+        ), { status: 200, headers: { "Content-Type": "application/json" } }),
+      );
+    }
+    if (path === "/clients/marta-silva") {
+      vi.spyOn(globalThis, "fetch").mockImplementation(async (input) =>
+        new Response(JSON.stringify(
+          String(input) === "/api/profile"
+            ? profileResponse("employee")
+            : {
+                id: 3,
+                displayName: "Marta Silva",
+                email: "marta@example.test",
+                projectCount: 0,
+                fullName: "Marta Isabel Silva",
+                nif: "123456789",
+                phoneNumber: "910000000",
+                address: "Lisboa",
+                internalNotes: "",
+                projects: [],
+                canManageProjects: false,
+              },
+        ), { status: 200, headers: { "Content-Type": "application/json" } }),
       );
     }
     renderApp(path);

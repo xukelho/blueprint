@@ -1,6 +1,7 @@
 using Blueprint.Api.Authentication;
 using Blueprint.Api.Data;
 using Blueprint.Api.Endpoints;
+using Blueprint.Api.Services;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
@@ -16,6 +17,8 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddDbContext<BlueprintDbContext>(
     options => options.UseNpgsql(connectionString));
 builder.Services.AddScoped<ICredentialValidator, DatabaseCredentialValidator>();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddHostedService<ClientInvitationExpiryService>();
 if (builder.Environment.IsEnvironment("Testing"))
 {
     builder.Services.AddSingleton<IDataProtectionProvider>(
@@ -57,6 +60,7 @@ app.MapCompanyEndpoints();
 app.MapCompanyMemberEndpoints();
 app.MapProjectEndpoints();
 app.MapClientManagementEndpoints();
+app.MapClientInvitationEndpoints();
 
 app.Run();
 

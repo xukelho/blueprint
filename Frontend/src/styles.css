@@ -1613,6 +1613,20 @@ button { cursor: pointer; }
   transform: translateY(-2px);
 }
 
+.mock-client-card--pending {
+  cursor: default;
+}
+
+.mock-client-card--pending:hover {
+  border-color: #dcecf1;
+  transform: none;
+}
+
+.mock-client-avatar--pending {
+  color: #006d77;
+  background: #e4f0f3;
+}
+
 .mock-client-avatar {
   width: 48px;
   height: 48px;
@@ -1675,10 +1689,6 @@ button { cursor: pointer; }
 .mock-project-member-card strong { color: #303236; font-size: 13px; }
 .mock-project-member-card--readonly { cursor: default; }
 .mock-empty-state { margin: 0; color: #686b70; }
-
-.mock-dialog-backdrop { position: fixed; z-index: 20; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(31, 32, 34, .42); }
-.mock-dialog { position: relative; width: min(100%, 430px); display: flex; flex-direction: column; gap: 18px; }
-.mock-dialog > .mock-icon-button { position: absolute; top: 12px; right: 12px; }
 
 .mock-client-detail-grid {
   display: grid;
@@ -1989,6 +1999,7 @@ button { cursor: pointer; }
 .mock-modal > p { margin: 6px 0 20px; color: #686b70; font-size: 11px; }
 .mock-modal .mock-field { margin-top: 14px; }
 .mock-modal-close { position: absolute; top: 18px; right: 18px; width: 32px; height: 32px; display: grid; place-items: center; padding: 0; color: #686b70; background: #edf6f9; border: 0; border-radius: 7px; }
+.company-client-invite-dialog { width: min(430px, 100%); }
 
 .mock-profile-hero {
   display: grid;
@@ -2727,6 +2738,8 @@ input:focus-visible { outline: 3px solid rgba(0, 109, 119, .22); outline-offset:
 .admin-role-badge { padding: 3px 7px; color: #005864; background: #e3f5fa; border-radius: 999px; font-size: 9px; font-weight: 700; }
 .admin-check { display: flex; align-items: center; gap: 8px; color: #4f5257; font-size: 11px; font-weight: 600; }
 .admin-check input { width: 16px; height: 16px; }
+.admin-company-memberships { display: grid; gap: 10px; margin: 0; padding: 14px; border: 1px solid #dcecf1; border-radius: 8px; }
+.admin-company-memberships legend { padding: 0 5px; color: #686b70; font-size: 11px; font-weight: 700; }
 .admin-filter { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 10px 16px; color: #4f5257; border-bottom: 1px solid #e3eff2; font-size: 11px; }
 
 .admin-audit { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 2px 0 0; overflow: hidden; background: #f8fcfd; border: 1px solid #e3eff2; border-radius: 8px; }

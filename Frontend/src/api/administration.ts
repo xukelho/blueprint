@@ -28,7 +28,7 @@ export type EmployeeResponse = ContactProfile & {
 export type ClientResponse = ContactProfile & {
   id: number;
   userId: number;
-  companyId: number | null;
+  companyIds: number[];
 };
 
 export type CompanyResponse = {

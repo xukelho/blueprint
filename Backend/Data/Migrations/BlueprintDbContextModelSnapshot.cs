@@ -37,9 +37,9 @@ namespace Blueprint.Api.Data.Migrations
                         .HasColumnType("character varying(1024)")
                         .HasColumnName("address");
 
-                    b.Property<long?>("CompanyId")
+                    b.Property<long?>("ActiveCompanyId")
                         .HasColumnType("bigint")
-                        .HasColumnName("company_id");
+                        .HasColumnName("active_company_id");
 
                     b.Property<string>("DisplayName")
                         .IsRequired()
@@ -59,14 +59,6 @@ namespace Blueprint.Api.Data.Migrations
                         .HasColumnType("character varying(512)")
                         .HasColumnName("full_name");
 
-                    b.Property<string>("InternalNotes")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)")
-                        .HasDefaultValue("")
-                        .HasColumnName("internal_notes");
-
                     b.Property<string>("Nif")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -85,7 +77,10 @@ namespace Blueprint.Api.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CompanyId");
+                    b.HasIndex("ActiveCompanyId");
+
+                    b.HasIndex("Email")
+                        .IsUnique();
 
                     b.HasIndex("UserId")
                         .IsUnique();
@@ -168,6 +163,62 @@ namespace Blueprint.Api.Data.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("companies", (string)null);
+                });
+
+            modelBuilder.Entity("Blueprint.Api.Data.ClientInvitation", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("CompanyId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("company_id");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)")
+                        .HasColumnName("email");
+
+                    b.Property<DateTimeOffset>("SentAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sent_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId", "Email")
+                        .IsUnique();
+
+                    b.ToTable("client_invitations", (string)null);
+                });
+
+            modelBuilder.Entity("Blueprint.Api.Data.CompanyClient", b =>
+                {
+                    b.Property<long>("CompanyId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("company_id");
+
+                    b.Property<long>("ClientId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("client_id");
+
+                    b.Property<string>("InternalNotes")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
+                        .HasDefaultValue("")
+                        .HasColumnName("internal_notes");
+
+                    b.HasKey("CompanyId", "ClientId");
+
+                    b.HasIndex("ClientId");
+
+                    b.ToTable("company_clients", (string)null);
                 });
 
             modelBuilder.Entity("Blueprint.Api.Data.CompanyEmployee", b =>
@@ -511,9 +562,9 @@ namespace Blueprint.Api.Data.Migrations
 
             modelBuilder.Entity("Blueprint.Api.Data.Client", b =>
                 {
-                    b.HasOne("Blueprint.Api.Data.Company", "Company")
-                        .WithMany("Clients")
-                        .HasForeignKey("CompanyId")
+                    b.HasOne("Blueprint.Api.Data.Company", "ActiveCompany")
+                        .WithMany("ActiveClients")
+                        .HasForeignKey("ActiveCompanyId")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("Blueprint.Api.Data.User", "User")
@@ -522,9 +573,39 @@ namespace Blueprint.Api.Data.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("Company");
+                    b.Navigation("ActiveCompany");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Blueprint.Api.Data.ClientInvitation", b =>
+                {
+                    b.HasOne("Blueprint.Api.Data.Company", "Company")
+                        .WithMany("ClientInvitations")
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Company");
+                });
+
+            modelBuilder.Entity("Blueprint.Api.Data.CompanyClient", b =>
+                {
+                    b.HasOne("Blueprint.Api.Data.Client", "Client")
+                        .WithMany("CompanyClients")
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Blueprint.Api.Data.Company", "Company")
+                        .WithMany("CompanyClients")
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Client");
+
+                    b.Navigation("Company");
                 });
 
             modelBuilder.Entity("Blueprint.Api.Data.CompanyEmployee", b =>
@@ -626,12 +707,18 @@ namespace Blueprint.Api.Data.Migrations
 
             modelBuilder.Entity("Blueprint.Api.Data.Client", b =>
                 {
+                    b.Navigation("CompanyClients");
+
                     b.Navigation("Projects");
                 });
 
             modelBuilder.Entity("Blueprint.Api.Data.Company", b =>
                 {
-                    b.Navigation("Clients");
+                    b.Navigation("ActiveClients");
+
+                    b.Navigation("ClientInvitations");
+
+                    b.Navigation("CompanyClients");
 
                     b.Navigation("CompanyEmployees");
 

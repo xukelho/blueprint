@@ -350,6 +350,10 @@ public static class AdministrationEndpoints
 
         var user = NewUser(normalizedUsername, validRequest.Password);
         user.UserRoles.Add(new UserRole { RoleId = RoleIds.Employee });
+        if (validRequest.RoleIds.Contains(RoleIds.Architect))
+        {
+            user.UserRoles.Add(new UserRole { RoleId = RoleIds.Architect });
+        }
 
         var employee = new Employee
         {
@@ -400,7 +404,7 @@ public static class AdministrationEndpoints
             return TypedResults.NotFound();
         }
 
-        Apply(employee, request);
+        Apply(employee, request!);
         await dbContext.SaveChangesAsync(cancellationToken);
         return TypedResults.Ok(ToResponse(employee));
     }
@@ -428,6 +432,7 @@ public static class AdministrationEndpoints
         CancellationToken cancellationToken)
     {
         var clients = await dbContext.Clients.AsNoTracking()
+            .Include(candidate => candidate.CompanyClients)
             .OrderBy(candidate => candidate.Id)
             .Select(candidate => ToResponse(candidate))
             .ToListAsync(cancellationToken);
@@ -440,6 +445,7 @@ public static class AdministrationEndpoints
         CancellationToken cancellationToken)
     {
         var client = await dbContext.Clients.AsNoTracking()
+            .Include(candidate => candidate.CompanyClients)
             .SingleOrDefaultAsync(candidate => candidate.Id == id, cancellationToken);
         return client is null
             ? TypedResults.NotFound()
@@ -459,14 +465,22 @@ public static class AdministrationEndpoints
         }
 
         var validRequest = request!;
-        if (validRequest.CompanyId is long companyId)
+        var companyIds = validRequest.CompanyIds?.Distinct().ToArray() ?? [];
+        if (validRequest.CompanyIds is null || companyIds.Length != validRequest.CompanyIds.Count || companyIds.Any(id => id <= 0))
         {
-            var companyResult = await RequireActiveCompany(
-                companyId, dbContext, cancellationToken);
-            if (companyResult is not null)
-            {
-                return companyResult;
-            }
+            return TypedResults.ValidationProblem(new Dictionary<string, string[]> { ["companyIds"] = ["Select valid companies without duplicates."] });
+        }
+        var selectedCompanies = await dbContext.Companies.AsNoTracking()
+            .Where(company => companyIds.Contains(company.Id))
+            .Select(company => new { company.Id, company.IsActive })
+            .ToArrayAsync(cancellationToken);
+        if (selectedCompanies.Length != companyIds.Length)
+        {
+            return TypedResults.NotFound(new AdministrationErrorResponse("One or more active companies were not found."));
+        }
+        if (selectedCompanies.Any(company => !company.IsActive))
+        {
+            return Conflict("Clients cannot be associated with an inactive company.");
         }
 
         var normalizedUsername = validRequest.Username.Trim();
@@ -475,21 +489,41 @@ public static class AdministrationEndpoints
             return Conflict("A user with this username already exists.");
         }
 
+        var email = EmailAddress.Normalize(validRequest.Email);
+        if (await dbContext.Clients.AnyAsync(candidate => candidate.Email == email, cancellationToken))
+        {
+            return Conflict("A client with this email already exists.");
+        }
+
         var user = NewUser(normalizedUsername, validRequest.Password);
         user.UserRoles.Add(new UserRole { RoleId = RoleIds.Client });
         var client = new Client
         {
             User = user,
-            CompanyId = validRequest.CompanyId,
+            ActiveCompanyId = companyIds.FirstOrDefault() is var activeCompanyId && activeCompanyId > 0 ? activeCompanyId : null,
             DisplayName = validRequest.DisplayName.Trim(),
             FullName = validRequest.FullName.Trim(),
             Nif = validRequest.Nif.Trim(),
-            Email = validRequest.Email.Trim(),
+            Email = email,
             PhoneNumber = validRequest.PhoneNumber.Trim(),
             Address = validRequest.Address.Trim()
         };
+        foreach (var companyId in companyIds)
+        {
+            client.CompanyClients.Add(new CompanyClient { CompanyId = companyId });
+        }
         dbContext.Clients.Add(client);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        await RemoveMatchingInvitations(companyIds, email, dbContext, cancellationToken);
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            return Conflict("A client with this email already exists.");
+        }
 
         return TypedResults.Created($"/api/admin/clients/{client.Id}", ToResponse(client));
     }
@@ -508,25 +542,74 @@ public static class AdministrationEndpoints
         }
 
         var client = await dbContext.Clients
+            .Include(candidate => candidate.CompanyClients)
             .SingleOrDefaultAsync(candidate => candidate.Id == id, cancellationToken);
         if (client is null)
         {
             return TypedResults.NotFound();
         }
 
-        if (client.CompanyId != request!.CompanyId &&
-            request.CompanyId is long companyId)
+        var companyIds = request!.CompanyIds?.Distinct().ToArray() ?? [];
+        if (request.CompanyIds is null || companyIds.Length != request.CompanyIds.Count || companyIds.Any(companyId => companyId <= 0))
         {
-            var companyResult = await RequireActiveCompany(
-                companyId, dbContext, cancellationToken);
-            if (companyResult is not null)
-            {
-                return companyResult;
-            }
+            return TypedResults.ValidationProblem(new Dictionary<string, string[]> { ["companyIds"] = ["Select valid companies without duplicates."] });
+        }
+
+        var currentCompanyIds = client.CompanyClients.Select(membership => membership.CompanyId).ToHashSet();
+        var addedCompanyIds = companyIds.Where(companyId => !currentCompanyIds.Contains(companyId)).ToArray();
+        var addedCompanies = await dbContext.Companies.AsNoTracking()
+            .Where(company => addedCompanyIds.Contains(company.Id))
+            .Select(company => new { company.Id, company.IsActive })
+            .ToArrayAsync(cancellationToken);
+        if (addedCompanies.Length != addedCompanyIds.Length)
+        {
+            return TypedResults.NotFound(new AdministrationErrorResponse("One or more active companies were not found."));
+        }
+        if (addedCompanies.Any(company => !company.IsActive))
+        {
+            return Conflict("Clients cannot be associated with an inactive company.");
+        }
+        var removedCompanyIds = currentCompanyIds.Where(companyId => !companyIds.Contains(companyId)).ToArray();
+        if (await dbContext.Projects.AnyAsync(project => project.ClientId == id && removedCompanyIds.Contains(project.CompanyId), cancellationToken))
+        {
+            return TypedResults.Conflict(new AdministrationErrorResponse(
+                "Remove this client from the company's projects before removing the company membership."));
+        }
+
+        var email = EmailAddress.Normalize(request.Email);
+        if (await dbContext.Clients.AnyAsync(candidate => candidate.Id != id && candidate.Email == email, cancellationToken))
+        {
+            return Conflict("A client with this email already exists.");
         }
 
         Apply(client, request);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        foreach (var membership in client.CompanyClients.Where(membership => removedCompanyIds.Contains(membership.CompanyId)).ToArray())
+        {
+            dbContext.CompanyClients.Remove(membership);
+        }
+        foreach (var companyId in addedCompanyIds)
+        {
+            client.CompanyClients.Add(new CompanyClient { CompanyId = companyId, ClientId = client.Id });
+        }
+        if (client.ActiveCompanyId is long activeCompanyId && !companyIds.Contains(activeCompanyId))
+        {
+            client.ActiveCompanyId = companyIds.FirstOrDefault() is var fallbackCompanyId && fallbackCompanyId > 0 ? fallbackCompanyId : null;
+        }
+        else if (client.ActiveCompanyId is null && companyIds.Length > 0)
+        {
+            client.ActiveCompanyId = companyIds[0];
+        }
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        await RemoveMatchingInvitations(companyIds, email, dbContext, cancellationToken);
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            return Conflict("A client with this email already exists.");
+        }
         return TypedResults.Ok(ToResponse(client));
     }
 
@@ -849,6 +932,10 @@ public static class AdministrationEndpoints
             values.Item4,
             values.Item5,
             values.Item6);
+        if (request is CreateClientRequest or UpdateClientRequest && !EmailAddress.IsValid(values.Item4))
+        {
+            errors["email"] = ["Enter a valid email address containing at most 320 characters."];
+        }
     }
 
     private static Dictionary<string, string[]> ValidateCompany(object? request)
@@ -908,11 +995,10 @@ public static class AdministrationEndpoints
 
     private static void Apply(Client client, UpdateClientRequest request)
     {
-        client.CompanyId = request.CompanyId;
         client.DisplayName = request.DisplayName.Trim();
         client.FullName = request.FullName.Trim();
         client.Nif = request.Nif.Trim();
-        client.Email = request.Email.Trim();
+        client.Email = EmailAddress.Normalize(request.Email);
         client.PhoneNumber = request.PhoneNumber.Trim();
         client.Address = request.Address.Trim();
     }
@@ -948,13 +1034,29 @@ public static class AdministrationEndpoints
         new(
             client.Id,
             client.UserId,
-            client.CompanyId,
+            client.CompanyClients.OrderBy(membership => membership.CompanyId).Select(membership => membership.CompanyId).ToArray(),
             client.DisplayName,
             client.FullName,
             client.Nif,
             client.Email,
             client.PhoneNumber,
             client.Address);
+
+    private static async Task RemoveMatchingInvitations(
+        IReadOnlyCollection<long> companyIds,
+        string email,
+        BlueprintDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        if (companyIds.Count == 0)
+        {
+            return;
+        }
+
+        await dbContext.ClientInvitations
+            .Where(invitation => companyIds.Contains(invitation.CompanyId) && invitation.Email == email)
+            .ExecuteDeleteAsync(cancellationToken);
+    }
 
     private static CompanyResponse ToResponse(Company company) =>
         new(

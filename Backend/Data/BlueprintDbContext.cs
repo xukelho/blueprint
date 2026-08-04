@@ -13,6 +13,8 @@ public sealed class BlueprintDbContext(DbContextOptions<BlueprintDbContext> opti
     public DbSet<Employee> Employees => Set<Employee>();
     public DbSet<Company> Companies => Set<Company>();
     public DbSet<CompanyEmployee> CompanyEmployees => Set<CompanyEmployee>();
+    public DbSet<CompanyClient> CompanyClients => Set<CompanyClient>();
+    public DbSet<ClientInvitation> ClientInvitations => Set<ClientInvitation>();
     public DbSet<Project> Projects => Set<Project>();
     public DbSet<ProjectMember> ProjectMembers => Set<ProjectMember>();
     public DbSet<ProjectPhase> ProjectPhases => Set<ProjectPhase>();
@@ -26,6 +28,8 @@ public sealed class BlueprintDbContext(DbContextOptions<BlueprintDbContext> opti
         ConfigureEmployees(modelBuilder);
         ConfigureCompanyEmployees(modelBuilder);
         ConfigureClients(modelBuilder);
+        ConfigureCompanyClients(modelBuilder);
+        ConfigureClientInvitations(modelBuilder);
         ConfigureProjects(modelBuilder);
     }
 
@@ -206,14 +210,43 @@ public sealed class BlueprintDbContext(DbContextOptions<BlueprintDbContext> opti
             .WithOne(candidate => candidate.Client)
             .HasForeignKey<Client>(candidate => candidate.UserId)
             .OnDelete(DeleteBehavior.Cascade);
-        client.Property(candidate => candidate.CompanyId)
-            .HasColumnName("company_id");
-        client.HasOne(candidate => candidate.Company)
-            .WithMany(candidate => candidate.Clients)
-            .HasForeignKey(candidate => candidate.CompanyId)
+        client.Property(candidate => candidate.ActiveCompanyId)
+            .HasColumnName("active_company_id");
+        client.HasOne(candidate => candidate.ActiveCompany)
+            .WithMany(candidate => candidate.ActiveClients)
+            .HasForeignKey(candidate => candidate.ActiveCompanyId)
             .OnDelete(DeleteBehavior.Restrict);
         ConfigureProfileProperties(client);
-        client.Property(candidate => candidate.InternalNotes).HasColumnName("internal_notes").HasMaxLength(4000).HasDefaultValue(string.Empty).IsRequired();
+        client.HasIndex(candidate => candidate.Email).IsUnique();
+    }
+
+    private static void ConfigureCompanyClients(ModelBuilder modelBuilder)
+    {
+        var membership = modelBuilder.Entity<CompanyClient>();
+        membership.ToTable("company_clients");
+        membership.HasKey(candidate => new { candidate.CompanyId, candidate.ClientId });
+        membership.Property(candidate => candidate.CompanyId).HasColumnName("company_id");
+        membership.Property(candidate => candidate.ClientId).HasColumnName("client_id");
+        membership.Property(candidate => candidate.InternalNotes).HasColumnName("internal_notes").HasMaxLength(4000).HasDefaultValue(string.Empty).IsRequired();
+        membership.HasIndex(candidate => candidate.ClientId);
+        membership.HasOne(candidate => candidate.Company).WithMany(candidate => candidate.CompanyClients)
+            .HasForeignKey(candidate => candidate.CompanyId).OnDelete(DeleteBehavior.Restrict);
+        membership.HasOne(candidate => candidate.Client).WithMany(candidate => candidate.CompanyClients)
+            .HasForeignKey(candidate => candidate.ClientId).OnDelete(DeleteBehavior.Cascade);
+    }
+
+    private static void ConfigureClientInvitations(ModelBuilder modelBuilder)
+    {
+        var invitation = modelBuilder.Entity<ClientInvitation>();
+        invitation.ToTable("client_invitations");
+        invitation.HasKey(candidate => candidate.Id);
+        invitation.Property(candidate => candidate.Id).HasColumnName("id").ValueGeneratedOnAdd();
+        invitation.Property(candidate => candidate.CompanyId).HasColumnName("company_id").IsRequired();
+        invitation.Property(candidate => candidate.Email).HasColumnName("email").HasMaxLength(320).IsRequired();
+        invitation.Property(candidate => candidate.SentAt).HasColumnName("sent_at").HasColumnType("timestamp with time zone").IsRequired();
+        invitation.HasIndex(candidate => new { candidate.CompanyId, candidate.Email }).IsUnique();
+        invitation.HasOne(candidate => candidate.Company).WithMany(candidate => candidate.ClientInvitations)
+            .HasForeignKey(candidate => candidate.CompanyId).OnDelete(DeleteBehavior.Cascade);
     }
 
     private static void ConfigureProjects(ModelBuilder modelBuilder)
