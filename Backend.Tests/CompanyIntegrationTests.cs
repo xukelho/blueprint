@@ -92,7 +92,7 @@ public sealed class CompanyIntegrationTests(
             {
                 username,
                 password = "secret",
-                companyId = (long?)null,
+                companyIds = Array.Empty<long>(),
                 displayName = "Marta",
                 fullName = "Marta Silva",
                 nif = "123456789",

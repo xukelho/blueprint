@@ -13,3 +13,5 @@ public sealed record ClientListItemResponse(long Id, string DisplayName, string 
 public sealed record ClientProjectResponse(long Id, string Title, string Code, string? CurrentPhaseCode, bool IsArchived);
 public sealed record ClientDetailResponse(long Id, string DisplayName, string FullName, string Nif, string Email, string PhoneNumber, string Address, string InternalNotes, IReadOnlyList<ClientProjectResponse> Projects, bool CanManageProjects);
 public sealed record UpdateClientNotesRequest(string InternalNotes);
+public sealed record CreateClientInvitationRequest(string Email);
+public sealed record ClientInvitationResponse(long Id, string Email, DateTimeOffset SentAt, DateTimeOffset ExpiresAt);

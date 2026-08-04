@@ -57,7 +57,7 @@ public sealed record EmployeeResponse(
 public sealed record CreateClientRequest(
     string Username,
     string Password,
-    long? CompanyId,
+    IReadOnlyList<long> CompanyIds,
     string DisplayName,
     string FullName,
     string Nif,
@@ -66,7 +66,7 @@ public sealed record CreateClientRequest(
     string Address);
 
 public sealed record UpdateClientRequest(
-    long? CompanyId,
+    IReadOnlyList<long> CompanyIds,
     string DisplayName,
     string FullName,
     string Nif,
@@ -77,7 +77,7 @@ public sealed record UpdateClientRequest(
 public sealed record ClientResponse(
     long Id,
     long UserId,
-    long? CompanyId,
+    IReadOnlyList<long> CompanyIds,
     string DisplayName,
     string FullName,
     string Nif,
