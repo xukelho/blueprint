@@ -16,6 +16,7 @@ public sealed class BlueprintDbContext(DbContextOptions<BlueprintDbContext> opti
     public DbSet<CompanyClient> CompanyClients => Set<CompanyClient>();
     public DbSet<ClientInvitation> ClientInvitations => Set<ClientInvitation>();
     public DbSet<Project> Projects => Set<Project>();
+    public DbSet<ProjectClient> ProjectClients => Set<ProjectClient>();
     public DbSet<ProjectMember> ProjectMembers => Set<ProjectMember>();
     public DbSet<ProjectPhase> ProjectPhases => Set<ProjectPhase>();
 
@@ -210,12 +211,6 @@ public sealed class BlueprintDbContext(DbContextOptions<BlueprintDbContext> opti
             .WithOne(candidate => candidate.Client)
             .HasForeignKey<Client>(candidate => candidate.UserId)
             .OnDelete(DeleteBehavior.Cascade);
-        client.Property(candidate => candidate.ActiveCompanyId)
-            .HasColumnName("active_company_id");
-        client.HasOne(candidate => candidate.ActiveCompany)
-            .WithMany(candidate => candidate.ActiveClients)
-            .HasForeignKey(candidate => candidate.ActiveCompanyId)
-            .OnDelete(DeleteBehavior.Restrict);
         ConfigureProfileProperties(client);
         client.HasIndex(candidate => candidate.Email).IsUnique();
     }
@@ -256,7 +251,6 @@ public sealed class BlueprintDbContext(DbContextOptions<BlueprintDbContext> opti
         project.HasKey(candidate => candidate.Id);
         project.Property(candidate => candidate.Id).HasColumnName("id").ValueGeneratedOnAdd();
         project.Property(candidate => candidate.CompanyId).HasColumnName("company_id").IsRequired();
-        project.Property(candidate => candidate.ClientId).HasColumnName("client_id");
         project.Property(candidate => candidate.Title).HasColumnName("title").HasMaxLength(256).IsRequired();
         project.Property(candidate => candidate.Code).HasColumnName("code").HasMaxLength(64).IsRequired();
         project.Property(candidate => candidate.Address).HasColumnName("address").HasMaxLength(1024).IsRequired();
@@ -268,7 +262,17 @@ public sealed class BlueprintDbContext(DbContextOptions<BlueprintDbContext> opti
         project.Property(candidate => candidate.UpdatedBy).HasColumnName("updated_by").IsRequired();
         project.HasIndex(candidate => new { candidate.CompanyId, candidate.Code }).IsUnique();
         project.HasOne(candidate => candidate.Company).WithMany(candidate => candidate.Projects).HasForeignKey(candidate => candidate.CompanyId).OnDelete(DeleteBehavior.Restrict);
-        project.HasOne(candidate => candidate.Client).WithMany(candidate => candidate.Projects).HasForeignKey(candidate => candidate.ClientId).OnDelete(DeleteBehavior.SetNull);
+
+        var projectClient = modelBuilder.Entity<ProjectClient>();
+        projectClient.ToTable("project_clients");
+        projectClient.HasKey(candidate => new { candidate.ProjectId, candidate.ClientId });
+        projectClient.Property(candidate => candidate.ProjectId).HasColumnName("project_id");
+        projectClient.Property(candidate => candidate.ClientId).HasColumnName("client_id");
+        projectClient.HasIndex(candidate => candidate.ClientId);
+        projectClient.HasOne(candidate => candidate.Project).WithMany(candidate => candidate.ProjectClients)
+            .HasForeignKey(candidate => candidate.ProjectId).OnDelete(DeleteBehavior.Cascade);
+        projectClient.HasOne(candidate => candidate.Client).WithMany(candidate => candidate.ProjectClients)
+            .HasForeignKey(candidate => candidate.ClientId).OnDelete(DeleteBehavior.Cascade);
 
         var member = modelBuilder.Entity<ProjectMember>();
         member.ToTable("project_members");

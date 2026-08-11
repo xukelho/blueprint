@@ -52,6 +52,7 @@ export default function PortalShell({ children, wide = false }: PortalShellProps
   const profileName = profile?.displayName ?? "Ana Martins";
   const profileRole = profile ? profileRoleLabel(profile) : "Arquiteta";
   const profileCompany = profile?.companyName ?? "Forma Norte";
+  const isClientProfile = profile?.profileType === "client";
   const visiblePrimaryNav = primaryNav.filter(
       (item) =>
       (item.path !== "/clients" || isEmployee()) &&
@@ -122,8 +123,8 @@ export default function PortalShell({ children, wide = false }: PortalShellProps
         <div className="atelier-context">
           <span className="atelier-context__icon" aria-hidden="true"><Building2 size={17} /></span>
           <span className="sidebar-label">
-            <small>Atelier ativo</small>
-            <strong>{profileCompany}</strong>
+            <small>{isClientProfile ? "Empresas associadas" : "Atelier ativo"}</small>
+            <strong>{isClientProfile ? profile.availableCompanies.length : profileCompany}</strong>
           </span>
         </div>
 
@@ -162,14 +163,14 @@ export default function PortalShell({ children, wide = false }: PortalShellProps
                   className={`nav-item ${active ? "nav-item--active" : ""}`}
                   type="button"
                   key={item.path}
-                  title={sidebarCollapsed ? `${item.label} — Mock` : undefined}
+                  title={sidebarCollapsed ? (isClientProfile && item.path === "/notifications" ? item.label : `${item.label} — Mock`) : undefined}
                   aria-current={active ? "page" : undefined}
                   onClick={() => goTo(item.path)}
                 >
                   <Icon size={19} strokeWidth={1.8} aria-hidden="true" />
                   <span className="sidebar-label">{item.label}</span>
-                  <span className="nav-status nav-status--mock" aria-hidden="true">Mock</span>
-                  {item.badge && <span className="nav-badge">{item.badge}</span>}
+                  {(!isClientProfile || item.path !== "/notifications") && <span className="nav-status nav-status--mock" aria-hidden="true">Mock</span>}
+                  {item.badge && (!isClientProfile || item.path !== "/notifications") && <span className="nav-badge">{item.badge}</span>}
                 </button>
               );
             })}

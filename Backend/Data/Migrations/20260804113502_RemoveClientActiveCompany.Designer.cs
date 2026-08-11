@@ -3,6 +3,7 @@ using System;
 using Blueprint.Api.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Blueprint.Api.Data.Migrations
 {
     [DbContext(typeof(BlueprintDbContext))]
-    partial class BlueprintDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260804113502_RemoveClientActiveCompany")]
+    partial class RemoveClientActiveCompany
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -313,6 +316,10 @@ namespace Blueprint.Api.Data.Migrations
                         .HasColumnType("character varying(1024)")
                         .HasColumnName("address");
 
+                    b.Property<long?>("ClientId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("client_id");
+
                     b.Property<string>("Code")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -358,27 +365,12 @@ namespace Blueprint.Api.Data.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ClientId");
+
                     b.HasIndex("CompanyId", "Code")
                         .IsUnique();
 
                     b.ToTable("projects", (string)null);
-                });
-
-            modelBuilder.Entity("Blueprint.Api.Data.ProjectClient", b =>
-                {
-                    b.Property<long>("ProjectId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("project_id");
-
-                    b.Property<long>("ClientId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("client_id");
-
-                    b.HasKey("ProjectId", "ClientId");
-
-                    b.HasIndex("ClientId");
-
-                    b.ToTable("project_clients", (string)null);
                 });
 
             modelBuilder.Entity("Blueprint.Api.Data.ProjectMember", b =>
@@ -638,32 +630,20 @@ namespace Blueprint.Api.Data.Migrations
 
             modelBuilder.Entity("Blueprint.Api.Data.Project", b =>
                 {
+                    b.HasOne("Blueprint.Api.Data.Client", "Client")
+                        .WithMany("Projects")
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("Blueprint.Api.Data.Company", "Company")
                         .WithMany("Projects")
                         .HasForeignKey("CompanyId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.Navigation("Company");
-                });
-
-            modelBuilder.Entity("Blueprint.Api.Data.ProjectClient", b =>
-                {
-                    b.HasOne("Blueprint.Api.Data.Client", "Client")
-                        .WithMany("ProjectClients")
-                        .HasForeignKey("ClientId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Blueprint.Api.Data.Project", "Project")
-                        .WithMany("ProjectClients")
-                        .HasForeignKey("ProjectId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
                     b.Navigation("Client");
 
-                    b.Navigation("Project");
+                    b.Navigation("Company");
                 });
 
             modelBuilder.Entity("Blueprint.Api.Data.ProjectMember", b =>
@@ -719,7 +699,7 @@ namespace Blueprint.Api.Data.Migrations
                 {
                     b.Navigation("CompanyClients");
 
-                    b.Navigation("ProjectClients");
+                    b.Navigation("Projects");
                 });
 
             modelBuilder.Entity("Blueprint.Api.Data.Company", b =>
@@ -745,8 +725,6 @@ namespace Blueprint.Api.Data.Migrations
                     b.Navigation("Members");
 
                     b.Navigation("Phases");
-
-                    b.Navigation("ProjectClients");
                 });
 
             modelBuilder.Entity("Blueprint.Api.Data.Role", b =>

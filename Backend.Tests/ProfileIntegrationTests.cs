@@ -64,7 +64,9 @@ public sealed class ProfileIntegrationTests(
         var updated = await update.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal("profile.client.updated", updated.GetProperty("username").GetString());
         Assert.Equal("Marta Atualizada", updated.GetProperty("displayName").GetString());
-        Assert.Equal(companyId, updated.GetProperty("companyId").GetInt64());
+        Assert.Equal(JsonValueKind.Null, updated.GetProperty("companyId").ValueKind);
+        Assert.Equal(JsonValueKind.Null, updated.GetProperty("companyName").ValueKind);
+        Assert.Equal(companyId, updated.GetProperty("availableCompanies")[0].GetProperty("id").GetInt64());
         Assert.Equal(
             ["client"],
             updated.GetProperty("roles").EnumerateArray()
@@ -80,18 +82,11 @@ public sealed class ProfileIntegrationTests(
             ProfilePayload("profile.client.conflict", companyId));
         Assert.Equal(HttpStatusCode.Conflict, conflict.StatusCode);
 
-        using var invalidCompany = await fixture.Client.PutAsJsonAsync(
+        using var ignoredCompany = await fixture.Client.PutAsJsonAsync(
             "/api/profile",
             ProfilePayload("profile.client.updated", long.MaxValue));
-        Assert.Equal(HttpStatusCode.Conflict, invalidCompany.StatusCode);
-
-        using var deactivateCompany = await fixture.Client.DeleteAsync(
-            $"/api/admin/companies/{companyId}");
-        Assert.Equal(HttpStatusCode.NoContent, deactivateCompany.StatusCode);
-        using var inactiveCompany = await fixture.Client.PutAsJsonAsync(
-            "/api/profile",
-            ProfilePayload("profile.client.updated", companyId));
-        Assert.Equal(HttpStatusCode.Conflict, inactiveCompany.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, ignoredCompany.StatusCode);
+        Assert.Equal(JsonValueKind.Null, (await ignoredCompany.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("companyId").ValueKind);
 
         using var clearCompany = await fixture.Client.PutAsJsonAsync(
             "/api/profile",

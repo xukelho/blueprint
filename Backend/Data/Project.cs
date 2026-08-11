@@ -4,7 +4,6 @@ public sealed class Project
 {
     public long Id { get; set; }
     public long CompanyId { get; set; }
-    public long? ClientId { get; set; }
     public required string Title { get; set; }
     public required string Code { get; set; }
     public required string Address { get; set; }
@@ -15,9 +14,17 @@ public sealed class Project
     public DateTimeOffset UpdatedAt { get; set; }
     public long UpdatedBy { get; set; }
     public Company? Company { get; set; }
-    public Client? Client { get; set; }
+    public ICollection<ProjectClient> ProjectClients { get; set; } = [];
     public ICollection<ProjectMember> Members { get; set; } = [];
     public ICollection<ProjectPhase> Phases { get; set; } = [];
+}
+
+public sealed class ProjectClient
+{
+    public long ProjectId { get; set; }
+    public long ClientId { get; set; }
+    public Project? Project { get; set; }
+    public Client? Client { get; set; }
 }
 
 public sealed class ProjectPhase

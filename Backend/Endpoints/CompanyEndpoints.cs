@@ -82,6 +82,11 @@ public static class CompanyEndpoints
         BlueprintDbContext dbContext,
         CancellationToken cancellationToken)
     {
+        if (!principal.IsInRole("employee"))
+        {
+            return (null, TypedResults.Forbid());
+        }
+
         var userId = GetUserId(principal);
         if (userId == 0)
         {

@@ -187,5 +187,56 @@ describe("CompanyClientPage", () => {
       method: "PUT",
       body: JSON.stringify({ internalNotes: "Nota da empresa" }),
     })));
+    expect(screen.queryByText("Contacto")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Iniciais de Marta Silva")).toHaveTextContent("MS");
+  });
+
+  it("shows available projects as selectable cards and toggles their association", async () => {
+    const projectCatalog = [
+      { id: 1, companyId: 10, companyName: "Forma Norte", title: "Casa Atual", code: "CA-1", address: "Lisboa", googleMapsUrl: null, isArchived: false, client: { id: 30, displayName: "Marta Silva" }, currentPhaseCode: null },
+      { id: 2, companyId: 10, companyName: "Forma Norte", title: "Casa Livre", code: "CL-2", address: "Porto", googleMapsUrl: null, isArchived: false, client: null, currentPhaseCode: null },
+      { id: 3, companyId: 10, companyName: "Forma Norte", title: "Casa Ocupada", code: "CO-3", address: "Faro", googleMapsUrl: null, isArchived: false, client: { id: 99, displayName: "Outro cliente" }, currentPhaseCode: null },
+    ];
+    const associated = new Set([1]);
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const path = String(input);
+      if (path === "/api/profile") return response(ownerProfile);
+      if (path === "/api/projects/") return response(projectCatalog);
+      if (path === "/api/clients/30/projects/2" && init?.method === "PUT") {
+        associated.add(2);
+        return response(null, 204);
+      }
+      if (path === "/api/clients/30/projects/1" && init?.method === "DELETE") {
+        associated.delete(1);
+        return response(null, 204);
+      }
+      if (path === "/api/clients/30") return response({
+        ...clients[0],
+        fullName: "Marta Isabel Silva",
+        nif: "123456789",
+        phoneNumber: "910000000",
+        address: "Lisboa",
+        internalNotes: "",
+        projects: projectCatalog.filter((project) => associated.has(project.id)).map(({ id, title, code, currentPhaseCode, isArchived }) => ({ id, title, code, currentPhaseCode, isArchived })),
+        canManageProjects: true,
+      });
+      throw new Error(`Unexpected request: ${path}`);
+    });
+    const user = userEvent.setup();
+    renderRoute("/clients/30");
+
+    const assignedCard = await screen.findByRole("button", { name: "Remover projeto Casa Atual" });
+    const availableCard = await screen.findByRole("button", { name: "Associar projeto Casa Livre" });
+    expect(assignedCard).toHaveAttribute("aria-pressed", "true");
+    expect(availableCard).toHaveAttribute("aria-pressed", "false");
+    expect(screen.queryByText("Casa Ocupada")).not.toBeInTheDocument();
+
+    await user.click(availableCard);
+    expect(await screen.findByRole("button", { name: "Remover projeto Casa Livre" })).toHaveAttribute("aria-pressed", "true");
+    expect(fetchMock).toHaveBeenCalledWith("/api/clients/30/projects/2", expect.objectContaining({ method: "PUT" }));
+
+    await user.click(screen.getByRole("button", { name: "Remover projeto Casa Atual" }));
+    expect(await screen.findByRole("button", { name: "Associar projeto Casa Atual" })).toHaveAttribute("aria-pressed", "false");
+    expect(fetchMock).toHaveBeenCalledWith("/api/clients/30/projects/1", expect.objectContaining({ method: "DELETE" }));
   });
 });

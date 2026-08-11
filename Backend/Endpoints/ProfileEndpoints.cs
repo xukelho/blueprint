@@ -127,14 +127,6 @@ public static class ProfileEndpoints
                     ["isArchitect"] = ["Only employee profiles can enable the architect role."]
                 });
             }
-            var validCompanyIds = companies.Select(company => company.Id).ToHashSet();
-            if ((validCompanyIds.Count > 0 && validRequest.CompanyId is null) ||
-                (validRequest.CompanyId is long selectedCompanyId && !validCompanyIds.Contains(selectedCompanyId)))
-            {
-                return TypedResults.Conflict(new AdministrationErrorResponse(
-                    "Clients may only select a company with an accepted membership."));
-            }
-
             var email = EmailAddress.Normalize(validRequest.Email);
             if (await dbContext.Clients.AnyAsync(
                     candidate => candidate.Id != client.Id && candidate.Email == email,
@@ -229,7 +221,7 @@ public static class ProfileEndpoints
             user,
             companies,
             companies.FirstOrDefault(company => company.Id ==
-                (client is null ? employee?.CompanyEmployee?.CompanyId : client.ActiveCompanyId))?.Name,
+                employee?.CompanyEmployee?.CompanyId)?.Name,
             roles));
     }
 
@@ -280,8 +272,6 @@ public static class ProfileEndpoints
         dbContext.Users
             .Include(candidate => candidate.UserRoles)
                 .ThenInclude(candidate => candidate.Role)
-            .Include(candidate => candidate.Client)
-                .ThenInclude(candidate => candidate!.ActiveCompany)
             .Include(candidate => candidate.Client)
                 .ThenInclude(candidate => candidate!.CompanyClients)
                     .ThenInclude(candidate => candidate.Company)
@@ -348,8 +338,8 @@ public static class ProfileEndpoints
             client.Email,
             client.PhoneNumber,
             client.Address,
-            client.ActiveCompanyId,
-            companyName ?? client.ActiveCompany?.Name,
+            null,
+            null,
             roles,
             companies);
     }
@@ -370,7 +360,6 @@ public static class ProfileEndpoints
         Client client,
         UpdateCurrentProfileRequest request)
     {
-        client.ActiveCompanyId = request.CompanyId;
         client.DisplayName = request.DisplayName.Trim();
         client.FullName = request.FullName.Trim();
         client.Nif = request.Nif.Trim();

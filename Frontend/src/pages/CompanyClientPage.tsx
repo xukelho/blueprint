@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ChevronDown, ChevronRight, Mail, Plus, Search, X } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, ChevronRight, Mail, Plus, Search, X } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import PortalShell from "../components/PortalShell";
 import {
@@ -22,6 +22,7 @@ import { useProfile } from "../profile/ProfileContext";
 
 const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toLocaleUpperCase();
 const normalizedSearch = (value: string) => value.toLocaleLowerCase("pt-PT");
+type ClientProjectCard = Pick<Project, "id" | "title" | "code" | "currentPhaseCode" | "isArchived">;
 
 function ConfirmedClientGrid({ clients, onOpen, searching = false }: { clients: ClientListItem[]; onOpen: (id: number) => void; searching?: boolean }) {
   if (!clients.length) return <p className="mock-empty-state">{searching ? "Nenhum cliente confirmado corresponde à pesquisa." : "Não existem clientes confirmados."}</p>;
@@ -161,12 +162,20 @@ export function CompanyClientDetailPage() {
   const [notes, setNotes] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [updatingProjectId, setUpdatingProjectId] = useState<number | null>(null);
 
-  const load = () => {
+  const load = async () => {
     if (!id) return;
-    getClient(id).then((value) => { setClient(value); setNotes(value.internalNotes); setError(""); }).catch((reason: Error) => setError(reason.message));
+    try {
+      const value = await getClient(id);
+      setClient(value);
+      setNotes(value.internalNotes);
+      setError("");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Erro ao carregar o cliente.");
+    }
   };
-  useEffect(load, [id]);
+  useEffect(() => { void load(); }, [id]);
   useEffect(() => { if (client?.canManageProjects) getProjects().then(setProjects).catch((reason: Error) => setError(reason.message)); }, [client?.canManageProjects]);
 
   const save = async () => {
@@ -174,12 +183,32 @@ export function CompanyClientDetailPage() {
     try { await saveClientNotes(id, notes); setNotice("Notas guardadas com sucesso."); setError(""); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "Erro ao guardar."); }
   };
-  const associate = async (projectId: number) => { if (id) { await associateClientProject(id, projectId); load(); } };
-  const remove = async (projectId: number) => { if (id) { await removeClientProject(id, projectId); load(); } };
+  const toggleProject = async (projectId: number, isAssociated: boolean) => {
+    if (!id || updatingProjectId !== null) return;
+    setUpdatingProjectId(projectId);
+    setError("");
+    setNotice("");
+    try {
+      if (isAssociated) await removeClientProject(id, projectId);
+      else await associateClientProject(id, projectId);
+      await load();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Erro ao atualizar o projeto.");
+    } finally {
+      setUpdatingProjectId(null);
+    }
+  };
 
   if (!client && !error) return <PortalShell><p>A carregar…</p></PortalShell>;
   if (!client) return <PortalShell><p role="alert">{error}</p></PortalShell>;
-  const unassigned = projects.filter((project) => !project.client);
+  const associatedProjectIds = new Set(client.projects.map((project) => project.id));
+  const projectCardsById = new Map<number, ClientProjectCard>(client.projects.map((project) => [project.id, project]));
+  if (client.canManageProjects) {
+    projects
+      .filter((project) => !project.client || project.client.id === client.id)
+      .forEach((project) => projectCardsById.set(project.id, project));
+  }
+  const projectCards = [...projectCardsById.values()].sort((left, right) => left.title.localeCompare(right.title, "pt-PT"));
 
   return (
     <PortalShell>
@@ -197,9 +226,26 @@ export function CompanyClientDetailPage() {
             <label className="mock-field mock-field--wide">Morada<input readOnly value={client.address} /></label>
             <label className="mock-field mock-field--wide">Notas internas<textarea value={notes} maxLength={4000} onChange={(event) => { setNotes(event.target.value); setNotice(""); }} /></label>
           </div></section>
-          <section className="mock-surface"><div className="mock-section-title"><div><h2>Projetos associados</h2><p>{client.projects.length} projetos com acesso.</p></div>{client.canManageProjects && <select aria-label="Associar projeto" defaultValue="" onChange={(event) => { if (event.target.value) associate(Number(event.target.value)); event.currentTarget.value = ""; }}><option value="">Associar projeto</option>{unassigned.map((project) => <option key={project.id} value={project.id}>{project.title}</option>)}</select>}</div>{client.projects.map((project) => <div className="mock-compact-project" key={project.id}><div><strong>{project.title}</strong><small>{project.code} · {phaseLabel(project.currentPhaseCode) ?? "Sem fase atual"}</small></div>{client.canManageProjects && <button type="button" onClick={() => remove(project.id)}>Remover</button>}</div>)}</section>
+          <section className="mock-surface">
+            <div className="mock-section-title"><div><h2>Projetos associados</h2><p>{client.projects.length} {client.projects.length === 1 ? "projeto com acesso" : "projetos com acesso"}.</p></div></div>
+            {client.canManageProjects && <p className="mock-client-project-help">Seleciona um projeto para atribuir ou remover o acesso deste cliente.</p>}
+            {projectCards.length ? <div className="mock-client-project-grid">
+              {projectCards.map((project) => {
+                const isAssociated = associatedProjectIds.has(project.id);
+                const isUpdating = updatingProjectId === project.id;
+                const content = <>
+                  <span className="mock-client-project-code">{project.code}</span>
+                  <span className="mock-client-project-copy"><strong>{project.title}</strong><small>{phaseLabel(project.currentPhaseCode) ?? "Sem fase atual"}{project.isArchived ? " · Arquivado" : ""}</small></span>
+                  <span className="mock-client-project-state">{isAssociated && <Check size={14} aria-hidden="true" />}{isUpdating ? "A atualizar…" : isAssociated ? "Associado" : "Disponível"}</span>
+                </>;
+                return client.canManageProjects
+                  ? <button className="mock-client-project-card" type="button" key={project.id} aria-label={`${isAssociated ? "Remover" : "Associar"} projeto ${project.title}`} aria-pressed={isAssociated} aria-busy={isUpdating} disabled={updatingProjectId !== null} onClick={() => toggleProject(project.id, isAssociated)}>{content}</button>
+                  : <article className="mock-client-project-card" data-associated={isAssociated} key={project.id}>{content}</article>;
+              })}
+            </div> : <p className="mock-empty-state">Não existem projetos disponíveis.</p>}
+          </section>
         </div>
-        <aside className="mock-client-sidebar"><section className="mock-surface mock-client-identity"><span className="mock-client-avatar mock-client-avatar--blue">{initials(client.displayName)}</span><dl><div><dt>Contacto</dt><dd><Mail size={14} />{client.email}</dd></div></dl></section></aside>
+        <aside className="mock-client-sidebar"><section className="mock-surface mock-client-identity"><span className="mock-client-avatar mock-client-avatar--blue" aria-label={`Iniciais de ${client.displayName}`}>{initials(client.displayName)}</span></section></aside>
       </div>
     </PortalShell>
   );

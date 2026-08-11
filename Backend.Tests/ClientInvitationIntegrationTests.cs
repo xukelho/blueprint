@@ -9,6 +9,73 @@ public sealed class ClientInvitationIntegrationTests(PostgreSqlApiFixture fixtur
     : IClassFixture<PostgreSqlApiFixture>
 {
     [Fact]
+    public async Task ClientCanListAcceptAndRejectInvitationsAcrossCompanies()
+    {
+        var suffix = Guid.NewGuid().ToString("N");
+        await LoginAsync("admin", "admin");
+        var firstCompanyId = await CreateCompanyAsync($"Received first {suffix[..6]}");
+        var secondCompanyId = await CreateCompanyAsync($"Received second {suffix[..6]}");
+        var inactiveCompanyId = await CreateCompanyAsync($"Received inactive {suffix[..6]}");
+        var firstOwner = $"received.owner1.{suffix}";
+        var secondOwner = $"received.owner2.{suffix}";
+        var inactiveOwner = $"received.owner3.{suffix}";
+        await CreateEmployeeAsync(firstOwner, firstCompanyId, owner: true);
+        await CreateEmployeeAsync(secondOwner, secondCompanyId, owner: true);
+        await CreateEmployeeAsync(inactiveOwner, inactiveCompanyId, owner: true);
+        var clientUsername = $"received.client.{suffix}";
+        var clientEmail = $"Received.Client.{suffix}@Example.Test";
+        using var clientResponse = await fixture.Client.PostAsJsonAsync(
+            "/api/admin/clients", ClientPayload(clientUsername, clientEmail, []));
+        Assert.Equal(HttpStatusCode.Created, clientResponse.StatusCode);
+        var clientId = (await clientResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetInt64();
+
+        var firstInvitationId = await InviteAsync(firstOwner, clientEmail);
+        var secondInvitationId = await InviteAsync(secondOwner, clientEmail.ToUpperInvariant());
+        var inactiveInvitationId = await InviteAsync(inactiveOwner, clientEmail);
+        await SetCompanyActiveAsync(inactiveCompanyId, false);
+
+        await LoginAsync(clientUsername);
+        var received = await fixture.Client.GetFromJsonAsync<JsonElement[]>("/api/client-invitations/received");
+        Assert.Equal(2, received!.Length);
+        Assert.DoesNotContain(received, item => item.GetProperty("id").GetInt64() == inactiveInvitationId);
+        Assert.Equal(0, await CountInvitationAsync(inactiveInvitationId));
+        Assert.All(received, item =>
+        {
+            Assert.True(item.TryGetProperty("companyId", out _));
+            Assert.True(item.TryGetProperty("companyName", out _));
+        });
+
+        var accepts = await Task.WhenAll(
+            fixture.Client.PostAsync($"/api/client-invitations/{firstInvitationId}/accept", null),
+            fixture.Client.PostAsync($"/api/client-invitations/{firstInvitationId}/accept", null));
+        Assert.Contains(accepts, response => response.StatusCode == HttpStatusCode.NoContent);
+        Assert.All(accepts, response => Assert.True(response.StatusCode is HttpStatusCode.NoContent or HttpStatusCode.NotFound));
+        Assert.Equal(1, await CountMembershipAsync(firstCompanyId, clientId));
+        Assert.Equal(0, await CountInvitationAsync(firstInvitationId));
+
+        using var reject = await fixture.Client.PostAsync($"/api/client-invitations/{secondInvitationId}/reject", null);
+        Assert.Equal(HttpStatusCode.NoContent, reject.StatusCode);
+        Assert.Equal(0, await CountMembershipAsync(secondCompanyId, clientId));
+        Assert.Equal(0, await CountInvitationAsync(secondInvitationId));
+
+        var otherEmail = $"other.{suffix}@example.test";
+        var otherInvitationId = await InviteAsync(firstOwner, otherEmail);
+        await LoginAsync(clientUsername);
+        using var crossClient = await fixture.Client.PostAsync($"/api/client-invitations/{otherInvitationId}/accept", null);
+        Assert.Equal(HttpStatusCode.NotFound, crossClient.StatusCode);
+
+        var expiredInvitationId = await InviteAsync(secondOwner, clientEmail);
+        await BackdateInvitationAsync(expiredInvitationId);
+        await LoginAsync(clientUsername);
+        using var expired = await fixture.Client.PostAsync($"/api/client-invitations/{expiredInvitationId}/accept", null);
+        Assert.Equal(HttpStatusCode.NotFound, expired.StatusCode);
+
+        await LoginAsync(firstOwner);
+        using var employeeList = await fixture.Client.GetAsync("/api/client-invitations/received");
+        Assert.Equal(HttpStatusCode.Forbidden, employeeList.StatusCode);
+    }
+
+    [Fact]
     public async Task InvitationsAreCompanyScopedOwnerOnlyUniqueAndExpireAfterThreeDays()
     {
         var suffix = Guid.NewGuid().ToString("N");
@@ -126,7 +193,7 @@ public sealed class ClientInvitationIntegrationTests(PostgreSqlApiFixture fixtur
             $"/api/admin/clients/{overrideClientId}",
             ClientUpdatePayload(overrideEmail, [companyId]));
         Assert.Equal(HttpStatusCode.OK, membershipUpdate.StatusCode);
-        Assert.Equal(companyId, await ActiveCompanyIdAsync(overrideClientId));
+        Assert.Equal(new[] { companyId }, await CompanyIdsAsync(overrideClientId));
     }
 
     private async Task<long> CreateCompanyAsync(string name)
@@ -218,6 +285,36 @@ public sealed class ClientInvitationIntegrationTests(PostgreSqlApiFixture fixtur
         return (long)(await command.ExecuteScalarAsync())!;
     }
 
+    private async Task<long> CountMembershipAsync(long companyId, long clientId)
+    {
+        await using var connection = new NpgsqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(*) FROM company_clients WHERE company_id = @companyId AND client_id = @clientId";
+        command.Parameters.AddWithValue("companyId", companyId);
+        command.Parameters.AddWithValue("clientId", clientId);
+        return (long)(await command.ExecuteScalarAsync())!;
+    }
+
+    private async Task SetCompanyActiveAsync(long companyId, bool active)
+    {
+        await using var connection = new NpgsqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE companies SET is_active = @active WHERE id = @companyId";
+        command.Parameters.AddWithValue("companyId", companyId);
+        command.Parameters.AddWithValue("active", active);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private async Task<long> InviteAsync(string ownerUsername, string email)
+    {
+        await LoginAsync(ownerUsername);
+        using var response = await fixture.Client.PostAsJsonAsync("/api/client-invitations/", new { email });
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        return (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetInt64();
+    }
+
     private async Task<long> CountInvitationsAsync(long companyId, string email)
     {
         await using var connection = new NpgsqlConnection(fixture.ConnectionString);
@@ -234,7 +331,16 @@ public sealed class ClientInvitationIntegrationTests(PostgreSqlApiFixture fixtur
         await using var connection = new NpgsqlConnection(fixture.ConnectionString);
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
-        command.CommandText = "INSERT INTO projects (company_id, client_id, title, code, address, is_archived, created_at, created_by, updated_at, updated_by) VALUES (@companyId, @clientId, 'Protected project', @code, '', false, now(), -999, now(), -999) RETURNING id";
+        command.CommandText = """
+            WITH inserted_project AS (
+                INSERT INTO projects (company_id, title, code, address, is_archived, created_at, created_by, updated_at, updated_by)
+                VALUES (@companyId, 'Protected project', @code, '', false, now(), -999, now(), -999)
+                RETURNING id
+            )
+            INSERT INTO project_clients (project_id, client_id)
+            SELECT id, @clientId FROM inserted_project
+            RETURNING project_id;
+            """;
         command.Parameters.AddWithValue("companyId", companyId);
         command.Parameters.AddWithValue("clientId", clientId);
         command.Parameters.AddWithValue("code", $"PROTECTED-{suffix[..8]}");
@@ -246,19 +352,22 @@ public sealed class ClientInvitationIntegrationTests(PostgreSqlApiFixture fixtur
         await using var connection = new NpgsqlConnection(fixture.ConnectionString);
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
-        command.CommandText = "UPDATE projects SET client_id = NULL WHERE id = @projectId";
+        command.CommandText = "DELETE FROM project_clients WHERE project_id = @projectId";
         command.Parameters.AddWithValue("projectId", projectId);
         await command.ExecuteNonQueryAsync();
     }
 
-    private async Task<long?> ActiveCompanyIdAsync(long clientId)
+    private async Task<long[]> CompanyIdsAsync(long clientId)
     {
         await using var connection = new NpgsqlConnection(fixture.ConnectionString);
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT active_company_id FROM clients WHERE id = @clientId";
+        command.CommandText = "SELECT company_id FROM company_clients WHERE client_id = @clientId ORDER BY company_id";
         command.Parameters.AddWithValue("clientId", clientId);
-        return (long?)await command.ExecuteScalarAsync();
+        var ids = new List<long>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync()) ids.Add(reader.GetInt64(0));
+        return ids.ToArray();
     }
 
     private async Task MoveEmployeeAsync(long employeeId, long companyId)

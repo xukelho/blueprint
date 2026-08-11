@@ -6,8 +6,6 @@ public sealed class Client
 
     public long UserId { get; set; }
 
-    public long? ActiveCompanyId { get; set; }
-
     public required string DisplayName { get; set; }
 
     public required string FullName { get; set; }
@@ -22,9 +20,7 @@ public sealed class Client
 
     public User? User { get; set; }
 
-    public Company? ActiveCompany { get; set; }
-
     public ICollection<CompanyClient> CompanyClients { get; set; } = [];
 
-    public ICollection<Project> Projects { get; set; } = [];
+    public ICollection<ProjectClient> ProjectClients { get; set; } = [];
 }

@@ -1627,6 +1627,20 @@ button { cursor: pointer; }
   background: #e4f0f3;
 }
 
+.mock-client-card--pending {
+  cursor: default;
+}
+
+.mock-client-card--pending:hover {
+  border-color: #dcecf1;
+  transform: none;
+}
+
+.mock-client-avatar--pending {
+  color: #006d77;
+  background: #e4f0f3;
+}
+
 .mock-client-avatar {
   width: 48px;
   height: 48px;
@@ -1729,6 +1743,63 @@ button { cursor: pointer; }
 .mock-client-identity dl > div { display: flex; align-items: center; justify-content: space-between; min-height: 43px; border-top: 1px solid #eaf3f5; }
 .mock-client-identity dt { color: #92959a; font-size: 10px; }
 .mock-client-identity dd { margin: 0; color: #4f5257; font-size: 10px; font-weight: 600; }
+
+.mock-client-project-help {
+  margin: -4px 0 16px;
+  color: #686b70;
+  font-size: 11px;
+}
+
+.mock-client-project-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.mock-client-project-card {
+  min-width: 0;
+  min-height: 96px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto 1fr;
+  align-items: start;
+  gap: 10px 12px;
+  padding: 14px;
+  color: #3f4246;
+  text-align: left;
+  background: #fff;
+  border: 1px solid #dcecf1;
+  border-radius: 10px;
+  transition: background .18s ease, border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+
+button.mock-client-project-card { cursor: pointer; }
+button.mock-client-project-card:hover:not(:disabled) { border-color: #8bbbc3; transform: translateY(-1px); }
+button.mock-client-project-card:focus-visible { outline: 3px solid rgba(0, 109, 119, .22); outline-offset: 2px; }
+button.mock-client-project-card:disabled { cursor: wait; }
+.mock-client-project-card[aria-pressed="true"],
+.mock-client-project-card[data-associated="true"] {
+  background: #edf8f8;
+  border-color: #006d77;
+  box-shadow: inset 0 0 0 1px rgba(0, 109, 119, .12);
+}
+
+.mock-client-project-code {
+  justify-self: start;
+  padding: 3px 7px;
+  color: #686b70;
+  background: #f4f8f9;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.mock-client-project-copy { min-width: 0; display: flex; flex-direction: column; gap: 4px; grid-column: 1 / -1; }
+.mock-client-project-copy strong { overflow: hidden; color: #303236; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.mock-client-project-copy small { color: #92959a; font-size: 10px; }
+.mock-client-project-state { display: flex; align-items: center; justify-content: flex-end; gap: 4px; color: #686b70; font-size: 10px; font-weight: 600; }
+.mock-client-project-card[aria-pressed="true"] .mock-client-project-state,
+.mock-client-project-card[data-associated="true"] .mock-client-project-state { color: #006d77; }
 
 .mock-compact-project {
   min-height: 74px;
@@ -2001,6 +2072,50 @@ button { cursor: pointer; }
 .mock-modal-close { position: absolute; top: 18px; right: 18px; width: 32px; height: 32px; display: grid; place-items: center; padding: 0; color: #686b70; background: #edf6f9; border: 0; border-radius: 7px; }
 .company-client-invite-dialog { width: min(430px, 100%); }
 
+.client-invitation-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.client-invitation-card {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-rows: auto;
+  align-items: center;
+  gap: 1rem;
+}
+
+.client-invitation-card .mock-client-avatar { grid-row: auto; }
+.client-invitation-card p { margin: 0; }
+.client-invitation-actions { display: flex; gap: .65rem; }
+.client-invitation-action {
+  width: 2.5rem;
+  height: 2.5rem;
+  display: inline-grid;
+  place-items: center;
+  border: 0;
+  border-radius: .7rem;
+  color: white;
+  cursor: pointer;
+}
+.client-invitation-action--accept { background: #23845c; }
+.client-invitation-action--reject { background: #c84d4d; }
+.client-invitation-action:disabled { cursor: wait; opacity: .55; }
+
+.client-associated-companies ul {
+  margin: .5rem 0 0;
+  padding-left: 1.2rem;
+}
+
+.client-associated-companies p { margin: .5rem 0 0; }
+.client-project-company { margin-top: 1.5rem; }
+.client-project-company > h2 { margin: 0 0 .85rem; }
+
+@media (max-width: 640px) {
+  .client-invitation-card { grid-template-columns: auto 1fr; }
+  .client-invitation-actions { grid-column: 2; }
+}
+
 .mock-profile-hero {
   display: grid;
   grid-template-columns: auto 1fr auto;
@@ -2085,6 +2200,7 @@ button { cursor: pointer; }
   .mock-project-grid,
   .mock-client-grid,
   .mock-project-member-grid,
+  .mock-client-project-grid,
   .mock-guide-grid { grid-template-columns: 1fr; }
   .mock-form-grid,
   .mock-project-details,
@@ -2738,6 +2854,8 @@ input:focus-visible { outline: 3px solid rgba(0, 109, 119, .22); outline-offset:
 .admin-role-badge { padding: 3px 7px; color: #005864; background: #e3f5fa; border-radius: 999px; font-size: 9px; font-weight: 700; }
 .admin-check { display: flex; align-items: center; gap: 8px; color: #4f5257; font-size: 11px; font-weight: 600; }
 .admin-check input { width: 16px; height: 16px; }
+.admin-company-memberships { display: grid; gap: 10px; margin: 0; padding: 14px; border: 1px solid #dcecf1; border-radius: 8px; }
+.admin-company-memberships legend { padding: 0 5px; color: #686b70; font-size: 11px; font-weight: 700; }
 .admin-company-memberships { display: grid; gap: 10px; margin: 0; padding: 14px; border: 1px solid #dcecf1; border-radius: 8px; }
 .admin-company-memberships legend { padding: 0 5px; color: #686b70; font-size: 11px; font-weight: 700; }
 .admin-filter { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 10px 16px; color: #4f5257; border-bottom: 1px solid #e3eff2; font-size: 11px; }
