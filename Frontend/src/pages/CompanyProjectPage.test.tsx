@@ -11,7 +11,7 @@ const emptyProject = { id: 1, title: "Casa do Vale", code: "CV-001", address: ""
 const profile = (companyRole: "owner" | "employee") => ({ profileType: "employee", userId: 1, username: "ana", displayName: "Ana", fullName: "Ana Martins", nif: "123", email: "ana@example.test", phoneNumber: "910", address: "Lisboa", companyId: 1, companyName: "Forma Norte", roles: ["employee"], availableCompanies: [], companyRole, isArchitect: true });
 
 function renderPage() {
-  return render(<MemoryRouter initialEntries={["/projects/1"]}><ProfileProvider><Routes><Route path="/projects/:id" element={<CompanyProjectPage />} /></Routes></ProfileProvider></MemoryRouter>);
+  return render(<MemoryRouter initialEntries={["/projects/1"]}><ProfileProvider><Routes><Route path="/projects/:id" element={<CompanyProjectPage />} /><Route path="/projects" element={<p>Lista de projetos</p>} /></Routes></ProfileProvider></MemoryRouter>);
 }
 
 afterEach(() => {
@@ -54,6 +54,28 @@ describe("CompanyProjectPage", () => {
     await user.click(screen.getByRole("button", { name: "Guardar" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/projects/1", expect.objectContaining({ method: "PUT", body: expect.stringContaining('"googleMapsUrl":"https://www.google.com/maps/search/?api=1&query=38.7,-9.1"') })));
+  });
+
+  it("allows an owner to reactivate an archived project", async () => {
+    setAuthenticatedRoles(["employee"]);
+    const archivedProject = { ...emptyProject, isArchived: true };
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url === "/api/profile") return response(profile("owner"));
+      if (url === "/api/clients/" || url === "/api/projects/members") return response([]);
+      if (url === "/api/projects/1" && !init?.method) return response(archivedProject);
+      if (url === "/api/projects/1/reactivate" && init?.method === "POST") return new Response(null, { status: 204 });
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "Editar" }));
+    await user.click(screen.getByRole("button", { name: "Reativar" }));
+    expect(screen.getByRole("alertdialog", { name: "Reativar projeto?" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Reativar projeto" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/projects/1/reactivate", { method: "POST" }));
   });
 
   it("fills and saves the quick timeline", async () => {

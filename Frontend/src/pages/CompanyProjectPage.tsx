@@ -4,7 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import PortalShell from "../components/PortalShell";
 import { GoogleMapPicker } from "../components/GoogleMapPicker";
 import { ProjectTimelineEditor, ProjectTimelineView, TimelinePhase, newTimelinePhase } from "../components/ProjectTimelineEditor";
-import { archiveProject, getClients, getCompanyMembers, getProject, Project, ProjectMember, updateMembers, updateProject, updateProjectPhases } from "../api/projects";
+import { archiveProject, getClients, getCompanyMembers, getProject, Project, ProjectMember, reactivateProject, updateMembers, updateProject, updateProjectPhases } from "../api/projects";
 import { useProfile } from "../profile/ProfileContext";
 import { QUICK_FILL_PHASE_CODES } from "../projectPhases";
 
@@ -30,6 +30,8 @@ export function CompanyProjectPage() {
   const [isTimelineEditing, setIsTimelineEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isSavingTimeline, setIsSavingTimeline] = useState(false);
+  const [isUpdatingArchiveStatus, setIsUpdatingArchiveStatus] = useState(false);
+  const [archiveStatusDialogOpen, setArchiveStatusDialogOpen] = useState(false);
   const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState<{ type: "success" | "error"; message: string } | null>(null);
@@ -69,7 +71,13 @@ export function CompanyProjectPage() {
     finally { setIsSavingTimeline(false); }
   };
   const cancelTimeline = () => { if (project) { setTimelinePhases((project.phases ?? []).map((phase) => ({ id: String(phase.id), code: phase.code }))); setCurrentPhaseId((project.phases ?? []).find((phase) => phase.isCurrent)?.id.toString() ?? null); } setIsTimelineEditing(false); };
-  const archive = async () => { if (!id || !confirm("Arquivar este projeto?")) return; try { await archiveProject(id); navigate("/projects"); } catch (caught) { setNotice({ type: "error", message: caught instanceof Error ? caught.message : "Não foi possível arquivar o projeto." }); } };
+  const updateArchiveStatus = async () => {
+    if (!id || !project || isUpdatingArchiveStatus) return;
+    setIsUpdatingArchiveStatus(true); setNotice(null);
+    try { if (project.isArchived) await reactivateProject(id); else await archiveProject(id); navigate("/projects"); }
+    catch (caught) { setNotice({ type: "error", message: caught instanceof Error ? caught.message : `Não foi possível ${project.isArchived ? "reativar" : "arquivar"} o projeto.` }); setArchiveStatusDialogOpen(false); }
+    finally { setIsUpdatingArchiveStatus(false); }
+  };
 
   if (!project && !error) return <PortalShell><p>A carregar…</p></PortalShell>;
   return <PortalShell>
@@ -91,8 +99,9 @@ export function CompanyProjectPage() {
         {isEditing && <div className="mock-toolbar mock-project-members-toolbar"><label className="mock-search"><Search size={19} /><span className="sr-only">Pesquisar colaboradores</span><input type="search" placeholder="Pesquisar por colaborador" value={query} onChange={(event) => setQuery(event.target.value)} />{query && <button type="button" aria-label="Limpar pesquisa" onClick={() => setQuery("")}><X size={16} /></button>}</label><span className="mock-result-count">{filteredMembers.length} {filteredMembers.length === 1 ? "arquiteto" : "arquitetos"}</span></div>}
         <div className="mock-project-member-grid">{filteredMembers.map((member) => isEditing ? <label className="mock-project-member-card" key={member.employeeId}><input type="checkbox" checked={selected.includes(member.employeeId)} onChange={(event) => toggleMember(member.employeeId, event.target.checked)} /><span className="mock-client-avatar mock-client-avatar--blue" aria-hidden="true">{initials(member.displayName)}</span><span><strong>{member.displayName}</strong></span></label> : <div className="mock-project-member-card mock-project-member-card--readonly" key={member.employeeId}><span className="mock-client-avatar mock-client-avatar--blue" aria-hidden="true">{initials(member.displayName)}</span><span><strong>{member.displayName}</strong></span></div>)}</div>{!filteredMembers.length && <p className="mock-empty-state">Não existem arquitetos a apresentar.</p>}
       </section>
-      {owner && isEditing && <div className="mock-project-form-actions"><button className="secondary-action" type="button" onClick={archive}>Arquivar</button><button className="secondary-action" type="button" onClick={cancelEditing}>Cancelar</button><button className="primary-action" type="submit" disabled={isSaving}>{isSaving ? "A guardar…" : "Guardar"}</button></div>}
+      {owner && isEditing && <div className="mock-project-form-actions"><button className="secondary-action" type="button" onClick={() => setArchiveStatusDialogOpen(true)}>{project.isArchived ? "Reativar" : "Arquivar"}</button><button className="secondary-action" type="button" onClick={cancelEditing}>Cancelar</button><button className="primary-action" type="submit" disabled={isSaving}>{isSaving ? "A guardar…" : "Guardar"}</button></div>}
     </form>}
+    {archiveStatusDialogOpen && <div className="mock-modal-backdrop" role="presentation"><section className="mock-modal" role="alertdialog" aria-modal="true" aria-labelledby="archive-project-title" aria-describedby="archive-project-description"><button className="mock-modal-close" type="button" aria-label="Fechar" disabled={isUpdatingArchiveStatus} onClick={() => setArchiveStatusDialogOpen(false)}><X size={19} /></button><h2 id="archive-project-title">{project?.isArchived ? "Reativar projeto?" : "Arquivar projeto?"}</h2><p id="archive-project-description">{project?.isArchived ? "Pretende reativar este projeto? O projeto voltará a estar disponível na lista de projetos ativos." : "Pretende arquivar este projeto? O projeto deixará de estar disponível na lista de projetos ativos."}</p><div className="mock-form-actions"><button className="secondary-action" type="button" disabled={isUpdatingArchiveStatus} onClick={() => setArchiveStatusDialogOpen(false)}>Cancelar</button><button className="primary-action" type="button" disabled={isUpdatingArchiveStatus} onClick={updateArchiveStatus}>{isUpdatingArchiveStatus ? (project?.isArchived ? "A reativar…" : "A arquivar…") : (project?.isArchived ? "Reativar projeto" : "Arquivar projeto")}</button></div></section></div>}
     {discardDialogOpen && <div className="mock-modal-backdrop" role="presentation"><section className="mock-modal" role="alertdialog" aria-modal="true" aria-labelledby="discard-project-changes-title" aria-describedby="discard-project-changes-description"><button className="mock-modal-close" type="button" aria-label="Fechar" onClick={() => setDiscardDialogOpen(false)}><X size={19} /></button><h2 id="discard-project-changes-title">Descartar alterações?</h2><p id="discard-project-changes-description">Existem alterações por guardar. Pretende descartá-las e sair do modo de edição?</p><div className="mock-form-actions"><button className="secondary-action" type="button" onClick={() => setDiscardDialogOpen(false)}>Voltar a editar</button><button className="primary-action" type="button" onClick={discardChanges}>Descartar alterações</button></div></section></div>}
   </PortalShell>;
 }
