@@ -21,6 +21,12 @@ function AdministrationRoute() {
     : <Navigate to="/dashboard" replace />;
 }
 
+function DashboardRoute() {
+  if (isEmployee() || isClient()) return <DashboardPage />;
+  if (isPlatformAdmin()) return <Navigate to="/administration" replace />;
+  return <Navigate to="/" replace />;
+}
+
 function ProfileRoute() {
   if (isPlatformAdmin()) return <Navigate to="/dashboard" replace />;
   if (isEmployee()) return <EmployeePage />;
@@ -70,7 +76,7 @@ function App() {
       <Routes>
         <Route path="/" element={<LoginPage />} />
         <Route element={<AuthenticatedRoute />}>
-          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/dashboard" element={<DashboardRoute />} />
           <Route path="/projects" element={<CompanyProjectsPage />} />
           <Route path="/projects/new" element={<CompanyProjectsCreatePage />} />
           <Route path="/projects/:id" element={<CompanyProjectPage />} />

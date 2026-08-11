@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import App from "./App";
@@ -58,6 +58,94 @@ const companyResponse = {
   updatedBy: 0,
 };
 
+const dashboardProjects = [
+  {
+    id: 1,
+    companyId: 10,
+    companyName: "Forma Norte",
+    title: "Casa do Vale",
+    code: "CV-001",
+    address: "Azeitão, Setúbal",
+    googleMapsUrl: null,
+    currentPhaseCode: "execution-project",
+    isArchived: false,
+    client: { id: 30, displayName: "Marta Silva" },
+    members: [{ employeeId: 2, displayName: "Ana Martins", email: "ana@example.test" }],
+  },
+  {
+    id: 2,
+    companyId: 10,
+    companyName: "Forma Norte",
+    title: "Apartamento Alvalade",
+    code: "AA-018",
+    address: "Alvalade, Lisboa",
+    googleMapsUrl: null,
+    currentPhaseCode: "preliminary-study",
+    isArchived: false,
+    client: { id: 31, displayName: "Inês Costa" },
+    members: [],
+  },
+  {
+    id: 3,
+    companyId: 10,
+    companyName: "Forma Norte",
+    title: "Projeto Arquivado",
+    code: "ARQ-003",
+    address: "Lisboa",
+    googleMapsUrl: null,
+    currentPhaseCode: null,
+    isArchived: true,
+    client: null,
+    members: [],
+  },
+];
+
+function mockCompanyDashboard(companyRole: "owner" | "employee" = "employee", projects = dashboardProjects) {
+  return vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+    const path = String(input);
+    if (path === "/api/profile") {
+      return new Response(JSON.stringify({ ...profileResponse("employee", true), companyRole }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    if (path === "/api/projects/") {
+      return new Response(JSON.stringify(projects), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    if (path === "/api/projects/1") {
+      return new Response(JSON.stringify({
+        ...dashboardProjects[0],
+        phases: [],
+        canEditTimeline: false,
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    if (path === "/api/auth/logout" && init?.method === "POST") {
+      return new Response(JSON.stringify({ status: "success" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    throw new Error(`Unexpected request: ${path}`);
+  });
+}
+
+function mockClientDashboard() {
+  return vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const path = String(input);
+    const body = path === "/api/profile" ? profileResponse("client") : dashboardProjects;
+    return new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  });
+}
+
 function mockProfile(profileType: "client" | "employee", architect = false) {
   return vi.spyOn(globalThis, "fetch").mockResolvedValue(
     new Response(JSON.stringify(profileResponse(profileType, architect)), {
@@ -98,8 +186,12 @@ describe("login", () => {
   it("posts credentials and navigates after a successful login", async () => {
     sessionStorage.setItem("blueprint.auth.roles", JSON.stringify(["client"]));
     sessionStorage.setItem("blueprint.auth.role", "company");
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
-      new Response(JSON.stringify({ status: "success", roles: ["platform admin"] }), {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) =>
+      new Response(JSON.stringify(
+        String(input) === "/api/auth/login"
+          ? { status: "success", roles: ["platform admin"] }
+          : [],
+      ), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       }),
@@ -109,7 +201,7 @@ describe("login", () => {
     await user.click(screen.getByRole("button", { name: "Sign in" }));
 
     await waitFor(() => expect(screen.queryByText("Sign in to Blueprint")).not.toBeInTheDocument());
-    expect(screen.getByRole("heading", { name: "Bom dia, Ana" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Administração", level: 1 })).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -137,6 +229,29 @@ describe("login", () => {
     await user.click(screen.getByRole("button", { name: "Sign in" }));
 
     expect(await screen.findByRole("heading", { name: "Bom dia, Ana" }))
+      .toBeInTheDocument();
+  });
+
+  it("opens the dashboard after a client logs in", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input) === "/api/auth/login") {
+        return new Response(JSON.stringify({ status: "success", roles: ["client"] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify(
+        String(input) === "/api/profile" ? profileResponse("client") : [],
+      ), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    const user = await completeLoginForm();
+
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    expect(await screen.findByRole("heading", { name: "Bom dia, Marta" }))
       .toBeInTheDocument();
   });
 
@@ -216,20 +331,29 @@ describe("login", () => {
 describe("dashboard", () => {
   beforeEach(() => {
     sessionStorage.setItem("blueprint.auth.roles", JSON.stringify(["employee", "architect"]));
+    mockCompanyDashboard();
   });
 
-  it("renders the architect dashboard and active projects", () => {
+  it("renders real active projects with their phase and notification placeholder", async () => {
     renderApp("/dashboard");
 
     expect(screen.getByRole("heading", { name: "Bom dia, Ana" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Projetos ativos" })).toBeInTheDocument();
-    expect(screen.getByText("Casa do Vale")).toBeInTheDocument();
+    expect(await screen.findByText("Casa do Vale")).toBeInTheDocument();
+    expect(screen.getByText("Projeto de Execução")).toBeInTheDocument();
+    expect(screen.queryByText("Projeto Arquivado")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Sem notificações")).toHaveLength(2);
     expect(screen.getByLabelText("Navegação principal")).toBeInTheDocument();
+    expect(within(screen.getByRole("button", { name: "Dashboard" })).queryByText("Mock"))
+      .not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Criar projeto/ })).not.toBeInTheDocument();
   });
 
   it("filters projects by client and clears the search", async () => {
     const user = userEvent.setup();
     renderApp("/dashboard");
+
+    await screen.findByText("Casa do Vale");
 
     await user.type(screen.getByLabelText("Pesquisar projetos"), "Inês Costa");
 
@@ -239,6 +363,66 @@ describe("dashboard", () => {
 
     await user.click(screen.getByRole("button", { name: "Limpar pesquisa" }));
     expect(screen.getByText("Casa do Vale")).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("Pesquisar projetos"), "Projeto inexistente");
+    expect(screen.getByRole("heading", { name: "Não encontrámos projetos" })).toBeInTheDocument();
+  });
+
+  it("shows the owner action and opens a project by its real id", async () => {
+    vi.restoreAllMocks();
+    mockCompanyDashboard("owner");
+    const user = userEvent.setup();
+    renderApp("/dashboard");
+
+    expect(await screen.findByRole("button", { name: /Criar projeto/ })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Abrir projeto Casa do Vale" }));
+    expect(await screen.findByRole("heading", { name: "Casa do Vale", level: 1 })).toBeInTheDocument();
+  });
+
+  it("opens the complete projects list from the dashboard link", async () => {
+    const user = userEvent.setup();
+    renderApp("/dashboard");
+
+    await screen.findByText("Casa do Vale");
+    await user.click(screen.getByRole("button", { name: "Ver todos os projetos" }));
+    expect(await screen.findByRole("heading", { name: "Projetos", level: 1 })).toBeInTheDocument();
+  });
+
+  it("shows assigned architects instead of the client name on a client dashboard card", async () => {
+    vi.restoreAllMocks();
+    sessionStorage.setItem("blueprint.auth.roles", JSON.stringify(["client"]));
+    mockClientDashboard();
+    renderApp("/dashboard");
+
+    const title = await screen.findByText("Casa do Vale");
+    const card = title.closest("article");
+    expect(card).not.toBeNull();
+    expect(within(card!).getByText("Ana Martins")).toBeInTheDocument();
+    expect(within(card!).queryByText("Marta Silva")).not.toBeInTheDocument();
+  });
+
+  it("distinguishes an empty dashboard from a failed project request", async () => {
+    vi.restoreAllMocks();
+    mockCompanyDashboard("employee", []);
+    const { unmount } = renderApp("/dashboard");
+    expect(await screen.findByRole("heading", { name: "Não existem projetos ativos" })).toBeInTheDocument();
+    unmount();
+
+    vi.restoreAllMocks();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input) === "/api/profile") {
+        return new Response(JSON.stringify(profileResponse("employee", true)), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({}), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    renderApp("/dashboard");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Não foi possível concluir a operação.");
   });
 
   it("collapses and expands the navigation", async () => {
@@ -252,12 +436,7 @@ describe("dashboard", () => {
   it("logs out and returns to the sign-in page", async () => {
     sessionStorage.setItem("blueprint.auth.roles", JSON.stringify(["employee"]));
     sessionStorage.setItem("blueprint.auth.role", "architect");
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ status: "success" }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
+    const fetchMock = vi.mocked(globalThis.fetch);
     const user = userEvent.setup();
     renderApp("/dashboard");
 
@@ -284,6 +463,8 @@ describe("mockup navigation", () => {
     sessionStorage.setItem("blueprint.auth.roles", JSON.stringify(["platform admin"]));
     renderApp("/dashboard");
 
+    expect(screen.queryByRole("button", { name: "Dashboard" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Projetos" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Administração" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Ana Martins/ })).not.toBeInTheDocument();
     expect(screen.queryByText("Mock parcial")).not.toBeInTheDocument();
@@ -432,7 +613,7 @@ describe("mockup navigation", () => {
     sessionStorage.setItem("blueprint.auth.roles", JSON.stringify(["platform admin"]));
     renderApp("/profile");
 
-    expect(screen.getByRole("heading", { name: "Bom dia, Ana" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Administração", level: 1 })).toBeInTheDocument();
     expect(screen.queryByText("Perfil de utilizador")).not.toBeInTheDocument();
   });
 
@@ -446,7 +627,7 @@ describe("mockup navigation", () => {
   it("does not route the removed company role to a company profile", () => {
     sessionStorage.setItem("blueprint.auth.roles", JSON.stringify(["company"]));
     renderApp("/profile");
-    expect(screen.getByRole("heading", { name: "Bom dia, Ana" })).toBeInTheDocument();
+    expect(screen.getByText("Sign in to Blueprint")).toBeInTheDocument();
     expect(screen.queryByText("Perfil de empresa")).not.toBeInTheDocument();
   });
 

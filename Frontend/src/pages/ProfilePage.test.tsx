@@ -144,7 +144,9 @@ describe("editable profile", () => {
 
   it("uses the real client identity button to reach the client page from dashboard", async () => {
     sessionStorage.setItem("blueprint.auth.roles", JSON.stringify(["client"]));
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(clientProfile));
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) =>
+      jsonResponse(String(input) === "/api/profile" ? clientProfile : []),
+    );
     const user = userEvent.setup();
     renderApp("/dashboard");
 
