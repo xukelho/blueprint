@@ -1627,6 +1627,20 @@ button { cursor: pointer; }
   background: #e4f0f3;
 }
 
+.mock-client-card--pending {
+  cursor: default;
+}
+
+.mock-client-card--pending:hover {
+  border-color: #dcecf1;
+  transform: none;
+}
+
+.mock-client-avatar--pending {
+  color: #006d77;
+  background: #e4f0f3;
+}
+
 .mock-client-avatar {
   width: 48px;
   height: 48px;
@@ -2840,6 +2854,8 @@ input:focus-visible { outline: 3px solid rgba(0, 109, 119, .22); outline-offset:
 .admin-role-badge { padding: 3px 7px; color: #005864; background: #e3f5fa; border-radius: 999px; font-size: 9px; font-weight: 700; }
 .admin-check { display: flex; align-items: center; gap: 8px; color: #4f5257; font-size: 11px; font-weight: 600; }
 .admin-check input { width: 16px; height: 16px; }
+.admin-company-memberships { display: grid; gap: 10px; margin: 0; padding: 14px; border: 1px solid #dcecf1; border-radius: 8px; }
+.admin-company-memberships legend { padding: 0 5px; color: #686b70; font-size: 11px; font-weight: 700; }
 .admin-company-memberships { display: grid; gap: 10px; margin: 0; padding: 14px; border: 1px solid #dcecf1; border-radius: 8px; }
 .admin-company-memberships legend { padding: 0 5px; color: #686b70; font-size: 11px; font-weight: 700; }
 .admin-filter { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 10px 16px; color: #4f5257; border-bottom: 1px solid #e3eff2; font-size: 11px; }

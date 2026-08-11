@@ -32,6 +32,23 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
           : "Não foi possível concluir a operação.";
     throw new ClientManagementApiError(message, response.status, fieldErrors);
   }
+  if (!response.ok) {
+    const hasJson = response.headers.get("content-type")?.includes("application/json");
+    const body = hasJson ? await response.json() as Record<string, unknown> : null;
+    const problemErrors = body?.errors as Record<string, string[]> | undefined;
+    const fieldErrors = Object.fromEntries(Object.entries(problemErrors ?? {}).map(([key, messages]) => [
+      key.charAt(0).toLocaleLowerCase() + key.slice(1),
+      Array.isArray(messages) ? messages.join(" ") : String(messages),
+    ]));
+    const message = typeof body?.error === "string"
+      ? body.error
+      : response.status === 403
+        ? "Apenas o proprietário da empresa pode convidar clientes."
+        : response.status === 404
+          ? "Não tens acesso a este recurso."
+          : "Não foi possível concluir a operação.";
+    throw new ClientManagementApiError(message, response.status, fieldErrors);
+  }
   return response.status === 204 ? undefined as T : response.json() as Promise<T>;
 }
 const json = (method: string, body: unknown): RequestInit => ({ method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
