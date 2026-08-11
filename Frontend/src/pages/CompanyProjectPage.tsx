@@ -4,10 +4,10 @@ import { useNavigate, useParams } from "react-router-dom";
 import PortalShell from "../components/PortalShell";
 import { GoogleMapPicker } from "../components/GoogleMapPicker";
 import { ProjectTimelineEditor, ProjectTimelineView, TimelinePhase, newTimelinePhase } from "../components/ProjectTimelineEditor";
-import { ProjectConversations, ProjectFloorPlan } from "../components/ProjectWorkspace";
+import { createMockProjectDocuments, MockProjectDocument, MockProjectDocuments, ProjectDocuments, ProjectFloorPlan, ProjectWorkspacePanel } from "../components/ProjectWorkspace";
 import { archiveProject, getClients, getCompanyMembers, getProject, Project, ProjectMember, reactivateProject, updateMembers, updateProject, updateProjectPhases } from "../api/projects";
 import { useProfile } from "../profile/ProfileContext";
-import { phaseLabel, QUICK_FILL_PHASE_CODES } from "../projectPhases";
+import { phaseLabel, PROJECT_PHASES, QUICK_FILL_PHASE_CODES } from "../projectPhases";
 
 type ProjectFormData = { title: string; code: string; address: string; googleMapsUrl: string; clientId: string };
 const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toLocaleUpperCase("pt-PT");
@@ -43,9 +43,11 @@ export function CompanyProjectPage() {
   const [timelinePhases, setTimelinePhases] = useState<TimelinePhase[]>([]);
   const [currentPhaseId, setCurrentPhaseId] = useState<string | null>(null);
   const [viewedPhaseId, setViewedPhaseId] = useState<string | null>(null);
+  const [mockDocuments, setMockDocuments] = useState<MockProjectDocuments>({});
   const [isEditing, setIsEditing] = useState(false);
   const [isTimelineEditing, setIsTimelineEditing] = useState(false);
   const [isTimelineExpanded, setIsTimelineExpanded] = useState(false);
+  const [isWorkspaceCollapsed, setIsWorkspaceCollapsed] = useState(false);
   const [timelineMenuOpen, setTimelineMenuOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isSavingTimeline, setIsSavingTimeline] = useState(false);
@@ -64,6 +66,10 @@ export function CompanyProjectPage() {
     setTimelinePhases(loadedPhases);
     setCurrentPhaseId(loadedCurrentPhaseId);
     setViewedPhaseId(loadedCurrentPhaseId ?? loadedPhases[0]?.id ?? null);
+    setMockDocuments((current) => {
+      const seeded = createMockProjectDocuments(loadedPhases);
+      return Object.fromEntries(loadedPhases.map((phase) => [phase.id, current[phase.id] ?? seeded[phase.id] ?? []]));
+    });
   };
   useEffect(() => {
     if (!owner) return;
@@ -75,10 +81,13 @@ export function CompanyProjectPage() {
   const projectPhases = useMemo(() => (project?.phases ?? []).map((phase) => ({ id: String(phase.id), code: phase.code })), [project?.phases]);
   const officialCurrentPhaseId = project?.phases?.find((phase) => phase.isCurrent)?.id.toString() ?? null;
   const viewedPhase = projectPhases.find((phase) => phase.id === viewedPhaseId) ?? projectPhases[0] ?? null;
-  const currentPhaseLabel = phaseLabel(project?.phases?.find((phase) => phase.isCurrent)?.code ?? project?.currentPhaseCode) ?? "Sem fase atual";
+  const currentPhaseCode = project?.phases?.find((phase) => phase.isCurrent)?.code ?? project?.currentPhaseCode;
+  const currentPhaseLabel = phaseLabel(currentPhaseCode) ?? "Sem fase atual";
+  const CurrentPhaseIcon = PROJECT_PHASES.find((phase) => phase.code === currentPhaseCode)?.icon ?? Milestone;
   const filteredMembers = useMemo(() => { const normalizedQuery = query.trim().toLocaleLowerCase("pt-PT"); return displayedMembers.filter((member) => member.displayName.toLocaleLowerCase("pt-PT").includes(normalizedQuery)); }, [displayedMembers, query]);
   const hasChanges = Boolean(project) && (Object.entries(projectFormData(project!)).some(([key, value]) => data[key as keyof ProjectFormData] !== value) || !sameMemberIds(selected, project!.members?.map((member) => member.employeeId) ?? []));
   const toggleMember = (employeeId: number, checked: boolean) => setSelected((current) => checked ? [...current, employeeId] : current.filter((memberId) => memberId !== employeeId));
+  const addMockDocuments = (phaseId: string, addedDocuments: MockProjectDocument[]) => setMockDocuments((current) => ({ ...current, [phaseId]: [...(current[phaseId] ?? []), ...addedDocuments] }));
   const startEditing = () => { setNotice(null); setQuery(""); setIsEditing(true); };
   const discardChanges = () => { if (project) { setData(projectFormData(project)); setSelected(project.members?.map((member) => member.employeeId) ?? []); } setQuery(""); setDiscardDialogOpen(false); setIsEditing(false); };
   const cancelEditing = () => { if (hasChanges) setDiscardDialogOpen(true); else discardChanges(); };
@@ -117,7 +126,7 @@ export function CompanyProjectPage() {
           {isEditing ? <>
             <div className="project-hero__edit-heading">
               <div><p className="project-hero__eyebrow">Editar projeto</p><h1>Informação do projeto</h1></div>
-              <span className={`project-hero__status ${project.isArchived ? "is-archived" : ""}`}>{project.isArchived ? "Arquivado" : "Ativo"}</span>
+              {project.isArchived && <span className="project-hero__status is-archived">Arquivado</span>}
             </div>
             <div className="project-hero__edit-grid">
               <label className="mock-field project-hero__title-field">Título<input required value={data.title} onChange={(event) => setData({ ...data, title: event.target.value })} /></label>
@@ -126,18 +135,23 @@ export function CompanyProjectPage() {
               <label className="mock-field project-hero__wide-field">Morada<input value={data.address} onChange={(event) => setData({ ...data, address: event.target.value })} /></label>
               <label className="mock-field project-hero__wide-field">Localização (Google Maps)<input type="url" value={data.googleMapsUrl} placeholder="Cole um link do Google Maps" onChange={(event) => setData({ ...data, googleMapsUrl: event.target.value })} /><small>Opcional. Pode colar um link ou selecionar no mapa.</small></label>
             </div>
+            <div className="project-hero__architect-editor">
+              <div><strong>Arquitetos atribuídos</strong><small>Seleciona os arquitetos que podem colaborar neste projeto.</small></div>
+              <div className="mock-toolbar mock-project-members-toolbar"><label className="mock-search"><Search size={19} /><span className="sr-only">Pesquisar colaboradores</span><input type="search" placeholder="Pesquisar por colaborador" value={query} onChange={(event) => setQuery(event.target.value)} />{query && <button type="button" aria-label="Limpar pesquisa" onClick={() => setQuery("")}><X size={16} /></button>}</label><span className="mock-result-count">{filteredMembers.length} {filteredMembers.length === 1 ? "arquiteto" : "arquitetos"}</span></div>
+              <div className="mock-project-member-grid">{filteredMembers.map((member) => <label className="mock-project-member-card" key={member.employeeId}><input type="checkbox" checked={selected.includes(member.employeeId)} onChange={(event) => toggleMember(member.employeeId, event.target.checked)} /><span className="mock-client-avatar mock-client-avatar--blue" aria-hidden="true">{initials(member.displayName)}</span><span><strong>{member.displayName}</strong></span></label>)}</div>
+              {!filteredMembers.length && <p className="mock-empty-state">Não existem arquitetos a apresentar.</p>}
+            </div>
           </> : <>
             <div className="project-hero__topline">
-              <div className="project-hero__badges"><span className="project-hero__code">{project.code}</span><span className={`project-hero__status ${project.isArchived ? "is-archived" : ""}`}>{project.isArchived ? "Arquivado" : "Ativo"}</span></div>
+              <div className="project-hero__badges"><span className="project-hero__code">{project.code}</span>{project.isArchived && <span className="project-hero__status is-archived">Arquivado</span>}</div>
               {owner && <button className="project-hero__edit-action" type="button" onClick={startEditing}><Pencil size={16} />Editar projeto</button>}
             </div>
             <p className="project-hero__eyebrow">{project.companyName ? `Projeto · ${project.companyName}` : "Projeto de arquitetura"}</p>
             <h1 id="project-title">{project.title}</h1>
             <div className="project-hero__metadata">
               {project.client && <div><span className="project-hero__meta-icon"><Building2 size={18} aria-hidden="true" /></span><span><small>Cliente</small><strong>{project.client.displayName}</strong></span></div>}
-              <div className="project-hero__metadata-phase"><span className="project-hero__meta-icon"><Milestone size={21} aria-hidden="true" /></span><span><small>Fase atual</small><strong>{currentPhaseLabel}</strong></span></div>
               {project.address && <div className="project-hero__metadata-address"><span className="project-hero__meta-icon"><MapPin size={18} aria-hidden="true" /></span><span><small>Morada</small><strong>{project.address}</strong></span></div>}
-              <div><span className="project-hero__meta-icon"><UsersRound size={18} aria-hidden="true" /></span><span><small>Equipa</small><strong>{project.members?.length ?? 0} {(project.members?.length ?? 0) === 1 ? "arquiteto" : "arquitetos"}</strong></span></div>
+              <div className="project-hero__metadata-architects"><span className="project-hero__meta-icon"><UsersRound size={18} aria-hidden="true" /></span><span><small>Arquitetos atribuídos</small><strong>{project.members?.length ? project.members.map((member) => member.displayName).join(", ") : "Sem arquitetos atribuídos"}</strong></span></div>
             </div>
           </>}
         </div>
@@ -147,12 +161,15 @@ export function CompanyProjectPage() {
             <div className="project-hero__location-footer"><span><small>Localização do projeto</small><strong>{project.address || "Ponto assinalado no mapa"}</strong></span><a href={project.googleMapsUrl} target="_blank" rel="noreferrer">Abrir no Google Maps<ExternalLink size={14} aria-hidden="true" /></a></div>
           </> : <div className="project-hero__location-empty"><span className="project-hero__location-mark"><MapPin size={28} aria-hidden="true" /></span><div><small>Localização</small><strong>Localização por definir</strong><p>Adicione uma morada ou um ponto no mapa para completar o enquadramento do projeto.</p></div></div>}
         </aside>
+        {!isEditing && <aside className="project-hero__phase" aria-label="Fase atual do projeto">
+          <span className="project-hero__phase-icon"><CurrentPhaseIcon size={32} strokeWidth={1.7} aria-hidden="true" /></span>
+          <span><small>Fase atual</small><strong>{currentPhaseLabel}</strong></span>
+        </aside>}
       </form>
-      <div className="project-workspace">
+      <div className={`project-workspace ${isWorkspaceCollapsed ? "is-sidebar-collapsed" : ""}`}>
         <div className="project-workspace__main">
-          <ProjectFloorPlan phaseCode={viewedPhase?.code ?? null} />
-          <section className={`mock-surface project-timeline-section project-timeline-section--workspace ${isTimelineEditing ? "is-editing" : ""}`}>
-            <div className="mock-section-title project-timeline-heading"><div><h2>Timeline do projeto</h2><p>{projectPhases.length ? "Arraste horizontalmente para consultar todas as fases." : "Ainda não foram definidas fases para este projeto."}</p></div>
+          <section className={`mock-surface project-timeline-section project-timeline-section--workspace ${isTimelineEditing ? "is-editing" : ""} ${isTimelineExpanded ? "is-expanded" : ""}`}>
+            <div className="mock-section-title project-timeline-heading"><div><h2>Timeline do projeto</h2></div>
               {!isTimelineEditing && <div className="project-timeline-options" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setTimelineMenuOpen(false); }} onKeyDown={(event) => { if (event.key === "Escape") { setTimelineMenuOpen(false); event.currentTarget.querySelector<HTMLButtonElement>(".project-icon-action")?.focus(); } }}>
                 <button type="button" className="project-icon-action" aria-label="Opções da timeline" aria-haspopup="menu" aria-expanded={timelineMenuOpen} onClick={() => setTimelineMenuOpen((open) => !open)}><MoreHorizontal size={19} aria-hidden="true" /></button>
                 {timelineMenuOpen && <div className="project-options-menu" role="menu">
@@ -163,14 +180,10 @@ export function CompanyProjectPage() {
             </div>
             {isTimelineEditing ? <><ProjectTimelineEditor phases={timelinePhases} currentPhaseId={currentPhaseId} onPhasesChange={setTimelinePhases} onCurrentPhaseIdChange={setCurrentPhaseId} onQuickFill={() => { setTimelinePhases(QUICK_FILL_PHASE_CODES.map(newTimelinePhase)); setCurrentPhaseId(null); }} /><div className="mock-project-form-actions"><button type="button" className="secondary-action" onClick={cancelTimeline}>Cancelar</button><button type="button" className="primary-action" disabled={isSavingTimeline} onClick={saveTimeline}>{isSavingTimeline ? "A guardar…" : "Guardar timeline"}</button></div></> : projectPhases.length ? <ProjectTimelineView phases={projectPhases} currentPhaseId={officialCurrentPhaseId} viewedPhaseId={viewedPhaseId} expanded={isTimelineExpanded} onPhaseSelect={setViewedPhaseId} /> : <p className="mock-empty-state">Timeline opcional ainda não configurada.</p>}
           </section>
+          <ProjectFloorPlan phaseCode={viewedPhase?.code ?? null} />
+          <ProjectDocuments phases={projectPhases} viewedPhaseId={viewedPhaseId} documents={mockDocuments} onDocumentsAdded={addMockDocuments} />
         </div>
-        <ProjectConversations phases={projectPhases} viewedPhaseId={viewedPhaseId} currentUser={profile?.displayName ?? "Utilizador"} />
-      </div>
-      <div className="mock-form-column project-details-form">
-      <section className="mock-surface"><div className="mock-section-title"><div><h2>Arquitetos atribuídos</h2><p>{isEditing ? "Seleciona os arquitetos que podem colaborar neste projeto." : "Arquitetos que colaboram neste projeto."}</p></div></div>
-        {isEditing && <div className="mock-toolbar mock-project-members-toolbar"><label className="mock-search"><Search size={19} /><span className="sr-only">Pesquisar colaboradores</span><input type="search" placeholder="Pesquisar por colaborador" value={query} onChange={(event) => setQuery(event.target.value)} />{query && <button type="button" aria-label="Limpar pesquisa" onClick={() => setQuery("")}><X size={16} /></button>}</label><span className="mock-result-count">{filteredMembers.length} {filteredMembers.length === 1 ? "arquiteto" : "arquitetos"}</span></div>}
-        <div className="mock-project-member-grid">{filteredMembers.map((member) => isEditing ? <label className="mock-project-member-card" key={member.employeeId}><input type="checkbox" checked={selected.includes(member.employeeId)} onChange={(event) => toggleMember(member.employeeId, event.target.checked)} /><span className="mock-client-avatar mock-client-avatar--blue" aria-hidden="true">{initials(member.displayName)}</span><span><strong>{member.displayName}</strong></span></label> : <div className="mock-project-member-card mock-project-member-card--readonly" key={member.employeeId}><span className="mock-client-avatar mock-client-avatar--blue" aria-hidden="true">{initials(member.displayName)}</span><span><strong>{member.displayName}</strong></span></div>)}</div>{!filteredMembers.length && <p className="mock-empty-state">Não existem arquitetos a apresentar.</p>}
-      </section>
+        <ProjectWorkspacePanel projectTitle={project.title} phases={projectPhases} viewedPhaseId={viewedPhaseId} currentUser={profile?.displayName ?? "Utilizador"} documents={mockDocuments} onCollapsedChange={setIsWorkspaceCollapsed} />
       </div>
       {owner && isEditing && <div className="mock-project-form-actions project-page-actions"><button className="secondary-action" type="button" onClick={() => setArchiveStatusDialogOpen(true)}>{project.isArchived ? "Reativar" : "Arquivar"}</button><button className="secondary-action" type="button" onClick={cancelEditing}>Cancelar</button><button className="primary-action" type="submit" form="project-details-form" disabled={isSaving}>{isSaving ? "A guardar…" : "Guardar"}</button></div>}
       </div>

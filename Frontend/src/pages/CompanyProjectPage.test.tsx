@@ -29,9 +29,9 @@ describe("CompanyProjectPage", () => {
 
     expect(await screen.findByRole("heading", { name: "Casa do Vale" })).toBeInTheDocument();
     expect(screen.getByText("CV-001")).toBeInTheDocument();
-    expect(screen.getByText("Ativo")).toBeInTheDocument();
+    expect(screen.queryByText("Ativo")).not.toBeInTheDocument();
     expect(screen.getByText("Sem fase atual")).toBeInTheDocument();
-    expect(screen.getByText("0 arquitetos")).toBeInTheDocument();
+    expect(screen.getByText("Sem arquitetos atribuídos")).toBeInTheDocument();
     expect(screen.getByText("Localização por definir")).toBeInTheDocument();
     expect(screen.queryByText("Cliente")).not.toBeInTheDocument();
     expect(screen.queryByText("Morada")).not.toBeInTheDocument();
@@ -55,7 +55,7 @@ describe("CompanyProjectPage", () => {
     expect(screen.getByText("Marta e João")).toBeInTheDocument();
     expect(screen.getAllByText("Estudo Prévio").length).toBeGreaterThan(0);
     expect(screen.getByText("Rua do Vale, Lisboa")).toBeInTheDocument();
-    expect(screen.getByText("1 arquiteto")).toBeInTheDocument();
+    expect(screen.getByText("Inês Costa")).toBeInTheDocument();
   });
 
   it("sends the optional Google Maps URL when an owner saves", async () => {
@@ -166,7 +166,7 @@ describe("CompanyProjectPage", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/projects/1/phases", expect.objectContaining({ body: expect.stringContaining('"currentPhaseIndex":1') })));
   });
 
-  it("switches the floor-plan context and phase conversations without removing the global thread", async () => {
+  it("switches phase documents and keeps the global conversation available", async () => {
     setAuthenticatedRoles(["employee"]);
     const phasedProject = { ...emptyProject, phases: [
       { id: 11, code: "preliminary-study", label: "Estudo Prévio", position: 0, isCurrent: true },
@@ -177,16 +177,43 @@ describe("CompanyProjectPage", () => {
     renderPage();
 
     expect(await screen.findByRole("img", { name: "Planta ilustrativa do piso térreo" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Conversa geral do projeto/ })).toBeInTheDocument();
+    const documentsToggle = screen.getByRole("button", { name: "Documentos" });
+    expect(documentsToggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Planta_Piso_0_R03.pdf")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Geral" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("region", { name: "Conversa geral do projeto" })).toBeInTheDocument();
     expect(screen.queryByText("Informação essencial, participantes e fases do projeto.")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Projeto de Licenciamento" }));
-    expect(screen.getAllByText("Projeto de Licenciamento").length).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: /Conversa geral do projeto/ })).toBeInTheDocument();
+    const emptyDocumentsToggle = screen.getByRole("button", { name: "Documentos" });
+    expect(emptyDocumentsToggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("Esta pasta está vazia")).not.toBeInTheDocument();
 
+    await user.click(emptyDocumentsToggle);
+    expect(screen.getByText("Esta pasta está vazia")).toBeInTheDocument();
+    await user.upload(screen.getByLabelText("Adicionar documentos"), new File(["licença"], "Licenca_Municipal.pdf", { type: "application/pdf" }));
+    expect(screen.getByText("Licenca_Municipal.pdf")).toBeInTheDocument();
+    expect(emptyDocumentsToggle).toHaveAttribute("aria-expanded", "true");
+
+    await user.type(screen.getByLabelText("Nova mensagem"), "Atualização global do projeto.");
+    await user.click(screen.getByRole("button", { name: "Enviar mensagem" }));
+    expect(screen.getByText("Atualização global do projeto.")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Conversas" }));
     await user.click(screen.getByRole("button", { name: /Dúvidas sobre a planta/ }));
     await user.type(screen.getByLabelText("Nova mensagem"), "Vamos confirmar esta medida.");
     await user.click(screen.getByRole("button", { name: "Enviar mensagem" }));
     expect(screen.getByText("Vamos confirmar esta medida.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Voltar à lista de conversas" }));
+    expect(screen.getByText("Conversas da fase")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Ficheiros" }));
+    expect(screen.getByRole("tree", { name: "Pastas de Casa do Vale" })).toBeInTheDocument();
+    expect(screen.getAllByText("Projeto de Licenciamento").length).toBeGreaterThan(0);
+    expect(screen.getByText("As pastas são criadas pela timeline e não podem ser movidas, renomeadas ou eliminadas.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /renomear|eliminar|mover/i })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Geral" }));
+    expect(screen.getByText("Atualização global do projeto.")).toBeInTheDocument();
   });
 });
