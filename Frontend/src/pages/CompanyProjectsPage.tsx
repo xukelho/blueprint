@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { ChevronRight, FolderKanban, MapPin, Plus, Search } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import PortalShell from "../components/PortalShell";
 import { getProjects, Project } from "../api/projects";
 import { useProfile } from "../profile/ProfileContext";
-import { phaseLabel } from "../projectPhases";
+import { ProjectCard } from "../components/ProjectCard";
 
 function ErrorMessage({ value }: { value: string }) {
   return value ? <p role="alert">{value}</p> : null;
@@ -29,19 +29,9 @@ export function CompanyProjectsPage() {
     else groups.push({ companyId: project.companyId, companyName: project.companyName, projects: [project] });
     return groups;
   }, []);
-  const projectCard = (project: Project) => <article className="mock-project-card mock-project-card--dashboard" key={project.id}>
-    <button className="mock-project-preview" aria-label={`Abrir projeto ${project.title}`} onClick={() => navigate(`/projects/${project.id}`)}>
-      <span className="mock-project-code">{project.code}</span>
-      <FolderKanban aria-hidden="true" size={42} strokeWidth={1.35} />
-    </button>
-    <button className="mock-project-content" onClick={() => navigate(`/projects/${project.id}`)}>
-      <span className="mock-project-title"><strong>{project.title}</strong><ChevronRight size={17} /></span>
-      <span>{project.client?.displayName ?? "Sem cliente"}</span>
-      <span className="mock-muted-row"><MapPin size={14} aria-hidden="true" />{project.address}</span>
-      {canViewArchitects && project.members?.length ? <span className="mock-project-members">Arquiteto{project.members.length === 1 ? "" : "s"}: {project.members.map((member) => member.displayName).join(", ")}</span> : null}
-      <span className="mock-project-meta"><span>{phaseLabel(project.currentPhaseCode) ?? "Sem fase atual"}</span><span>{project.code}</span></span>
-    </button>
-  </article>;
+  const projectCard = (project: Project) => (
+    <ProjectCard project={project} canViewArchitects={canViewArchitects} key={project.id} />
+  );
 
   return <PortalShell>
     <header className="mock-page-header">

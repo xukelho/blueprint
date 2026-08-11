@@ -754,6 +754,11 @@ button { cursor: pointer; }
   font-weight: 600;
 }
 
+.mock-notification-count--empty {
+  color: #92959a;
+  font-weight: 500;
+}
+
 .mock-back-link,
 .mock-breadcrumbs button {
   display: inline-flex;
@@ -2575,6 +2580,20 @@ button.mock-client-project-card:disabled { cursor: wait; }
 .empty-state h3 { margin: 12px 0 4px; color: #303236; font: 600 17px/24px "Manrope", sans-serif; }
 .empty-state p { margin: 0 0 17px; font-size: 13px; }
 .empty-state button { min-height: 36px; padding: 0 13px; color: #005864; background: #fff; border: 1px solid #9ecfdd; border-radius: 7px; font-weight: 600; }
+
+.dashboard-project-state {
+  min-height: 180px;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  color: #7b7e83;
+  background: #fff;
+  border: 1px solid #dcecf1;
+  border-radius: 11px;
+  font-size: 13px;
+}
+
+.dashboard-project-state--error { color: #ad4f3f; }
 
 .toast { position: fixed; z-index: 50; right: 24px; bottom: 24px; max-width: min(380px, calc(100vw - 48px)); padding: 12px 16px; color: #fff; background: #303236; border-radius: 8px; box-shadow: 0 10px 30px rgba(31, 32, 34, .2); font-size: 13px; }
 
