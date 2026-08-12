@@ -4,8 +4,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import PortalShell from "../components/PortalShell";
 import { GoogleMapPicker } from "../components/GoogleMapPicker";
 import { ProjectTimelineEditor, ProjectTimelineView, TimelinePhase, newTimelinePhase } from "../components/ProjectTimelineEditor";
-import { createMockProjectDocuments, MockProjectDocument, MockProjectDocuments, ProjectDocuments, ProjectFloorPlan, ProjectWorkspacePanel } from "../components/ProjectWorkspace";
-import { archiveProject, getClients, getCompanyMembers, getProject, Project, ProjectMember, reactivateProject, updateMembers, updateProject, updateProjectPhases } from "../api/projects";
+import { ProjectDocuments, ProjectDocumentsByPhase, ProjectFloorPlan, ProjectWorkspacePanel } from "../components/ProjectWorkspace";
+import { archiveProject, deleteProjectDocument, getClients, getCompanyMembers, getProject, getProjectDocuments, Project, ProjectMember, reactivateProject, updateMembers, updateProject, updateProjectPhases, uploadProjectDocument } from "../api/projects";
 import { useProfile } from "../profile/ProfileContext";
 import { phaseLabel, PROJECT_PHASES, QUICK_FILL_PHASE_CODES } from "../projectPhases";
 
@@ -43,7 +43,9 @@ export function CompanyProjectPage() {
   const [timelinePhases, setTimelinePhases] = useState<TimelinePhase[]>([]);
   const [currentPhaseId, setCurrentPhaseId] = useState<string | null>(null);
   const [viewedPhaseId, setViewedPhaseId] = useState<string | null>(null);
-  const [mockDocuments, setMockDocuments] = useState<MockProjectDocuments>({});
+  const [documents, setDocuments] = useState<ProjectDocumentsByPhase>({});
+  const [documentsLoading, setDocumentsLoading] = useState(true);
+  const [documentsError, setDocumentsError] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [isTimelineEditing, setIsTimelineEditing] = useState(false);
   const [isTimelineExpanded, setIsTimelineExpanded] = useState(false);
@@ -66,16 +68,25 @@ export function CompanyProjectPage() {
     setTimelinePhases(loadedPhases);
     setCurrentPhaseId(loadedCurrentPhaseId);
     setViewedPhaseId(loadedCurrentPhaseId ?? loadedPhases[0]?.id ?? null);
-    setMockDocuments((current) => {
-      const seeded = createMockProjectDocuments(loadedPhases);
-      return Object.fromEntries(loadedPhases.map((phase) => [phase.id, current[phase.id] ?? seeded[phase.id] ?? []]));
-    });
   };
   useEffect(() => {
     if (!owner) return;
     Promise.all([getClients(), getCompanyMembers()]).then(([loadedClients, loadedMembers]) => { setClients(loadedClients); setMembers(loadedMembers); }).catch((caught) => setError(caught instanceof Error ? caught.message : "Erro ao carregar."));
   }, [owner]);
   useEffect(() => { if (id) getProject(id).then(loadProject).catch((caught) => setError(caught instanceof Error ? caught.message : "Erro ao carregar.")); }, [id]);
+  useEffect(() => {
+    if (!id) return;
+    setDocumentsLoading(true);
+    setDocumentsError("");
+    getProjectDocuments(id)
+      .then((loadedDocuments) => setDocuments(loadedDocuments.reduce<ProjectDocumentsByPhase>((grouped, document) => {
+        const phaseId = String(document.phaseId);
+        grouped[phaseId] = [...(grouped[phaseId] ?? []), document];
+        return grouped;
+      }, {})))
+      .catch((caught) => setDocumentsError(caught instanceof Error ? caught.message : "Não foi possível carregar os documentos."))
+      .finally(() => setDocumentsLoading(false));
+  }, [id]);
 
   const displayedMembers = isEditing ? members : project?.members ?? [];
   const projectPhases = useMemo(() => (project?.phases ?? []).map((phase) => ({ id: String(phase.id), code: phase.code })), [project?.phases]);
@@ -87,7 +98,17 @@ export function CompanyProjectPage() {
   const filteredMembers = useMemo(() => { const normalizedQuery = query.trim().toLocaleLowerCase("pt-PT"); return displayedMembers.filter((member) => member.displayName.toLocaleLowerCase("pt-PT").includes(normalizedQuery)); }, [displayedMembers, query]);
   const hasChanges = Boolean(project) && (Object.entries(projectFormData(project!)).some(([key, value]) => data[key as keyof ProjectFormData] !== value) || !sameMemberIds(selected, project!.members?.map((member) => member.employeeId) ?? []));
   const toggleMember = (employeeId: number, checked: boolean) => setSelected((current) => checked ? [...current, employeeId] : current.filter((memberId) => memberId !== employeeId));
-  const addMockDocuments = (phaseId: string, addedDocuments: MockProjectDocument[]) => setMockDocuments((current) => ({ ...current, [phaseId]: [...(current[phaseId] ?? []), ...addedDocuments] }));
+  const uploadDocument = async (phaseId: string, file: File) => {
+    if (!id) throw new Error("Projeto indisponível.");
+    const uploaded = await uploadProjectDocument(id, phaseId, file);
+    const uploadedPhaseId = String(uploaded.phaseId);
+    setDocuments((current) => ({ ...current, [uploadedPhaseId]: [...(current[uploadedPhaseId] ?? []), uploaded] }));
+  };
+  const removeDocument = async (documentId: string) => {
+    if (!id) throw new Error("Projeto indisponível.");
+    await deleteProjectDocument(id, documentId);
+    setDocuments((current) => Object.fromEntries(Object.entries(current).map(([phaseId, phaseDocuments]) => [phaseId, phaseDocuments.filter((document) => document.id !== documentId)])));
+  };
   const startEditing = () => { setNotice(null); setQuery(""); setIsEditing(true); };
   const discardChanges = () => { if (project) { setData(projectFormData(project)); setSelected(project.members?.map((member) => member.employeeId) ?? []); } setQuery(""); setDiscardDialogOpen(false); setIsEditing(false); };
   const cancelEditing = () => { if (hasChanges) setDiscardDialogOpen(true); else discardChanges(); };
@@ -146,7 +167,7 @@ export function CompanyProjectPage() {
               {project.isArchived && <span className="project-hero__status is-archived">Arquivado</span>}
               {owner && <button className="project-hero__edit-action" type="button" onClick={startEditing}><Pencil size={16} />Editar projeto</button>}
             </div>}
-            <p className="project-hero__eyebrow">{project.companyName ? `Projeto · ${project.companyName}` : "Projeto de arquitetura"}</p>
+            <p className="project-hero__eyebrow">{project.companyName ? `${project.code} · ${project.companyName}` : project.code}</p>
             <h1 id="project-title">{project.title}</h1>
             <div className="project-hero__metadata">
               {project.client && <div><span className="project-hero__meta-icon"><Building2 size={18} aria-hidden="true" /></span><span><small>Cliente</small><strong>{project.client.displayName}</strong></span></div>}
@@ -181,9 +202,9 @@ export function CompanyProjectPage() {
             {isTimelineEditing ? <><ProjectTimelineEditor phases={timelinePhases} currentPhaseId={currentPhaseId} onPhasesChange={setTimelinePhases} onCurrentPhaseIdChange={setCurrentPhaseId} onQuickFill={() => { setTimelinePhases(QUICK_FILL_PHASE_CODES.map(newTimelinePhase)); setCurrentPhaseId(null); }} /><div className="mock-project-form-actions"><button type="button" className="secondary-action" onClick={cancelTimeline}>Cancelar</button><button type="button" className="primary-action" disabled={isSavingTimeline} onClick={saveTimeline}>{isSavingTimeline ? "A guardar…" : "Guardar timeline"}</button></div></> : projectPhases.length ? <ProjectTimelineView phases={projectPhases} currentPhaseId={officialCurrentPhaseId} viewedPhaseId={viewedPhaseId} expanded={isTimelineExpanded} onPhaseSelect={setViewedPhaseId} /> : <p className="mock-empty-state">Timeline opcional ainda não configurada.</p>}
           </section>
           <ProjectFloorPlan phaseCode={viewedPhase?.code ?? null} />
-          <ProjectDocuments phases={projectPhases} viewedPhaseId={viewedPhaseId} documents={mockDocuments} onDocumentsAdded={addMockDocuments} />
+          <ProjectDocuments phases={projectPhases} viewedPhaseId={viewedPhaseId} documents={documents} loading={documentsLoading} error={documentsError} readOnly={project.isArchived} onUploadFile={uploadDocument} onDeleteDocument={removeDocument} />
         </div>
-        <ProjectWorkspacePanel projectTitle={project.title} phases={projectPhases} viewedPhaseId={viewedPhaseId} currentUser={profile?.displayName ?? "Utilizador"} documents={mockDocuments} onCollapsedChange={setIsWorkspaceCollapsed} />
+        <ProjectWorkspacePanel projectTitle={project.title} phases={projectPhases} viewedPhaseId={viewedPhaseId} currentUser={profile?.displayName ?? "Utilizador"} documents={documents} onCollapsedChange={setIsWorkspaceCollapsed} />
       </div>
       {owner && isEditing && <div className="mock-project-form-actions project-page-actions"><button className="secondary-action" type="button" onClick={() => setArchiveStatusDialogOpen(true)}>{project.isArchived ? "Reativar" : "Arquivar"}</button><button className="secondary-action" type="button" onClick={cancelEditing}>Cancelar</button><button className="primary-action" type="submit" form="project-details-form" disabled={isSaving}>{isSaving ? "A guardar…" : "Guardar"}</button></div>}
       </div>

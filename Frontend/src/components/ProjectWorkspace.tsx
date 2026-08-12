@@ -1,13 +1,13 @@
-import { ChangeEvent, FormEvent, KeyboardEvent, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ChevronDown, File, FilePlus2, FileSpreadsheet, FileText, FileType2, Folder, FolderOpen, LockKeyhole, MessageSquare, MessagesSquare, PanelRightClose, PanelRightOpen, PanelsTopLeft, Send } from "lucide-react";
+import { ChangeEvent, DragEvent, FormEvent, KeyboardEvent, MouseEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft, Box, ChevronDown, File, FileArchive, FileImage, FilePlus2, FileSpreadsheet, FileText, FileType2, Folder, FolderOpen, LoaderCircle, LockKeyhole, MessageSquare, MessagesSquare, PanelRightClose, PanelRightOpen, PanelsTopLeft, Plus, Presentation, Send, Trash2, X } from "lucide-react";
+import type { ProjectDocument } from "../api/projects";
 import { phaseDefinition, phaseLabel } from "../projectPhases";
 import type { TimelinePhase } from "./ProjectTimelineEditor";
 
 type ProjectFloorPlanProps = { phaseCode: string | null };
 type MockMessage = { id: string; author: string; time: string; body: string; own?: boolean };
 type MockConversation = { id: string; title: string; scope: "global" | string; messages: MockMessage[] };
-export type MockProjectDocument = { id: string; name: string; type: string; size: string; author: string; date: string };
-export type MockProjectDocuments = Record<string, MockProjectDocument[]>;
+export type ProjectDocumentsByPhase = Record<string, ProjectDocument[]>;
 
 const globalConversation: MockConversation = {
   id: "global",
@@ -38,29 +38,31 @@ const phaseConversations = (phase: TimelinePhase): MockConversation[] => {
   ];
 };
 
-export const createMockProjectDocuments = (phases: TimelinePhase[]): MockProjectDocuments => Object.fromEntries(phases.map((phase, index) => {
-  if (index === 0) return [phase.id, [
-    { id: `${phase.id}:plan`, name: "Planta_Piso_0_R03.pdf", type: "PDF", size: "8,4 MB", author: "Ana Martins", date: "Hoje, 09:38" },
-    { id: `${phase.id}:brief`, name: "Memoria_Descritiva.docx", type: "DOCX", size: "1,2 MB", author: "Pedro Sousa", date: "Ontem, 16:12" },
-  ]];
-  if (index > 0 && index % 3 === 0) return [phase.id, [
-    { id: `${phase.id}:model`, name: "Modelo_Coordenacao.ifc", type: "IFC", size: "42,1 MB", author: "Ana Martins", date: "18 jul. 2026" },
-    { id: `${phase.id}:specification`, name: "Especificacoes_Tecnicas.pdf", type: "PDF", size: "2,8 MB", author: "Pedro Sousa", date: "17 jul. 2026" },
-    { id: `${phase.id}:report`, name: "Relatorio_de_Coordenacao.docx", type: "DOCX", size: "860 KB", author: "Ana Martins", date: "16 jul. 2026" },
-    { id: `${phase.id}:measurements`, name: "Mapa_de_Medicoes.xlsx", type: "XLSX", size: "540 KB", author: "Marta Silva", date: "15 jul. 2026" },
-    { id: `${phase.id}:notes`, name: "Notas_de_Revisao.txt", type: "TXT", size: "18 KB", author: "Pedro Sousa", date: "14 jul. 2026" },
-  ]];
-  return [phase.id, []];
-}));
-
-const fileType = (name: string) => name.includes(".") ? name.split(".").pop()!.toLocaleUpperCase("pt-PT") : "FICHEIRO";
+const fileType = (name: string) => name.includes(".") ? name.split(".").pop()!.toLocaleLowerCase("pt-PT") : "file";
 const fileSize = (bytes: number) => bytes >= 1_000_000 ? `${(bytes / 1_000_000).toLocaleString("pt-PT", { maximumFractionDigits: 1 })} MB` : `${Math.max(1, Math.round(bytes / 1_000))} KB`;
-const documentIcon = (type: string) => {
-  const normalizedType = type.toLocaleLowerCase("pt-PT");
-  if (normalizedType === "pdf") return <FileText size={25} aria-hidden="true" />;
-  if (["doc", "docx"].includes(normalizedType)) return <FileType2 size={25} aria-hidden="true" />;
-  if (["xls", "xlsx", "csv"].includes(normalizedType)) return <FileSpreadsheet size={25} aria-hidden="true" />;
-  return <File size={25} aria-hidden="true" />;
+const fileDate = (value: string | null) => value ? new Intl.DateTimeFormat("pt-PT", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)) : "Upload pendente";
+const documentKind = (name: string) => {
+  const extension = fileType(name);
+  if (extension === "pdf") return "pdf";
+  if (["doc", "docx", "odt", "rtf"].includes(extension)) return "document";
+  if (["xls", "xlsx", "csv", "ods"].includes(extension)) return "spreadsheet";
+  if (["ppt", "pptx", "odp"].includes(extension)) return "presentation";
+  if (["jpg", "jpeg", "png", "gif", "webp", "svg", "tif", "tiff", "bmp"].includes(extension)) return "image";
+  if (["zip", "rar", "7z", "tar", "gz"].includes(extension)) return "archive";
+  if (["dwg", "dxf", "ifc"].includes(extension)) return "model";
+  if (["txt", "md"].includes(extension)) return "text";
+  return "generic";
+};
+const documentIcon = (name: string, size = 25) => {
+  const kind = documentKind(name);
+  if (kind === "pdf" || kind === "text") return <FileText size={size} aria-hidden="true" />;
+  if (kind === "document") return <FileType2 size={size} aria-hidden="true" />;
+  if (kind === "spreadsheet") return <FileSpreadsheet size={size} aria-hidden="true" />;
+  if (kind === "presentation") return <Presentation size={size} aria-hidden="true" />;
+  if (kind === "image") return <FileImage size={size} aria-hidden="true" />;
+  if (kind === "archive") return <FileArchive size={size} aria-hidden="true" />;
+  if (kind === "model") return <Box size={size} aria-hidden="true" />;
+  return <File size={size} aria-hidden="true" />;
 };
 
 export function ProjectFloorPlan({ phaseCode }: ProjectFloorPlanProps) {
@@ -112,49 +114,150 @@ export function ProjectFloorPlan({ phaseCode }: ProjectFloorPlanProps) {
   </section>;
 }
 
-export function ProjectDocuments({ phases, viewedPhaseId, documents, onDocumentsAdded }: { phases: TimelinePhase[]; viewedPhaseId: string | null; documents: MockProjectDocuments; onDocumentsAdded: (phaseId: string, documents: MockProjectDocument[]) => void }) {
+type ProjectDocumentsProps = {
+  phases: TimelinePhase[];
+  viewedPhaseId: string | null;
+  documents: ProjectDocumentsByPhase;
+  loading?: boolean;
+  error?: string;
+  readOnly?: boolean;
+  onUploadFile: (phaseId: string, file: File) => Promise<void>;
+  onDeleteDocument: (documentId: string) => Promise<void>;
+};
+
+type PendingFile = { id: string; name: string; size: number };
+
+export function ProjectDocuments({ phases, viewedPhaseId, documents, loading = false, error = "", readOnly = false, onUploadFile, onDeleteDocument }: ProjectDocumentsProps) {
   const phase = phases.find((candidate) => candidate.id === viewedPhaseId) ?? null;
   const phaseDocuments = phase ? documents[phase.id] ?? [] : [];
-  const [expandedByPhase, setExpandedByPhase] = useState<Record<string, boolean>>(() => Object.fromEntries(phases.map((item) => [item.id, (documents[item.id]?.length ?? 0) > 0])));
-  const expanded = phase ? expandedByPhase[phase.id] ?? phaseDocuments.length > 0 : false;
+  const [expandedByPhase, setExpandedByPhase] = useState<Record<string, boolean>>(() => Object.fromEntries(phases.map((item) => [item.id, true])));
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selectionAnchor, setSelectionAnchor] = useState<string | null>(null);
+  const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
+  const [operationError, setOperationError] = useState("");
+  const [dragging, setDragging] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const dragDepth = useRef(0);
+  const expanded = phase ? expandedByPhase[phase.id] ?? true : false;
   const panelId = `phase-documents-${phase?.id ?? "none"}`;
 
   useEffect(() => {
-    setExpandedByPhase((current) => ({ ...Object.fromEntries(phases.map((item) => [item.id, (documents[item.id]?.length ?? 0) > 0])), ...current }));
-  }, [documents, phases]);
+    setExpandedByPhase((current) => ({ ...Object.fromEntries(phases.map((item) => [item.id, true])), ...current }));
+  }, [phases]);
+  useEffect(() => {
+    setSelectedIds([]);
+    setSelectionAnchor(null);
+    setOperationError("");
+    setDeleteDialogOpen(false);
+  }, [viewedPhaseId]);
+
+  const uploadFiles = async (files: File[]) => {
+    if (!phase || readOnly || !files.length) return;
+    setExpandedByPhase((current) => ({ ...current, [phase.id]: true }));
+    setOperationError("");
+    const batch = files.map((file, index) => ({ id: `${Date.now()}:${index}:${file.name}`, file }));
+    setPendingFiles((current) => [...current, ...batch.map(({ id, file }) => ({ id, name: file.name, size: file.size }))]);
+    const failures: string[] = [];
+    await Promise.all(batch.map(async ({ id, file }) => {
+      try { await onUploadFile(phase.id, file); }
+      catch { failures.push(file.name); }
+      finally { setPendingFiles((current) => current.filter((pending) => pending.id !== id)); }
+    }));
+    if (failures.length) setOperationError(`Não foi possível carregar: ${failures.join(", ")}.`);
+  };
 
   const addFiles = (event: ChangeEvent<HTMLInputElement>) => {
-    if (!phase || !event.target.files?.length) return;
-    const added = Array.from(event.target.files).map((file, index) => ({
-      id: `${phase.id}:upload:${Date.now()}:${index}`,
-      name: file.name,
-      type: fileType(file.name),
-      size: fileSize(file.size),
-      author: "Utilizador atual",
-      date: "Agora",
-    }));
-    onDocumentsAdded(phase.id, added);
-    setExpandedByPhase((current) => ({ ...current, [phase.id]: true }));
+    if (event.target.files?.length) void uploadFiles(Array.from(event.target.files));
     event.target.value = "";
   };
 
-  return <section className={`mock-surface project-documents ${expanded ? "is-expanded" : ""}`} aria-labelledby="project-documents-title">
+  const selectDocument = (event: MouseEvent<HTMLButtonElement>, documentId: string) => {
+    const additive = event.ctrlKey || event.metaKey;
+    if (event.shiftKey && selectionAnchor) {
+      const anchorIndex = phaseDocuments.findIndex((document) => document.id === selectionAnchor);
+      const selectedIndex = phaseDocuments.findIndex((document) => document.id === documentId);
+      if (anchorIndex >= 0 && selectedIndex >= 0) {
+        const range = phaseDocuments.slice(Math.min(anchorIndex, selectedIndex), Math.max(anchorIndex, selectedIndex) + 1).map((document) => document.id);
+        setSelectedIds((current) => additive ? Array.from(new Set([...current, ...range])) : range);
+        return;
+      }
+    }
+    if (additive) setSelectedIds((current) => current.includes(documentId) ? current.filter((id) => id !== documentId) : [...current, documentId]);
+    else setSelectedIds([documentId]);
+    setSelectionAnchor(documentId);
+  };
+
+  const confirmDelete = async () => {
+    setDeleting(true);
+    setOperationError("");
+    const ids = [...selectedIds];
+    const results = await Promise.allSettled(ids.map((documentId) => onDeleteDocument(documentId)));
+    const failedIds = ids.filter((_, index) => results[index].status === "rejected");
+    setSelectedIds(failedIds);
+    setSelectionAnchor(failedIds.at(-1) ?? null);
+    setDeleting(false);
+    setDeleteDialogOpen(false);
+    if (failedIds.length) setOperationError(`Não foi possível eliminar ${failedIds.length === 1 ? "o ficheiro selecionado" : `${failedIds.length} ficheiros`}.`);
+  };
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    const target = event.target as HTMLElement;
+    if (event.key !== "Delete" || !selectedIds.length || readOnly || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable) return;
+    event.preventDefault();
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDragEnter = (event: DragEvent<HTMLElement>) => {
+    if (readOnly || !phase || !event.dataTransfer.types.includes("Files")) return;
+    event.preventDefault();
+    dragDepth.current += 1;
+    setDragging(true);
+  };
+  const handleDragLeave = (event: DragEvent<HTMLElement>) => {
+    if (!dragging) return;
+    event.preventDefault();
+    dragDepth.current -= 1;
+    if (dragDepth.current <= 0) { dragDepth.current = 0; setDragging(false); }
+  };
+  const handleDrop = (event: DragEvent<HTMLElement>) => {
+    if (readOnly || !phase) return;
+    event.preventDefault();
+    dragDepth.current = 0;
+    setDragging(false);
+    void uploadFiles(Array.from(event.dataTransfer.files));
+  };
+
+  return <section className={`mock-surface project-documents ${expanded ? "is-expanded" : ""} ${dragging ? "is-dragging" : ""}`} aria-labelledby="project-documents-title" onKeyDown={handleKeyDown} onDragEnter={handleDragEnter} onDragOver={(event) => { if (!readOnly && phase) event.preventDefault(); }} onDragLeave={handleDragLeave} onDrop={handleDrop}>
+    <input ref={inputRef} className="sr-only" type="file" multiple aria-label="Adicionar documentos" disabled={!phase || readOnly} onChange={addFiles} />
     <div className="project-documents__bar">
       <button type="button" className="project-documents__toggle" aria-expanded={expanded} aria-controls={panelId} disabled={!phase} onClick={() => phase && setExpandedByPhase((current) => ({ ...current, [phase.id]: !expanded }))}>
         <span className="project-documents__icon"><Folder size={19} aria-hidden="true" /></span>
         <span><strong id="project-documents-title">Documentos</strong></span>
         <ChevronDown size={18} aria-hidden="true" />
       </button>
-      {phase && <label className="project-documents__upload" title="Adicionar documentos"><FilePlus2 size={16} aria-hidden="true" /><span className="sr-only">Adicionar documentos</span><input type="file" multiple aria-label="Adicionar documentos" onChange={addFiles} /></label>}
+      {phase && !readOnly && <button className="project-documents__upload" type="button" title="Adicionar documentos" aria-label="Escolher documentos" onClick={() => inputRef.current?.click()}><FilePlus2 size={16} aria-hidden="true" /></button>}
     </div>
     {expanded && phase && <div className="project-documents__content" id={panelId}>
-      {phaseDocuments.length ? <div className="project-documents__list">
-        {phaseDocuments.map((document) => <article key={document.id}>
-          <span className={`project-document__file project-document__file--${document.type.toLocaleLowerCase("pt-PT")}`}>{documentIcon(document.type)}</span>
-          <span className="project-document__name"><strong>{document.name}</strong><small>{document.author} · {document.date}</small></span>
-        </article>)}
-      </div> : <div className="project-documents__empty"><Folder size={25} aria-hidden="true" /><div><strong>Esta pasta está vazia</strong><p>Adicione documentos relativos a esta fase do projeto.</p></div></div>}
+      {(error || operationError) && <p className="project-documents__error" role="alert">{operationError || error}</p>}
+      {loading ? <div className="project-documents__loading" role="status"><LoaderCircle size={24} aria-hidden="true" />A carregar documentos…</div> : phaseDocuments.length || pendingFiles.length ? <div className="project-documents__list" role="listbox" aria-label="Documentos da fase" aria-multiselectable="true">
+        {phaseDocuments.map((document) => <button type="button" role="option" aria-selected={selectedIds.includes(document.id)} className={selectedIds.includes(document.id) ? "is-selected" : ""} key={document.id} onClick={(event) => selectDocument(event, document.id)}>
+          <span className={`project-document__file project-document__file--${documentKind(document.fileName)}`}>{documentIcon(document.fileName)}</span>
+          <span className="project-document__name"><strong title={document.fileName}>{document.fileName}</strong><small>{document.createdByDisplayName} · {fileDate(document.uploadedAt ?? document.createdAt)}</small><small>{fileSize(document.length)}{document.status !== "Available" ? ` · ${document.status}` : ""}</small></span>
+        </button>)}
+        {pendingFiles.map((pending) => <div className="project-document--uploading" role="status" key={pending.id}>
+          <span className="project-document__file"><LoaderCircle size={25} aria-hidden="true" /></span>
+          <span className="project-document__name"><strong title={pending.name}>{pending.name}</strong><small>A carregar… · {fileSize(pending.size)}</small></span>
+        </div>)}
+      </div> : <button type="button" className="project-documents__empty" disabled={readOnly} onClick={() => inputRef.current?.click()}><Plus size={44} aria-hidden="true" /><span><strong>Adicionar documentos</strong><small>{readOnly ? "Este projeto está arquivado." : "Clique ou arraste ficheiros para esta fase do projeto."}</small></span></button>}
     </div>}
+    {deleteDialogOpen && <div className="mock-modal-backdrop" role="presentation"><section className="mock-modal" role="alertdialog" aria-modal="true" aria-labelledby="delete-documents-title" aria-describedby="delete-documents-description">
+      <button className="mock-modal-close" type="button" aria-label="Fechar" disabled={deleting} onClick={() => setDeleteDialogOpen(false)}><X size={19} /></button>
+      <h2 id="delete-documents-title">Eliminar {selectedIds.length === 1 ? "documento?" : `${selectedIds.length} documentos?`}</h2>
+      <p id="delete-documents-description">Esta ação é permanente. Pretende eliminar {selectedIds.length === 1 ? "o documento selecionado" : "os documentos selecionados"}?</p>
+      <div className="mock-form-actions"><button className="secondary-action" type="button" disabled={deleting} onClick={() => setDeleteDialogOpen(false)}>Cancelar</button><button className="project-documents__delete" type="button" disabled={deleting} onClick={() => void confirmDelete()}><Trash2 size={16} aria-hidden="true" />{deleting ? "A eliminar…" : "Eliminar"}</button></div>
+    </section></div>}
   </section>;
 }
 
@@ -187,7 +290,7 @@ function ConversationChat({ thread, messages, currentUser, phaseName, onMessages
 
 type WorkspaceTab = "global" | "conversations" | "files";
 
-export function ProjectWorkspacePanel({ projectTitle, phases, viewedPhaseId, currentUser, documents, onCollapsedChange }: { projectTitle: string; phases: TimelinePhase[]; viewedPhaseId: string | null; currentUser: string; documents: MockProjectDocuments; onCollapsedChange?: (collapsed: boolean) => void }) {
+export function ProjectWorkspacePanel({ projectTitle, phases, viewedPhaseId, currentUser, documents, onCollapsedChange }: { projectTitle: string; phases: TimelinePhase[]; viewedPhaseId: string | null; currentUser: string; documents: ProjectDocumentsByPhase; onCollapsedChange?: (collapsed: boolean) => void }) {
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("global");
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [selectedPhaseThreadId, setSelectedPhaseThreadId] = useState<string | null>(null);
@@ -259,7 +362,7 @@ export function ProjectWorkspacePanel({ projectTitle, phases, viewedPhaseId, cur
                 <span><strong>{phaseLabel(phase.code)}</strong><small>{phaseDocuments.length} {phaseDocuments.length === 1 ? "ficheiro" : "ficheiros"}</small></span>
                 <LockKeyhole size={13} aria-label="Pasta protegida" />
               </button>
-              {folderExpanded && <div role="group" className="project-folder-tree__files">{phaseDocuments.length ? phaseDocuments.map((document) => <div role="treeitem" key={document.id}><File size={14} aria-hidden="true" /><span>{document.name}</span></div>) : <p>Pasta vazia</p>}</div>}
+              {folderExpanded && <div role="group" className="project-folder-tree__files">{phaseDocuments.length ? phaseDocuments.map((document) => <div role="treeitem" key={document.id}>{documentIcon(document.fileName, 14)}<span>{document.fileName}</span></div>) : <p>Pasta vazia</p>}</div>}
             </div>;
           })}</div>
         </div>

@@ -22,6 +22,7 @@ services:
     environment:
       ConnectionStrings__DefaultConnection: "Host=postgresdb;Port=7584;Database=blueprint;Username=blueprint;Password=blueprint_dev_password"
       ObjectStorage__Endpoint: "http://minio:9000"
+      ObjectStorage__PublicEndpoint: "http://localhost:9000"
       ObjectStorage__Region: "us-east-1"
       ObjectStorage__Bucket: "blueprint-private"
       ObjectStorage__AccessKey: "blueprint_dev"

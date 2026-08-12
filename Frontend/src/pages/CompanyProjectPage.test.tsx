@@ -172,7 +172,18 @@ describe("CompanyProjectPage", () => {
       { id: 11, code: "preliminary-study", label: "Estudo Prévio", position: 0, isCurrent: true },
       { id: 12, code: "licensing-project", label: "Projeto de Licenciamento", position: 1, isCurrent: false },
     ] };
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => String(input) === "/api/profile" ? response(profile("employee")) : response(phasedProject));
+    const planDocument = { id: "document-1", phaseId: 11, fileName: "Planta_Piso_0_R03.pdf", contentType: "application/pdf", length: 8400000, status: "Available", createdBy: 1, createdByDisplayName: "Ana Martins", createdAt: "2026-08-12T09:38:00Z", uploadedAt: "2026-08-12T09:38:00Z" };
+    const uploadedDocument = { ...planDocument, id: "document-2", phaseId: 12, fileName: "Licenca_Municipal.pdf", length: 7 };
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url === "/api/profile") return response(profile("employee"));
+      if (url === "/api/projects/1" && !init?.method) return response(phasedProject);
+      if (url === "/api/projects/1/documents") return response([planDocument]);
+      if (url === "/api/projects/1/phases/12/documents/uploads" && init?.method === "POST") return response({ documentId: "document-2", storedObjectId: "object-2", upload: { url: "https://storage.test/document-2", expiresAt: "2026-08-12T10:00:00Z", requiredHeaders: { "Content-Type": "application/pdf", "X-Upload": "required" } } }, 201);
+      if (url === "https://storage.test/document-2" && init?.method === "PUT") return new Response(null, { status: 200 });
+      if (url === "/api/projects/1/documents/document-2/complete" && init?.method === "POST") return response({ document: uploadedDocument });
+      throw new Error(`Unexpected request: ${url}`);
+    });
     const user = userEvent.setup();
     renderPage();
 
@@ -186,13 +197,11 @@ describe("CompanyProjectPage", () => {
 
     await user.click(screen.getByRole("button", { name: "Projeto de Licenciamento" }));
     const emptyDocumentsToggle = screen.getByRole("button", { name: "Documentos" });
-    expect(emptyDocumentsToggle).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByText("Esta pasta está vazia")).not.toBeInTheDocument();
-
-    await user.click(emptyDocumentsToggle);
-    expect(screen.getByText("Esta pasta está vazia")).toBeInTheDocument();
+    expect(emptyDocumentsToggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: /Adicionar documentos/ })).toBeInTheDocument();
     await user.upload(screen.getByLabelText("Adicionar documentos"), new File(["licença"], "Licenca_Municipal.pdf", { type: "application/pdf" }));
-    expect(screen.getByText("Licenca_Municipal.pdf")).toBeInTheDocument();
+    expect(await screen.findByText("Licenca_Municipal.pdf")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith("https://storage.test/document-2", expect.objectContaining({ method: "PUT", headers: { "Content-Type": "application/pdf", "X-Upload": "required" } }));
     expect(emptyDocumentsToggle).toHaveAttribute("aria-expanded", "true");
 
     await user.type(screen.getByLabelText("Nova mensagem"), "Atualização global do projeto.");

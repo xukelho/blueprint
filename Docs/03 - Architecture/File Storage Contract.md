@@ -25,7 +25,7 @@
 
 ## Configuration
 
-The `ObjectStorage` section defines `Endpoint`, `Region`, `Bucket`, `AccessKey`, `SecretKey`, `ForcePathStyle`, `UploadGrantLifetime`, `DownloadGrantLifetime`, and `PendingUploadLifetime`. These values describe an S3-compatible service without exposing AWS SDK types outside the adapter. Local Compose uses MinIO and development-only credentials; deployments must inject secrets.
+The `ObjectStorage` section defines `Endpoint`, optional `PublicEndpoint`, `Region`, `Bucket`, `AccessKey`, `SecretKey`, `ForcePathStyle`, `UploadGrantLifetime`, `DownloadGrantLifetime`, and `PendingUploadLifetime`. `Endpoint` is used for server-to-storage operations; `PublicEndpoint` is used when signing browser-facing upload and download grants and falls back to `Endpoint` when omitted. These values describe an S3-compatible service without exposing AWS SDK types outside the adapter. Local Compose uses MinIO and development-only credentials; deployments must inject secrets.
 
 ## Non-goals
 

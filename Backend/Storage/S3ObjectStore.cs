@@ -6,16 +6,19 @@ using Amazon.Runtime;
 
 namespace Blueprint.Api.Storage;
 
-public sealed class S3ObjectStore(IAmazonS3 client, IOptions<ObjectStorageOptions> options, TimeProvider timeProvider) : IObjectStore
+public sealed class S3ObjectStore(IAmazonS3 client, IAmazonS3 grantClient, IOptions<ObjectStorageOptions> options, TimeProvider timeProvider) : IObjectStore
 {
     private readonly ObjectStorageOptions _options = options.Value;
+
+    public S3ObjectStore(IAmazonS3 client, IOptions<ObjectStorageOptions> options, TimeProvider timeProvider)
+        : this(client, client, options, timeProvider) { }
 
     public async Task<PresignedUploadGrant> CreateUploadGrantAsync(string key, string contentType, TimeSpan lifetime, CancellationToken cancellationToken = default)
     {
         var expiresAt = timeProvider.GetUtcNow().Add(lifetime);
         try
         {
-            var url = await client.GetPreSignedURLAsync(new GetPreSignedUrlRequest
+            var url = await grantClient.GetPreSignedURLAsync(new GetPreSignedUrlRequest
             {
                 BucketName = _options.Bucket,
                 Key = key,
@@ -54,7 +57,7 @@ public sealed class S3ObjectStore(IAmazonS3 client, IOptions<ObjectStorageOption
         var expiresAt = timeProvider.GetUtcNow().Add(lifetime);
         try
         {
-            var url = await client.GetPreSignedURLAsync(new GetPreSignedUrlRequest
+            var url = await grantClient.GetPreSignedURLAsync(new GetPreSignedUrlRequest
             {
                 BucketName = _options.Bucket,
                 Key = key,
@@ -87,7 +90,7 @@ public sealed class S3ObjectStore(IAmazonS3 client, IOptions<ObjectStorageOption
     }
 
     private static string? NormalizeEtag(string? value) => value?.Trim('"');
-    private Protocol PresignProtocol() => new Uri(_options.Endpoint).Scheme == Uri.UriSchemeHttps ? Protocol.HTTPS : Protocol.HTTP;
+    private Protocol PresignProtocol() => new Uri(_options.PublicEndpoint ?? _options.Endpoint).Scheme == Uri.UriSchemeHttps ? Protocol.HTTPS : Protocol.HTTP;
     private static ObjectStoreException Translate(string message, AmazonS3Exception exception) =>
         new(message, exception.StatusCode is HttpStatusCode.RequestTimeout or HttpStatusCode.TooManyRequests or >= HttpStatusCode.InternalServerError, exception);
 }
@@ -102,17 +105,29 @@ public static class S3ObjectStoreRegistration
             .Validate(options => options.UploadGrantLifetime > TimeSpan.Zero && options.DownloadGrantLifetime > TimeSpan.Zero && options.PendingUploadLifetime > TimeSpan.Zero,
                 "Object storage URL lifetimes must be positive.")
             .ValidateOnStart();
-        services.AddSingleton<IAmazonS3>(provider =>
+        services.AddKeyedSingleton<IAmazonS3>("object-storage-internal", (provider, _) =>
         {
             var options = provider.GetRequiredService<IOptions<ObjectStorageOptions>>().Value;
-            return new AmazonS3Client(new BasicAWSCredentials(options.AccessKey, options.SecretKey), new AmazonS3Config
-            {
-                ServiceURL = options.Endpoint,
-                AuthenticationRegion = options.Region,
-                ForcePathStyle = options.ForcePathStyle
-            });
+            return CreateClient(options, options.Endpoint);
         });
-        services.AddSingleton<IObjectStore, S3ObjectStore>();
+        services.AddKeyedSingleton<IAmazonS3>("object-storage-grants", (provider, _) =>
+        {
+            var options = provider.GetRequiredService<IOptions<ObjectStorageOptions>>().Value;
+            return CreateClient(options, options.PublicEndpoint ?? options.Endpoint);
+        });
+        services.AddSingleton<IObjectStore>(provider => new S3ObjectStore(
+            provider.GetRequiredKeyedService<IAmazonS3>("object-storage-internal"),
+            provider.GetRequiredKeyedService<IAmazonS3>("object-storage-grants"),
+            provider.GetRequiredService<IOptions<ObjectStorageOptions>>(),
+            provider.GetRequiredService<TimeProvider>()));
         return services;
     }
+
+    private static AmazonS3Client CreateClient(ObjectStorageOptions options, string endpoint) =>
+        new(new BasicAWSCredentials(options.AccessKey, options.SecretKey), new AmazonS3Config
+        {
+            ServiceURL = endpoint,
+            AuthenticationRegion = options.Region,
+            ForcePathStyle = options.ForcePathStyle
+        });
 }
