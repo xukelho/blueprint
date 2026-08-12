@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Npgsql;
@@ -8,6 +9,99 @@ namespace Blueprint.Api.IntegrationTests;
 public sealed class ProjectIntegrationTests(PostgreSqlApiFixture fixture)
     : IClassFixture<PostgreSqlApiFixture>
 {
+    [Fact]
+    public async Task ProjectDocumentEndpointsEnforceLifecycleVisibilityAndArchivedReadOnlyAccess()
+    {
+        var owner = await CreateOwnerAsync();
+        var suffix = Guid.NewGuid().ToString("N");
+        await LoginAsync("admin", "admin");
+        var client = await CreateClientAsync($"files.client.{suffix}", [owner.CompanyId]);
+        await LoginAsync(owner.Username);
+
+        using var projectResponse = await fixture.Client.PostAsJsonAsync("/api/projects/", new
+        {
+            title = "Project files",
+            code = $"FILES-{suffix[..6]}",
+            address = "Lisboa",
+            googleMapsUrl = (string?)null,
+            clientId = (long?)client.Id,
+            employeeIds = Array.Empty<long>(),
+            phaseCodes = new[] { "feasibility-studies", "execution-project" },
+            currentPhaseIndex = 0
+        });
+        Assert.Equal(HttpStatusCode.Created, projectResponse.StatusCode);
+        var project = await projectResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var projectId = project.GetProperty("id").GetInt64();
+        var firstPhaseId = project.GetProperty("phases")[0].GetProperty("id").GetInt64();
+        var secondPhaseId = project.GetProperty("phases")[1].GetProperty("id").GetInt64();
+        var originalBytes = "original project document"u8.ToArray();
+
+        using var pendingResponse = await fixture.Client.PostAsJsonAsync(
+            $"/api/projects/{projectId}/phases/{firstPhaseId}/documents/uploads",
+            new { fileName = "drawing.txt", contentType = "text/plain", length = originalBytes.Length });
+        Assert.Equal(HttpStatusCode.Created, pendingResponse.StatusCode);
+        var pending = await pendingResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var documentId = pending.GetProperty("documentId").GetGuid();
+        await UploadAsync(pending.GetProperty("upload"), originalBytes);
+
+        using var completed = await fixture.Client.PostAsync($"/api/projects/{projectId}/documents/{documentId}/complete", null);
+        Assert.Equal(HttpStatusCode.OK, completed.StatusCode);
+        using var completedAgain = await fixture.Client.PostAsync($"/api/projects/{projectId}/documents/{documentId}/complete", null);
+        Assert.Equal(HttpStatusCode.OK, completedAgain.StatusCode);
+
+        var ownerDocuments = await fixture.Client.GetFromJsonAsync<JsonElement[]>($"/api/projects/{projectId}/documents");
+        Assert.Single(ownerDocuments!);
+        Assert.Equal("drawing.txt", ownerDocuments![0].GetProperty("fileName").GetString());
+        Assert.Equal("Available", ownerDocuments[0].GetProperty("status").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(ownerDocuments[0].GetProperty("createdByDisplayName").GetString()));
+
+        using var moved = await fixture.Client.PutAsJsonAsync($"/api/projects/{projectId}/documents/{documentId}/phase", new { targetPhaseId = secondPhaseId });
+        Assert.Equal(HttpStatusCode.OK, moved.StatusCode);
+        Assert.Equal(secondPhaseId, (await moved.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("phaseId").GetInt64());
+
+        var replacementBytes = "replacement project document"u8.ToArray();
+        using var replacementResponse = await fixture.Client.PostAsJsonAsync(
+            $"/api/projects/{projectId}/documents/{documentId}/replacements",
+            new { fileName = "drawing-v2.txt", contentType = "text/plain", length = replacementBytes.Length });
+        Assert.Equal(HttpStatusCode.Created, replacementResponse.StatusCode);
+        var replacement = await replacementResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var replacementId = replacement.GetProperty("storedObjectId").GetGuid();
+        await UploadAsync(replacement.GetProperty("upload"), replacementBytes);
+        using var replaced = await fixture.Client.PostAsync($"/api/projects/{projectId}/documents/{documentId}/replacements/{replacementId}/complete", null);
+        Assert.Equal(HttpStatusCode.OK, replaced.StatusCode);
+        using var replacedAgain = await fixture.Client.PostAsync($"/api/projects/{projectId}/documents/{documentId}/replacements/{replacementId}/complete", null);
+        Assert.Equal(HttpStatusCode.OK, replacedAgain.StatusCode);
+
+        await LoginAsync(client.Username);
+        var clientDocuments = await fixture.Client.GetFromJsonAsync<JsonElement[]>($"/api/projects/{projectId}/documents");
+        Assert.Single(clientDocuments!);
+        Assert.Equal("drawing-v2.txt", clientDocuments![0].GetProperty("fileName").GetString());
+        using var clientDownload = await fixture.Client.PostAsync($"/api/projects/{projectId}/documents/{documentId}/download", null);
+        Assert.Equal(HttpStatusCode.OK, clientDownload.StatusCode);
+        var downloadGrant = await clientDownload.Content.ReadFromJsonAsync<JsonElement>();
+        using var storage = new HttpClient();
+        Assert.Equal(replacementBytes, await storage.GetByteArrayAsync(downloadGrant.GetProperty("url").GetString()));
+        using var clientMutation = await fixture.Client.DeleteAsync($"/api/projects/{projectId}/documents/{documentId}");
+        Assert.Equal(HttpStatusCode.NotFound, clientMutation.StatusCode);
+
+        await LoginAsync(owner.Username);
+        using var archived = await fixture.Client.PostAsync($"/api/projects/{projectId}/archive", null);
+        Assert.Equal(HttpStatusCode.NoContent, archived.StatusCode);
+        Assert.Single((await fixture.Client.GetFromJsonAsync<JsonElement[]>($"/api/projects/{projectId}/documents"))!);
+        using var archivedMutation = await fixture.Client.PutAsJsonAsync($"/api/projects/{projectId}/documents/{documentId}/phase", new { targetPhaseId = firstPhaseId });
+        Assert.Equal(HttpStatusCode.Conflict, archivedMutation.StatusCode);
+
+        using var reactivated = await fixture.Client.PostAsync($"/api/projects/{projectId}/reactivate", null);
+        Assert.Equal(HttpStatusCode.NoContent, reactivated.StatusCode);
+        using var removedEmptyPhase = await fixture.Client.PostAsJsonAsync($"/api/projects/{projectId}/phases/{firstPhaseId}/remove", new { mode = "emptyOnly", targetPhaseId = (long?)null });
+        Assert.Equal(HttpStatusCode.NoContent, removedEmptyPhase.StatusCode);
+        using var deleted = await fixture.Client.DeleteAsync($"/api/projects/{projectId}/documents/{documentId}");
+        Assert.Equal(HttpStatusCode.NoContent, deleted.StatusCode);
+        using var deletedAgain = await fixture.Client.DeleteAsync($"/api/projects/{projectId}/documents/{documentId}");
+        Assert.Equal(HttpStatusCode.NoContent, deletedAgain.StatusCode);
+        Assert.Empty((await fixture.Client.GetFromJsonAsync<JsonElement[]>($"/api/projects/{projectId}/documents"))!);
+    }
+
     [Fact]
     public async Task OwnerCanReplaceClearAndConcurrentlyAssociateOneClientWhileSchemaAllowsMany()
     {
@@ -330,6 +424,21 @@ public sealed class ProjectIntegrationTests(PostgreSqlApiFixture fixture)
     private async Task LoginAsync(string username, string password = "secret")
     {
         using var response = await fixture.Client.PostAsJsonAsync("/api/auth/login", new { username, password });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    private static async Task UploadAsync(JsonElement grant, byte[] bytes)
+    {
+        using var storage = new HttpClient();
+        using var content = new ByteArrayContent(bytes);
+        foreach (var header in grant.GetProperty("requiredHeaders").EnumerateObject())
+        {
+            if (header.Name.Equals("Content-Type", StringComparison.OrdinalIgnoreCase))
+                content.Headers.ContentType = new MediaTypeHeaderValue(header.Value.GetString()!);
+            else
+                content.Headers.TryAddWithoutValidation(header.Name, header.Value.GetString());
+        }
+        using var response = await storage.PutAsync(grant.GetProperty("url").GetString(), content);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 }

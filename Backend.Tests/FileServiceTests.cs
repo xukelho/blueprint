@@ -26,6 +26,7 @@ public sealed class FileServiceTests
 
         store.Metadata[stored.ObjectKey] = new ObjectMetadata(12, "application/pdf", "etag-one", clock.GetUtcNow());
         await service.CompleteUploadAsync(pending.DocumentId, 7);
+        await service.CompleteUploadAsync(pending.DocumentId, 7);
         Assert.Equal(StoredObjectStatus.Available, stored.Status);
 
         await service.MoveAsync(pending.DocumentId, second.Id, 8);
@@ -38,9 +39,11 @@ public sealed class FileServiceTests
         Assert.NotEqual(stored.ObjectKey, newObject.ObjectKey);
         store.Metadata[newObject.ObjectKey] = new ObjectMetadata(20, "application/pdf", "etag-two", clock.GetUtcNow());
         await service.CompleteReplacementAsync(pending.DocumentId, replacement.StoredObjectId, 8);
+        await service.CompleteReplacementAsync(pending.DocumentId, replacement.StoredObjectId, 8);
         Assert.Equal(StoredObjectStatus.DeletionPending, stored.Status);
         Assert.Equal(replacement.StoredObjectId, (await db.ProjectDocuments.FindAsync(pending.DocumentId))!.StoredObjectId);
 
+        await service.DeleteAsync(pending.DocumentId, 9);
         await service.DeleteAsync(pending.DocumentId, 9);
         Assert.True((await db.ProjectDocuments.FindAsync(pending.DocumentId))!.IsDeleted);
         Assert.Equal(StoredObjectStatus.DeletionPending, newObject.Status);
@@ -56,10 +59,10 @@ public sealed class FileServiceTests
         var service = CreateService(db, store, clock);
         var pending = await service.CreatePendingUploadAsync(project.Id, phase.Id, "x.bin", "application/octet-stream", 4, 1);
 
-        await Assert.ThrowsAsync<FileDomainException>(() => service.CompleteUploadAsync(pending.DocumentId, 1));
+        await Assert.ThrowsAsync<FileConflictException>(() => service.CompleteUploadAsync(pending.DocumentId, 1));
         var stored = await db.StoredObjects.SingleAsync(candidate => candidate.Id == pending.StoredObjectId);
         store.Metadata[stored.ObjectKey] = new ObjectMetadata(5, "application/octet-stream", null, null);
-        await Assert.ThrowsAsync<FileDomainException>(() => service.CompleteUploadAsync(pending.DocumentId, 1));
+        await Assert.ThrowsAsync<FileConflictException>(() => service.CompleteUploadAsync(pending.DocumentId, 1));
         Assert.Equal(StoredObjectStatus.PendingUpload, stored.Status);
     }
 

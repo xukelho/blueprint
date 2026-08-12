@@ -29,7 +29,7 @@ The `ObjectStorage` section defines `Endpoint`, `Region`, `Bucket`, `AccessKey`,
 
 ## Non-goals
 
-HTTP endpoints and frontend changes are deferred. General-purpose folders, file version history, and detailed filename/presentation rules are excluded.
+Frontend integration remains deferred. General-purpose folders, file version history, and detailed filename/presentation rules are excluded.
 
 ## API/UI handoff
 
@@ -49,3 +49,23 @@ Service contract:
 | `PhaseRemovalService.RemoveAsync` | project, phase, explicit mode, optional target, actor | rejects non-empty implicit removal; explicitly moves or deletes documents before removing the phase |
 
 Expected API mappings are domain validation -> 400, missing or inaccessible aggregate -> 404, unsafe phase removal/state conflict -> 409, and temporary object-store failure -> 503. Upload URLs must be returned with their required headers and absolute expiry; the UI must upload directly, then call completion before treating a document as available. Retries of completion, logical deletion, and background maintenance are safe; replacement initiation may create a new pending object and should use the returned object ID for completion.
+
+## HTTP API
+
+All routes require authentication and are scoped beneath `/api/projects/{projectId}`. Inaccessible projects and nested resources return `404` so the API does not disclose their existence. Company owners and assigned architects may perform mutations. The project's associated client may list and download available documents, but cannot see pending uploads or perform mutations. Archived projects remain readable and reject file or phase mutations with `409`.
+
+| Method and route | Purpose |
+| --- | --- |
+| `GET /documents` | List active documents in phase/creation order. Professionals also see pending uploads; clients see only available documents. |
+| `POST /phases/{phaseId}/documents/uploads` | Persist a pending document and return its document/object IDs and presigned PUT grant. |
+| `POST /documents/{documentId}/complete` | Verify a direct upload and make the document available. Repeating a successful completion is safe. |
+| `POST /documents/{documentId}/download` | Return a short-lived presigned GET grant for an available document. |
+| `PUT /documents/{documentId}/phase` | Move an active document to another phase in the same project. |
+| `POST /documents/{documentId}/replacements` | Create an immutable pending replacement and return its object ID and PUT grant. |
+| `POST /documents/{documentId}/replacements/{storedObjectId}/complete` | Verify and activate the specified replacement. Repeating an applied completion is safe. |
+| `DELETE /documents/{documentId}` | Logically delete the document and queue physical deletion. Repeating deletion is safe. |
+| `POST /phases/{phaseId}/remove` | Remove a phase using explicit `emptyOnly`, `moveDocuments`, or `deleteDocuments` behavior. |
+
+Document responses expose logical IDs, phase, filename, media type, verified-or-expected length, lifecycle status, uploader ID/display name, creation time, and upload time. They never expose object keys, ETags, credentials, or provider SDK types. Upload-grant responses contain the URL, absolute expiry, and every header the direct PUT must send.
+
+HTTP failures use validation problems for invalid request fields (`400`), `404` for missing or inaccessible resources, `409` for lifecycle and read-only conflicts, `502` for non-transient storage-provider failures, and `503` for transient storage failures.

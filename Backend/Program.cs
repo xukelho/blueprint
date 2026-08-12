@@ -66,6 +66,7 @@ app.MapProfileEndpoints();
 app.MapCompanyEndpoints();
 app.MapCompanyMemberEndpoints();
 app.MapProjectEndpoints();
+app.MapProjectDocumentEndpoints();
 app.MapClientManagementEndpoints();
 app.MapClientInvitationEndpoints();
 

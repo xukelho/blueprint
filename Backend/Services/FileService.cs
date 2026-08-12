@@ -27,14 +27,20 @@ public sealed class FileService(BlueprintDbContext db, IObjectStore objectStore,
     {
         ValidateUpload(fileName, contentType, length);
         if (!await db.ProjectPhases.AnyAsync(phase => phase.Id == phaseId && phase.ProjectId == projectId, cancellationToken))
-            throw new FileDomainException("The phase does not belong to the project.");
+            throw new FileResourceNotFoundException("The phase was not found.");
 
         var storedObject = NewPendingObject(projectId, fileName, contentType, length, actorId);
         var now = timeProvider.GetUtcNow();
         var document = new ProjectDocument
         {
-            Id = Guid.NewGuid(), ProjectId = projectId, PhaseId = phaseId, StoredObjectId = storedObject.Id,
-            CreatedAt = now, UpdatedAt = now, CreatedBy = actorId, UpdatedBy = actorId
+            Id = Guid.NewGuid(),
+            ProjectId = projectId,
+            PhaseId = phaseId,
+            StoredObjectId = storedObject.Id,
+            CreatedAt = now,
+            UpdatedAt = now,
+            CreatedBy = actorId,
+            UpdatedBy = actorId
         };
         db.StoredObjects.Add(storedObject);
         db.ProjectDocuments.Add(document);
@@ -57,7 +63,8 @@ public sealed class FileService(BlueprintDbContext db, IObjectStore objectStore,
     {
         var document = await db.ProjectDocuments.Include(candidate => candidate.StoredObject)
             .SingleOrDefaultAsync(candidate => candidate.Id == documentId && !candidate.IsDeleted, cancellationToken)
-            ?? throw new FileDomainException("Document not found.");
+            ?? throw new FileResourceNotFoundException("Document not found.");
+        if (document.StoredObject!.Status == StoredObjectStatus.Available) return;
         await VerifyPendingObjectAsync(document.StoredObject!, actorId, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
     }
@@ -66,18 +73,18 @@ public sealed class FileService(BlueprintDbContext db, IObjectStore objectStore,
     {
         var document = await db.ProjectDocuments.AsNoTracking().Include(candidate => candidate.StoredObject)
             .SingleOrDefaultAsync(candidate => candidate.Id == documentId && !candidate.IsDeleted, cancellationToken)
-            ?? throw new FileDomainException("Document not found.");
+            ?? throw new FileResourceNotFoundException("Document not found.");
         if (document.StoredObject!.Status != StoredObjectStatus.Available)
-            throw new FileDomainException("The document is not available.");
+            throw new FileConflictException("The document is not available.");
         return await objectStore.CreateDownloadGrantAsync(document.StoredObject.ObjectKey, document.StoredObject.FileName, _options.DownloadGrantLifetime, cancellationToken);
     }
 
     public async Task MoveAsync(Guid documentId, long targetPhaseId, long actorId, CancellationToken cancellationToken = default)
     {
         var document = await db.ProjectDocuments.SingleOrDefaultAsync(candidate => candidate.Id == documentId && !candidate.IsDeleted, cancellationToken)
-            ?? throw new FileDomainException("Document not found.");
+            ?? throw new FileResourceNotFoundException("Document not found.");
         if (!await db.ProjectPhases.AnyAsync(phase => phase.Id == targetPhaseId && phase.ProjectId == document.ProjectId, cancellationToken))
-            throw new FileDomainException("The target phase does not belong to the project.");
+            throw new FileResourceNotFoundException("The target phase was not found.");
         document.PhaseId = targetPhaseId;
         Touch(document, actorId);
         await db.SaveChangesAsync(cancellationToken);
@@ -88,7 +95,7 @@ public sealed class FileService(BlueprintDbContext db, IObjectStore objectStore,
         ValidateUpload(fileName, contentType, length);
         var projectId = await db.ProjectDocuments.Where(candidate => candidate.Id == documentId && !candidate.IsDeleted)
             .Select(candidate => (long?)candidate.ProjectId).SingleOrDefaultAsync(cancellationToken)
-            ?? throw new FileDomainException("Document not found.");
+            ?? throw new FileResourceNotFoundException("Document not found.");
         var storedObject = NewPendingObject(projectId, fileName, contentType, length, actorId);
         db.StoredObjects.Add(storedObject);
         await db.SaveChangesAsync(cancellationToken);
@@ -110,11 +117,12 @@ public sealed class FileService(BlueprintDbContext db, IObjectStore objectStore,
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         var document = await db.ProjectDocuments.Include(candidate => candidate.StoredObject)
             .SingleOrDefaultAsync(candidate => candidate.Id == documentId && !candidate.IsDeleted, cancellationToken)
-            ?? throw new FileDomainException("Document not found.");
+            ?? throw new FileResourceNotFoundException("Document not found.");
         var replacement = await db.StoredObjects.SingleOrDefaultAsync(candidate => candidate.Id == replacementObjectId && candidate.ProjectId == document.ProjectId, cancellationToken)
-            ?? throw new FileDomainException("Replacement object not found.");
+            ?? throw new FileResourceNotFoundException("Replacement object not found.");
+        if (document.StoredObjectId == replacementObjectId && replacement.Status == StoredObjectStatus.Available) return;
         if (await db.ProjectDocuments.AnyAsync(candidate => candidate.StoredObjectId == replacementObjectId, cancellationToken))
-            throw new FileDomainException("Replacement object is already in use.");
+            throw new FileConflictException("Replacement object is already in use.");
 
         await VerifyPendingObjectAsync(replacement, actorId, cancellationToken);
         QueueDeletion(document.StoredObject!, actorId);
@@ -127,8 +135,9 @@ public sealed class FileService(BlueprintDbContext db, IObjectStore objectStore,
     public async Task DeleteAsync(Guid documentId, long actorId, CancellationToken cancellationToken = default)
     {
         var document = await db.ProjectDocuments.Include(candidate => candidate.StoredObject)
-            .SingleOrDefaultAsync(candidate => candidate.Id == documentId && !candidate.IsDeleted, cancellationToken)
-            ?? throw new FileDomainException("Document not found.");
+            .SingleOrDefaultAsync(candidate => candidate.Id == documentId, cancellationToken)
+            ?? throw new FileResourceNotFoundException("Document not found.");
+        if (document.IsDeleted) return;
         var now = timeProvider.GetUtcNow();
         document.IsDeleted = true;
         document.DeletedAt = now;
@@ -144,21 +153,29 @@ public sealed class FileService(BlueprintDbContext db, IObjectStore objectStore,
         var now = timeProvider.GetUtcNow();
         return new StoredObject
         {
-            Id = id, ProjectId = projectId, ObjectKey = $"projects/{projectId}/objects/{id:N}",
-            FileName = fileName.Trim(), ContentType = contentType.Trim(), ExpectedLength = length,
-            Status = StoredObjectStatus.PendingUpload, UploadExpiresAt = now.Add(_options.PendingUploadLifetime),
-            CreatedAt = now, UpdatedAt = now, CreatedBy = actorId, UpdatedBy = actorId
+            Id = id,
+            ProjectId = projectId,
+            ObjectKey = $"projects/{projectId}/objects/{id:N}",
+            FileName = fileName.Trim(),
+            ContentType = contentType.Trim(),
+            ExpectedLength = length,
+            Status = StoredObjectStatus.PendingUpload,
+            UploadExpiresAt = now.Add(_options.PendingUploadLifetime),
+            CreatedAt = now,
+            UpdatedAt = now,
+            CreatedBy = actorId,
+            UpdatedBy = actorId
         };
     }
 
     private async Task VerifyPendingObjectAsync(StoredObject storedObject, long actorId, CancellationToken cancellationToken)
     {
-        if (storedObject.Status != StoredObjectStatus.PendingUpload) throw new FileDomainException("The upload is not pending.");
-        if (storedObject.UploadExpiresAt <= timeProvider.GetUtcNow()) throw new FileDomainException("The upload has expired.");
+        if (storedObject.Status != StoredObjectStatus.PendingUpload) throw new FileConflictException("The upload is not pending.");
+        if (storedObject.UploadExpiresAt <= timeProvider.GetUtcNow()) throw new FileConflictException("The upload has expired.");
         var metadata = await objectStore.GetMetadataAsync(storedObject.ObjectKey, cancellationToken)
-            ?? throw new FileDomainException("The uploaded object was not found.");
+            ?? throw new FileConflictException("The uploaded object was not found.");
         if (metadata.Length != storedObject.ExpectedLength || !string.Equals(metadata.ContentType, storedObject.ContentType, StringComparison.OrdinalIgnoreCase))
-            throw new FileDomainException("Uploaded object metadata does not match the pending upload.");
+            throw new FileConflictException("Uploaded object metadata does not match the pending upload.");
         storedObject.Status = StoredObjectStatus.Available;
         storedObject.VerifiedLength = metadata.Length;
         storedObject.ETag = metadata.ETag;
@@ -187,10 +204,16 @@ public sealed class FileService(BlueprintDbContext db, IObjectStore objectStore,
 
     private static void ValidateUpload(string fileName, string contentType, long length)
     {
-        if (string.IsNullOrWhiteSpace(fileName) || fileName.Length > 512) throw new FileDomainException("A valid file name is required.");
-        if (string.IsNullOrWhiteSpace(contentType) || contentType.Length > 256) throw new FileDomainException("A valid content type is required.");
-        if (length < 0) throw new FileDomainException("File length cannot be negative.");
+        if (string.IsNullOrWhiteSpace(fileName) || fileName.Length > 512) throw new FileValidationException("A valid file name is required.", "fileName");
+        if (string.IsNullOrWhiteSpace(contentType) || contentType.Length > 256) throw new FileValidationException("A valid content type is required.", "contentType");
+        if (length < 0) throw new FileValidationException("File length cannot be negative.", "length");
     }
 }
 
-public sealed class FileDomainException(string message) : InvalidOperationException(message);
+public abstract class FileDomainException(string message) : InvalidOperationException(message);
+public sealed class FileValidationException(string message, string field) : FileDomainException(message)
+{
+    public string Field { get; } = field;
+}
+public sealed class FileResourceNotFoundException(string message) : FileDomainException(message);
+public class FileConflictException(string message) : FileDomainException(message);

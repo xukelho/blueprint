@@ -19,7 +19,7 @@ public sealed class PhaseRemovalService(BlueprintDbContext db, IFileService file
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         var phase = await db.ProjectPhases.SingleOrDefaultAsync(
             candidate => candidate.Id == command.PhaseId && candidate.ProjectId == command.ProjectId, cancellationToken)
-            ?? throw new FileDomainException("Phase not found.");
+            ?? throw new FileResourceNotFoundException("Phase not found.");
         var documents = await db.ProjectDocuments.Where(document => document.ProjectId == command.ProjectId && document.PhaseId == command.PhaseId).ToListAsync(cancellationToken);
 
         switch (command.Mode)
@@ -29,7 +29,7 @@ public sealed class PhaseRemovalService(BlueprintDbContext db, IFileService file
             case PhaseRemovalMode.MoveDocuments:
                 if (command.TargetPhaseId is null || command.TargetPhaseId == command.PhaseId ||
                     !await db.ProjectPhases.AnyAsync(candidate => candidate.Id == command.TargetPhaseId && candidate.ProjectId == command.ProjectId, cancellationToken))
-                    throw new FileDomainException("A different target phase in the same project is required.");
+                    throw new FileConflictException("A different target phase in the same project is required.");
                 foreach (var document in documents)
                 {
                     document.PhaseId = command.TargetPhaseId.Value;
@@ -46,7 +46,7 @@ public sealed class PhaseRemovalService(BlueprintDbContext db, IFileService file
             case PhaseRemovalMode.EmptyOnly:
                 break;
             default:
-                throw new FileDomainException("The phase removal strategy is ambiguous.");
+                throw new FileValidationException("The phase removal strategy is ambiguous.", "mode");
         }
 
         db.ProjectPhases.Remove(phase);

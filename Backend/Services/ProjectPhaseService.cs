@@ -69,4 +69,4 @@ public sealed class ProjectPhaseService(BlueprintDbContext db)
 }
 
 public sealed class PhaseHasDocumentsException()
-    : InvalidOperationException("A phase with documents requires an explicit move-or-delete removal operation.");
+    : FileConflictException("A phase with documents requires an explicit move-or-delete removal operation.");
