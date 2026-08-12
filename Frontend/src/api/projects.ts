@@ -6,6 +6,21 @@ export type ClientListItem = { id: number; displayName: string; email: string; p
 export type ClientDetail = ClientListItem & { fullName: string; nif: string; phoneNumber: string; address: string; internalNotes: string; projects: Array<Pick<Project, "id" | "title" | "code" | "currentPhaseCode" | "isArchived">>; canManageProjects: boolean };
 export type ClientInvitation = { id: number; email: string; sentAt: string; expiresAt: string };
 export type ReceivedClientInvitation = { id: number; companyId: number; companyName: string; sentAt: string; expiresAt: string };
+export type ProjectDocument = {
+  id: string;
+  phaseId: number;
+  fileName: string;
+  contentType: string;
+  length: number;
+  status: string;
+  createdBy: number;
+  createdByDisplayName: string;
+  createdAt: string;
+  uploadedAt: string | null;
+};
+export type UploadGrant = { url: string; expiresAt: string; requiredHeaders: Record<string, string> };
+export type PendingDocumentUpload = { documentId: string; storedObjectId: string; upload: UploadGrant };
+export type CompleteDocumentUpload = { document: ProjectDocument };
 
 export class ClientManagementApiError extends Error {
   constructor(message: string, public status: number, public fieldErrors: Record<string, string> = {}) {
@@ -60,6 +75,26 @@ export const updateProjectPhases = (id: string, body: { phaseCodes: string[]; cu
 export const updateMembers = (id: string, employeeIds: number[]) => request<Project>(`/api/projects/${id}/members`, json("PUT", { employeeIds }));
 export const archiveProject = (id: string) => request<void>(`/api/projects/${id}/archive`, { method: "POST" });
 export const reactivateProject = (id: string) => request<void>(`/api/projects/${id}/reactivate`, { method: "POST" });
+export const getProjectDocuments = (id: string) => request<ProjectDocument[]>(`/api/projects/${id}/documents`);
+export const createProjectDocumentUpload = (projectId: string, phaseId: string, file: File) => request<PendingDocumentUpload>(
+  `/api/projects/${projectId}/phases/${phaseId}/documents/uploads`,
+  json("POST", { fileName: file.name, contentType: file.type || "application/octet-stream", length: file.size }),
+);
+export async function putProjectDocument(upload: UploadGrant, file: File) {
+  const response = await fetch(upload.url, { method: "PUT", headers: upload.requiredHeaders, body: file });
+  if (!response.ok) throw new ClientManagementApiError(`Não foi possível enviar ${file.name}.`, response.status);
+}
+export const completeProjectDocumentUpload = (projectId: string, documentId: string) => request<CompleteDocumentUpload>(
+  `/api/projects/${projectId}/documents/${documentId}/complete`, { method: "POST" },
+);
+export async function uploadProjectDocument(projectId: string, phaseId: string, file: File) {
+  const pending = await createProjectDocumentUpload(projectId, phaseId, file);
+  await putProjectDocument(pending.upload, file);
+  return (await completeProjectDocumentUpload(projectId, pending.documentId)).document;
+}
+export const deleteProjectDocument = (projectId: string, documentId: string) => request<void>(
+  `/api/projects/${projectId}/documents/${documentId}`, { method: "DELETE" },
+);
 export const getCompanyMembers = () => request<ProjectMember[]>("/api/projects/members");
 export const getClients = () => request<ClientListItem[]>("/api/clients/");
 export const getClient = (id: string) => request<ClientDetail>(`/api/clients/${id}`);

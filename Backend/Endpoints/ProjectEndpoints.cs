@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Blueprint.Api.Contracts;
 using Blueprint.Api.Data;
+using Blueprint.Api.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace Blueprint.Api.Endpoints;
@@ -103,7 +104,7 @@ public static class ProjectEndpoints
         project.UpdatedAt = DateTimeOffset.UtcNow; project.UpdatedBy = access.UserId; await db.SaveChangesAsync(ct); await db.Entry(project).Collection(x => x.Members).Query().Include(x => x.Employee).LoadAsync(ct); return TypedResults.Ok(ToResponse(project, access));
     }
 
-    private static async Task<IResult> UpdatePhases(long id, UpdateProjectPhasesRequest? request, ClaimsPrincipal principal, BlueprintDbContext db, CancellationToken ct)
+    private static async Task<IResult> UpdatePhases(long id, UpdateProjectPhasesRequest? request, ClaimsPrincipal principal, BlueprintDbContext db, ProjectPhaseService phaseService, CancellationToken ct)
     {
         var access = await Access.ForUser(principal, db, ct);
         if (access is null) return TypedResults.NotFound();
@@ -117,12 +118,16 @@ public static class ProjectEndpoints
         if (project is null || !CanEditTimeline(project, access)) return TypedResults.NotFound();
 
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        project.Phases.Clear();
-        await db.SaveChangesAsync(ct);
-        foreach (var phase in BuildPhases(phaseCodes, request!.CurrentPhaseIndex)) project.Phases.Add(phase);
         project.UpdatedAt = DateTimeOffset.UtcNow;
         project.UpdatedBy = access.UserId;
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await phaseService.ReconcileAsync(project, phaseCodes, request!.CurrentPhaseIndex, ct);
+        }
+        catch (PhaseHasDocumentsException exception)
+        {
+            return TypedResults.Conflict(new AdministrationErrorResponse(exception.Message));
+        }
         await transaction.CommitAsync(ct);
         return TypedResults.Ok(ToResponse(project, access));
     }

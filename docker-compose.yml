@@ -21,9 +21,47 @@ services:
       - "1818:1818"
     environment:
       ConnectionStrings__DefaultConnection: "Host=postgresdb;Port=7584;Database=blueprint;Username=blueprint;Password=blueprint_dev_password"
+      ObjectStorage__Endpoint: "http://minio:9000"
+      ObjectStorage__PublicEndpoint: "http://localhost:9000"
+      ObjectStorage__Region: "us-east-1"
+      ObjectStorage__Bucket: "blueprint-private"
+      ObjectStorage__AccessKey: "blueprint_dev"
+      ObjectStorage__SecretKey: "blueprint_dev_password"
+      ObjectStorage__ForcePathStyle: "true"
     depends_on:
       postgresdb:
         condition: service_healthy
+      minio-bootstrap:
+        condition: service_completed_successfully
+
+  minio:
+    image: minio/minio:RELEASE.2025-07-23T15-54-02Z
+    command: server /data --console-address ":9001"
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    environment:
+      MINIO_ROOT_USER: blueprint_dev
+      MINIO_ROOT_PASSWORD: blueprint_dev_password
+    volumes:
+      - blueprint-objects:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio-bootstrap:
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        mc alias set local http://minio:9000 blueprint_dev blueprint_dev_password &&
+        mc mb --ignore-existing local/blueprint-private &&
+        mc anonymous set none local/blueprint-private
 
   postgresdb:
     build:
@@ -45,3 +83,5 @@ volumes:
     name: blueprint-frontend-node-modules
   blueprint-db:
     name: blueprint-db
+  blueprint-objects:
+    name: blueprint-objects

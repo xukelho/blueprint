@@ -19,6 +19,8 @@ public sealed class BlueprintDbContext(DbContextOptions<BlueprintDbContext> opti
     public DbSet<ProjectClient> ProjectClients => Set<ProjectClient>();
     public DbSet<ProjectMember> ProjectMembers => Set<ProjectMember>();
     public DbSet<ProjectPhase> ProjectPhases => Set<ProjectPhase>();
+    public DbSet<StoredObject> StoredObjects => Set<StoredObject>();
+    public DbSet<ProjectDocument> ProjectDocuments => Set<ProjectDocument>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -32,6 +34,7 @@ public sealed class BlueprintDbContext(DbContextOptions<BlueprintDbContext> opti
         ConfigureCompanyClients(modelBuilder);
         ConfigureClientInvitations(modelBuilder);
         ConfigureProjects(modelBuilder);
+        ConfigureProjectDocuments(modelBuilder);
     }
 
     private static void ConfigureRoles(ModelBuilder modelBuilder)
@@ -291,8 +294,65 @@ public sealed class BlueprintDbContext(DbContextOptions<BlueprintDbContext> opti
         phase.Property(candidate => candidate.Position).HasColumnName("position").IsRequired();
         phase.Property(candidate => candidate.IsCurrent).HasColumnName("is_current").HasDefaultValue(false).IsRequired();
         phase.HasIndex(candidate => new { candidate.ProjectId, candidate.Position }).IsUnique();
+        phase.HasAlternateKey(candidate => new { candidate.ProjectId, candidate.Id });
         phase.HasIndex(candidate => candidate.ProjectId).HasFilter("is_current").IsUnique();
         phase.HasOne(candidate => candidate.Project).WithMany(candidate => candidate.Phases).HasForeignKey(candidate => candidate.ProjectId).OnDelete(DeleteBehavior.Cascade);
+    }
+
+    private static void ConfigureProjectDocuments(ModelBuilder modelBuilder)
+    {
+        var storedObject = modelBuilder.Entity<StoredObject>();
+        storedObject.ToTable("stored_objects", table => table.HasCheckConstraint("CK_stored_objects_expected_length", "expected_length >= 0"));
+        storedObject.HasKey(candidate => candidate.Id);
+        storedObject.HasAlternateKey(candidate => new { candidate.ProjectId, candidate.Id });
+        storedObject.Property(candidate => candidate.Id).HasColumnName("id").ValueGeneratedNever();
+        storedObject.Property(candidate => candidate.ProjectId).HasColumnName("project_id").IsRequired();
+        storedObject.Property(candidate => candidate.ObjectKey).HasColumnName("object_key").HasMaxLength(512).IsRequired();
+        storedObject.HasIndex(candidate => candidate.ObjectKey).IsUnique();
+        storedObject.Property(candidate => candidate.FileName).HasColumnName("file_name").HasMaxLength(512).IsRequired();
+        storedObject.Property(candidate => candidate.ContentType).HasColumnName("content_type").HasMaxLength(256).IsRequired();
+        storedObject.Property(candidate => candidate.ExpectedLength).HasColumnName("expected_length").IsRequired();
+        storedObject.Property(candidate => candidate.VerifiedLength).HasColumnName("verified_length");
+        storedObject.Property(candidate => candidate.ETag).HasColumnName("etag").HasMaxLength(256);
+        storedObject.Property(candidate => candidate.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(32).IsRequired();
+        storedObject.Property(candidate => candidate.UploadExpiresAt).HasColumnName("upload_expires_at").HasColumnType("timestamp with time zone").IsRequired();
+        storedObject.Property(candidate => candidate.UploadedAt).HasColumnName("uploaded_at").HasColumnType("timestamp with time zone");
+        storedObject.Property(candidate => candidate.DeletionRequestedAt).HasColumnName("deletion_requested_at").HasColumnType("timestamp with time zone");
+        storedObject.Property(candidate => candidate.DeletedAt).HasColumnName("deleted_at").HasColumnType("timestamp with time zone");
+        storedObject.Property(candidate => candidate.MaintenanceAttempts).HasColumnName("maintenance_attempts").HasDefaultValue(0).IsRequired();
+        storedObject.Property(candidate => candidate.RetryAfter).HasColumnName("retry_after").HasColumnType("timestamp with time zone");
+        storedObject.Property(candidate => candidate.LastStorageError).HasColumnName("last_storage_error").HasMaxLength(2000);
+        storedObject.Property(candidate => candidate.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone").IsRequired();
+        storedObject.Property(candidate => candidate.CreatedBy).HasColumnName("created_by").IsRequired();
+        storedObject.Property(candidate => candidate.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone").IsRequired();
+        storedObject.Property(candidate => candidate.UpdatedBy).HasColumnName("updated_by").IsRequired();
+        storedObject.HasOne(candidate => candidate.Project).WithMany(candidate => candidate.StoredObjects)
+            .HasForeignKey(candidate => candidate.ProjectId).OnDelete(DeleteBehavior.Restrict);
+
+        var document = modelBuilder.Entity<ProjectDocument>();
+        document.ToTable("project_documents");
+        document.HasKey(candidate => candidate.Id);
+        document.Property(candidate => candidate.Id).HasColumnName("id").ValueGeneratedNever();
+        document.Property(candidate => candidate.ProjectId).HasColumnName("project_id").IsRequired();
+        document.Property(candidate => candidate.PhaseId).HasColumnName("phase_id").IsRequired();
+        document.Property(candidate => candidate.StoredObjectId).HasColumnName("stored_object_id").IsRequired();
+        document.Property(candidate => candidate.IsDeleted).HasColumnName("is_deleted").HasDefaultValue(false).IsRequired();
+        document.Property(candidate => candidate.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone").IsRequired();
+        document.Property(candidate => candidate.CreatedBy).HasColumnName("created_by").IsRequired();
+        document.Property(candidate => candidate.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone").IsRequired();
+        document.Property(candidate => candidate.UpdatedBy).HasColumnName("updated_by").IsRequired();
+        document.Property(candidate => candidate.DeletedAt).HasColumnName("deleted_at").HasColumnType("timestamp with time zone");
+        document.Property(candidate => candidate.DeletedBy).HasColumnName("deleted_by");
+        document.HasIndex(candidate => new { candidate.ProjectId, candidate.PhaseId });
+        document.HasIndex(candidate => candidate.StoredObjectId).IsUnique();
+        document.HasOne(candidate => candidate.Project).WithMany(candidate => candidate.Documents)
+            .HasForeignKey(candidate => candidate.ProjectId).OnDelete(DeleteBehavior.Restrict);
+        document.HasOne(candidate => candidate.Phase).WithMany(candidate => candidate.Documents)
+            .HasForeignKey(candidate => new { candidate.ProjectId, candidate.PhaseId })
+            .HasPrincipalKey(candidate => new { candidate.ProjectId, candidate.Id }).OnDelete(DeleteBehavior.Restrict);
+        document.HasOne(candidate => candidate.StoredObject).WithMany(candidate => candidate.Documents)
+            .HasForeignKey(candidate => new { candidate.ProjectId, candidate.StoredObjectId })
+            .HasPrincipalKey(candidate => new { candidate.ProjectId, candidate.Id }).OnDelete(DeleteBehavior.Restrict);
     }
 
     private static void ConfigureProfileProperties<TProfile>(
