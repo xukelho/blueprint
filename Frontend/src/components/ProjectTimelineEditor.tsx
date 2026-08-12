@@ -2,7 +2,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { CollisionDetection, DndContext, DragEndEvent, DragOverlay, DragStartEvent, KeyboardSensor, PointerSensor, pointerWithin, rectIntersection, useDraggable, useDroppable, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, arrayMove, rectSortingStrategy, sortableKeyboardCoordinates, useSortable } from "@dnd-kit/sortable";
 import { Flag, Plus, Trash2 } from "lucide-react";
-import { CSSProperties, ReactNode, useCallback, useLayoutEffect, useRef, useState } from "react";
+import { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { PROJECT_PHASES, phaseDefinition, phaseLabel } from "../projectPhases";
 
 export type TimelinePhase = { id: string; code: string };
@@ -116,8 +116,80 @@ export function ProjectTimelineEditor({ phases, currentPhaseId, onPhasesChange, 
   return <div className="project-timeline-editor"><div className="project-timeline-editor__toolbar"><p>Arraste as fases para construir e reorganizar a timeline. Use a bandeira para indicar a fase atual.</p><button type="button" className="secondary-action" onClick={onQuickFill}>Preenchimento rápido</button></div><DndContext sensors={sensors} collisionDetection={timelineCollisionDetection} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => setActive(null)}><div className="project-phase-catalog" aria-label="Fases disponíveis">{PROJECT_PHASES.map((phase) => <CatalogPhase key={phase.code} code={phase.code} onAdd={() => add(phase.code)} />)}</div><div ref={trackRef} className="project-timeline-editor__track"><TimelineDropArea /><TimelineConnectors phases={phases} trackRef={trackRef} itemRefs={itemRefs} />{!phases.length && <p className="mock-empty-state">Arraste ou adicione fases para construir a timeline.</p>}<SortableContext items={phases.map((phase) => phase.id)} strategy={rectSortingStrategy}>{phases.map((phase) => <SortablePhase key={phase.id} phase={phase} isCurrent={currentPhaseId === phase.id} onSetCurrent={() => onCurrentPhaseIdChange(phase.id)} onRemove={() => remove(phase.id)} itemRef={(element) => { if (element) itemRefs.current.set(phase.id, element); else itemRefs.current.delete(phase.id); }} />)}</SortableContext></div><DragOverlay>{active && <ProjectPhaseCard code={active.code} />}</DragOverlay></DndContext></div>;
 }
 
-export function ProjectTimelineView({ phases, currentPhaseId }: { phases: TimelinePhase[]; currentPhaseId: string | null }) {
-  const trackRef = useRef<HTMLDivElement>(null); const itemRefs = useRef(new Map<string, HTMLElement>());
+type TimelineViewProps = {
+  phases: TimelinePhase[];
+  currentPhaseId: string | null;
+  viewedPhaseId?: string | null;
+  expanded?: boolean;
+  onPhaseSelect?: (phaseId: string) => void;
+};
+
+export function ProjectTimelineView({ phases, currentPhaseId, viewedPhaseId = currentPhaseId, expanded = false, onPhaseSelect }: TimelineViewProps) {
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const currentNodeRef = useRef<HTMLButtonElement | null>(null);
+  const dragRef = useRef<{ pointerId: number; startX: number; scrollLeft: number; moved: boolean } | null>(null);
+  const suppressClickRef = useRef(false);
+  const [isPanning, setIsPanning] = useState(false);
   const currentPhaseIndex = phases.findIndex((phase) => phase.id === currentPhaseId);
-  return <div ref={trackRef} className="project-timeline-view"><TimelineConnectors phases={phases} trackRef={trackRef} itemRefs={itemRefs} />{phases.map((phase, index) => <div key={phase.id} ref={(element) => { if (element) itemRefs.current.set(phase.id, element); else itemRefs.current.delete(phase.id); }}><ProjectPhaseCard code={phase.code} isCurrent={currentPhaseId === phase.id} isCompleted={currentPhaseIndex >= 0 && index < currentPhaseIndex} /></div>)}</div>;
+
+  useEffect(() => {
+    currentNodeRef.current?.scrollIntoView?.({ block: "nearest", inline: "center" });
+  }, [currentPhaseId, phases.length]);
+
+  const startPanning = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    dragRef.current = { pointerId: event.pointerId, startX: event.clientX, scrollLeft: event.currentTarget.scrollLeft, moved: false };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+  const pan = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const distance = event.clientX - drag.startX;
+    if (!drag.moved && Math.abs(distance) > 5) { drag.moved = true; setIsPanning(true); }
+    if (drag.moved) event.currentTarget.scrollLeft = drag.scrollLeft - distance;
+  };
+  const stopPanning = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    suppressClickRef.current = drag.moved;
+    dragRef.current = null;
+    setIsPanning(false);
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+    if (drag.moved) window.setTimeout(() => { suppressClickRef.current = false; }, 0);
+  };
+
+  return <div
+    ref={viewportRef}
+    className={`project-timeline-viewport ${isPanning ? "is-panning" : ""}`}
+    aria-label="Timeline do projeto"
+    onPointerDown={startPanning}
+    onPointerMove={pan}
+    onPointerUp={stopPanning}
+    onPointerCancel={stopPanning}
+  >
+    <div className={`project-timeline-view ${expanded ? "is-expanded" : ""}`}>
+      {phases.map((phase, index) => {
+        const definition = phaseDefinition(phase.code); const Icon = definition.icon;
+        const isCurrent = currentPhaseId === phase.id;
+        const isViewed = viewedPhaseId === phase.id;
+        const isCompleted = currentPhaseIndex >= 0 && index < currentPhaseIndex;
+        return <button
+          key={phase.id}
+          ref={isCurrent ? currentNodeRef : undefined}
+          className={`project-timeline-node ${isCompleted ? "is-completed" : ""} ${isCurrent ? "is-current" : ""} ${isViewed ? "is-viewed" : ""}`.trim()}
+          type="button"
+          aria-label={`${definition.label}${isCurrent ? ", fase atual" : ""}`}
+          aria-pressed={isViewed}
+          onClick={() => {
+            if (suppressClickRef.current) { suppressClickRef.current = false; return; }
+            onPhaseSelect?.(phase.id);
+          }}
+        >
+          <span className="project-timeline-node__icon"><Icon size={22} strokeWidth={1.7} aria-hidden="true" /></span>
+          {expanded && <span className="project-timeline-node__label">{definition.label}</span>}
+          {isCurrent && <span className="sr-only">Fase atual</span>}
+        </button>;
+      })}
+    </div>
+  </div>;
 }

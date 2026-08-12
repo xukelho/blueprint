@@ -17,6 +17,7 @@ public static class ProjectEndpoints
         projects.MapPut("/{id:long}/members", UpdateMembers);
         projects.MapPut("/{id:long}/phases", UpdatePhases);
         projects.MapPost("/{id:long}/archive", Archive);
+        projects.MapPost("/{id:long}/reactivate", Reactivate);
         projects.MapGet("/members", ListCompanyMembers);
         return endpoints;
     }
@@ -131,6 +132,13 @@ public static class ProjectEndpoints
         var access = await Access.ForUser(principal, db, ct); if (access is null || !access.IsOwner) return TypedResults.NotFound();
         var project = await db.Projects.SingleOrDefaultAsync(x => x.Id == id && x.CompanyId == access.CompanyId, ct); if (project is null) return TypedResults.NotFound();
         project.IsArchived = true; project.UpdatedAt = DateTimeOffset.UtcNow; project.UpdatedBy = access.UserId; await db.SaveChangesAsync(ct); return TypedResults.NoContent();
+    }
+
+    private static async Task<IResult> Reactivate(long id, ClaimsPrincipal principal, BlueprintDbContext db, CancellationToken ct)
+    {
+        var access = await Access.ForUser(principal, db, ct); if (access is null || !access.IsOwner) return TypedResults.NotFound();
+        var project = await db.Projects.SingleOrDefaultAsync(x => x.Id == id && x.CompanyId == access.CompanyId, ct); if (project is null) return TypedResults.NotFound();
+        project.IsArchived = false; project.UpdatedAt = DateTimeOffset.UtcNow; project.UpdatedBy = access.UserId; await db.SaveChangesAsync(ct); return TypedResults.NoContent();
     }
 
     private static async Task<IResult> ListCompanyMembers(ClaimsPrincipal principal, BlueprintDbContext db, CancellationToken ct)

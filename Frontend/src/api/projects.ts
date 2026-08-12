@@ -59,6 +59,7 @@ export const updateProject = (id: string, body: { title: string; code: string; a
 export const updateProjectPhases = (id: string, body: { phaseCodes: string[]; currentPhaseIndex: number | null }) => request<Project>(`/api/projects/${id}/phases`, json("PUT", body));
 export const updateMembers = (id: string, employeeIds: number[]) => request<Project>(`/api/projects/${id}/members`, json("PUT", { employeeIds }));
 export const archiveProject = (id: string) => request<void>(`/api/projects/${id}/archive`, { method: "POST" });
+export const reactivateProject = (id: string) => request<void>(`/api/projects/${id}/reactivate`, { method: "POST" });
 export const getCompanyMembers = () => request<ProjectMember[]>("/api/projects/members");
 export const getClients = () => request<ClientListItem[]>("/api/clients/");
 export const getClient = (id: string) => request<ClientDetail>(`/api/clients/${id}`);

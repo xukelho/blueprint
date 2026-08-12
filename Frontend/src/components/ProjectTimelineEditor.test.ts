@@ -33,8 +33,17 @@ describe("ProjectTimelineEditor helpers", () => {
   it("renders only phases before the current one as completed", () => {
     render(createElement(ProjectTimelineView, { phases: viewPhases, currentPhaseId: "b" }));
 
-    expect(screen.getByText("Estudos de Viabilidade").closest(".project-phase-card")).toHaveClass("is-completed");
-    expect(screen.getByText("Estudo Prévio").closest(".project-phase-card")).toHaveClass("is-current");
-    expect(screen.getByText("Projeto de Licenciamento").closest(".project-phase-card")).not.toHaveClass("is-completed", "is-current");
+    expect(screen.getByRole("button", { name: "Estudos de Viabilidade" })).toHaveClass("is-completed");
+    expect(screen.getByRole("button", { name: "Estudo Prévio, fase atual" })).toHaveClass("is-current");
+    expect(screen.getByRole("button", { name: "Projeto de Licenciamento" })).not.toHaveClass("is-completed", "is-current");
+    expect(screen.queryByText("Projeto de Licenciamento")).not.toBeInTheDocument();
+  });
+
+  it("reveals labels only in expanded mode", () => {
+    const { rerender } = render(createElement(ProjectTimelineView, { phases: viewPhases, currentPhaseId: "b" }));
+
+    expect(screen.queryByText("Projeto de Licenciamento")).not.toBeInTheDocument();
+    rerender(createElement(ProjectTimelineView, { phases: viewPhases, currentPhaseId: "b", expanded: true }));
+    expect(screen.getByText("Projeto de Licenciamento")).toBeInTheDocument();
   });
 });
