@@ -142,10 +142,10 @@ export function CompanyProjectPage() {
               {!filteredMembers.length && <p className="mock-empty-state">Não existem arquitetos a apresentar.</p>}
             </div>
           </> : <>
-            <div className="project-hero__topline">
-              <div className="project-hero__badges"><span className="project-hero__code">{project.code}</span>{project.isArchived && <span className="project-hero__status is-archived">Arquivado</span>}</div>
+            {(project.isArchived || owner) && <div className="project-hero__topline">
+              {project.isArchived && <span className="project-hero__status is-archived">Arquivado</span>}
               {owner && <button className="project-hero__edit-action" type="button" onClick={startEditing}><Pencil size={16} />Editar projeto</button>}
-            </div>
+            </div>}
             <p className="project-hero__eyebrow">{project.companyName ? `Projeto · ${project.companyName}` : "Projeto de arquitetura"}</p>
             <h1 id="project-title">{project.title}</h1>
             <div className="project-hero__metadata">

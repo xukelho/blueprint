@@ -855,15 +855,14 @@ button { cursor: pointer; }
 }
 .project-hero__content { min-width: 0; align-self: center; padding: 8px 4px; }
 .project-hero__topline, .project-hero__edit-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
-.project-hero__badges { display: flex; align-items: center; gap: 8px; }
-.project-hero__code, .project-hero__status { display: inline-flex; align-items: center; min-height: 26px; padding: 4px 9px; border-radius: 6px; font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
-.project-hero__code { color: #005864; background: #dff1f3; border: 1px solid #bfdee2; }
+.project-hero__status { display: inline-flex; align-items: center; min-height: 26px; padding: 4px 9px; border-radius: 6px; font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
 .project-hero__status { color: #397148; background: #e8f2e9; border: 1px solid #c5ddca; }
 .project-hero__status::before { content: ""; width: 6px; height: 6px; margin-right: 6px; background: currentColor; border-radius: 50%; }
 .project-hero__status.is-archived { color: #7b5b2a; background: #f8efe1; border-color: #e8d3b2; }
 .project-hero__edit-action { display: inline-flex; align-items: center; gap: 7px; padding: 8px 11px; color: #005864; background: rgb(255 255 255 / 72%); border: 1px solid #bcd8dc; border-radius: 7px; font-size: 11px; font-weight: 700; backdrop-filter: blur(5px); }
 .project-hero__edit-action:hover { background: #fff; border-color: #7fb2b9; box-shadow: 0 4px 12px rgb(35 74 79 / 8%); }
-.project-hero__eyebrow { margin: 32px 0 7px; color: #40818a; font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+.project-hero__eyebrow { margin: 0 0 7px; color: #40818a; font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+.project-hero__topline + .project-hero__eyebrow { margin-top: 22px; }
 .project-hero h1 { max-width: 760px; margin: 0; color: #173438; font: 650 38px/46px "Manrope", sans-serif; letter-spacing: -1.4px; }
 .project-hero__metadata { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 22px; margin: 30px 0 0; }
 .project-hero__metadata > div { min-width: 0; display: flex; align-items: center; gap: 10px; }
