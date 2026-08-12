@@ -2,6 +2,7 @@ using Blueprint.Api.Authentication;
 using Blueprint.Api.Data;
 using Blueprint.Api.Endpoints;
 using Blueprint.Api.Services;
+using Blueprint.Api.Storage;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
@@ -18,7 +19,13 @@ builder.Services.AddDbContext<BlueprintDbContext>(
     options => options.UseNpgsql(connectionString));
 builder.Services.AddScoped<ICredentialValidator, DatabaseCredentialValidator>();
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddObjectStorage(builder.Configuration);
+builder.Services.AddScoped<IFileService, FileService>();
+builder.Services.AddScoped<ProjectPhaseService>();
+builder.Services.AddScoped<PhaseRemovalService>();
+builder.Services.AddScoped<FileMaintenanceProcessor>();
 builder.Services.AddHostedService<ClientInvitationExpiryService>();
+builder.Services.AddHostedService<FileMaintenanceService>();
 if (builder.Environment.IsEnvironment("Testing"))
 {
     builder.Services.AddSingleton<IDataProtectionProvider>(

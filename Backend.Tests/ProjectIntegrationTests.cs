@@ -190,6 +190,8 @@ public sealed class ProjectIntegrationTests(PostgreSqlApiFixture fixture)
         var created = await createdResponse.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal(2, created.GetProperty("phases").GetArrayLength());
         Assert.True(created.GetProperty("phases")[1].GetProperty("isCurrent").GetBoolean());
+        var feasibilityId = created.GetProperty("phases")[0].GetProperty("id").GetInt64();
+        var surveyId = created.GetProperty("phases")[1].GetProperty("id").GetInt64();
 
         var projectId = created.GetProperty("id").GetInt64();
         using var invalidResponse = await fixture.Client.PutAsJsonAsync($"/api/projects/{projectId}/phases", new { phaseCodes = new[] { "feasibility-studies" }, currentPhaseIndex = 1 });
@@ -200,6 +202,14 @@ public sealed class ProjectIntegrationTests(PostgreSqlApiFixture fixture)
         var repeated = await repeatedResponse.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal(3, repeated.GetProperty("phases").GetArrayLength());
         Assert.True(repeated.GetProperty("phases")[2].GetProperty("isCurrent").GetBoolean());
+        Assert.Equal(feasibilityId, repeated.GetProperty("phases")[0].GetProperty("id").GetInt64());
+        Assert.Equal(surveyId, repeated.GetProperty("phases")[1].GetProperty("id").GetInt64());
+
+        using var reorderedResponse = await fixture.Client.PutAsJsonAsync($"/api/projects/{projectId}/phases", new { phaseCodes = new[] { "topographic-survey", "feasibility-studies", "feasibility-studies" }, currentPhaseIndex = 0 });
+        Assert.Equal(HttpStatusCode.OK, reorderedResponse.StatusCode);
+        var reordered = await reorderedResponse.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(surveyId, reordered.GetProperty("phases")[0].GetProperty("id").GetInt64());
+        Assert.Equal(feasibilityId, reordered.GetProperty("phases")[1].GetProperty("id").GetInt64());
 
         using var clearedResponse = await fixture.Client.PutAsJsonAsync($"/api/projects/{projectId}/phases", new { phaseCodes = Array.Empty<string>(), currentPhaseIndex = (int?)null });
         Assert.Equal(HttpStatusCode.OK, clearedResponse.StatusCode);

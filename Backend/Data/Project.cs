@@ -17,6 +17,8 @@ public sealed class Project
     public ICollection<ProjectClient> ProjectClients { get; set; } = [];
     public ICollection<ProjectMember> Members { get; set; } = [];
     public ICollection<ProjectPhase> Phases { get; set; } = [];
+    public ICollection<ProjectDocument> Documents { get; set; } = [];
+    public ICollection<StoredObject> StoredObjects { get; set; } = [];
 }
 
 public sealed class ProjectClient
@@ -35,6 +37,7 @@ public sealed class ProjectPhase
     public int Position { get; set; }
     public bool IsCurrent { get; set; }
     public Project? Project { get; set; }
+    public ICollection<ProjectDocument> Documents { get; set; } = [];
 }
 
 public sealed class ProjectMember
