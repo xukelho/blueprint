@@ -1,0 +1,41 @@
+<svg width="1440" height="960" viewBox="0 0 1440 960" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse">
+      <path d="M24 0H0V24" stroke="#4E9CAA" stroke-width=".7"/>
+    </pattern>
+    <pattern id="major-grid" width="120" height="120" patternUnits="userSpaceOnUse">
+      <rect width="120" height="120" fill="url(#grid)"/>
+      <path d="M120 0H0V120" stroke="#287786" stroke-width="1"/>
+    </pattern>
+  </defs>
+  <rect width="1440" height="960" fill="url(#major-grid)"/>
+  <g stroke="#287786" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M846 87H1293V400H1114V542H846V87Z" stroke-width="2"/>
+    <path d="M885 126H1077V270H1254V361H1114V502H885V126Z" stroke-width="1.4"/>
+    <path d="M1077 126V270M1077 270H885M1254 270H1114M1114 361H1254" stroke-width="1.4"/>
+    <path d="M885 215H846M1021 126V87M1114 400H1077M1254 322H1293" stroke-width="4"/>
+    <path d="M908 145A42 42 0 0 1 950 187M1175 342A40 40 0 0 1 1215 302M1077 455A47 47 0 0 1 1030 502" stroke-width="1.2"/>
+    <path d="M810 63V42H1329V63M810 49l8-7M810 49l8 7M1329 49l-8-7M1329 49l-8 7" stroke-width="1"/>
+    <path d="M1320 77H1341V552H1320M1334 77l-7 8M1334 77l-7-8M1334 552l-7-8M1334 552l-7 8" stroke-width="1"/>
+    <path d="M150 625H580V837H150V625Z" stroke-width="2"/>
+    <path d="M150 696H580M258 625V837M470 625V696M470 768V837" stroke-width="1.4"/>
+    <path d="M197 696A47 47 0 0 1 150 743M423 768A47 47 0 0 1 470 721" stroke-width="1.2"/>
+    <path d="M117 600V577H613V600M117 588l8-7M117 588l8 7M613 588l-8-7M613 588l-8 7" stroke-width="1"/>
+    <path d="M694 663H776M694 695H776M694 727H776M694 759H776M694 791H776" stroke-width="2"/>
+    <path d="M706 663V791M728 663V791M750 663V791M772 663V791" stroke-width="1"/>
+  </g>
+  <g fill="#287786" font-family="Arial, sans-serif" font-size="10" letter-spacing="1.2">
+    <text x="1034" y="38">EAST WING · SCALE 1:100</text>
+    <text x="1354" y="320" transform="rotate(90 1354 320)">31.40 M</text>
+    <text x="890" y="198">STUDIO</text>
+    <text x="1135" y="330">COURTYARD</text>
+    <text x="314" y="573">GROUND FLOOR · REVISION 04</text>
+    <text x="180" y="677">ENTRY</text>
+    <text x="496" y="677">WORKSHOP</text>
+    <text x="694" y="644">ELEVATION A-A</text>
+  </g>
+  <g stroke="#287786" stroke-width="1.2">
+    <path d="M694 812H776M705 812V836H765V812M715 812V788H755V812M727 788V766H743V788"/>
+    <path d="M694 836H776"/>
+  </g>
+</svg>

@@ -2526,9 +2526,27 @@ button.mock-client-project-card:disabled { cursor: wait; }
 
 .app-shell {
   --sidebar-width: 256px;
+  position: relative;
+  isolation: isolate;
   min-height: 100vh;
   color: #202124;
   background: #f4f9fb;
+}
+
+.app-shell::before {
+  content: "";
+  position: fixed;
+  z-index: -1;
+  inset: 0 0 0 var(--sidebar-width);
+  pointer-events: none;
+  background-image:
+    linear-gradient(90deg, rgba(244, 249, 251, .84), rgba(244, 249, 251, .93)),
+    url("./assets/architectural-background.svg");
+  background-position: center, center top;
+  background-repeat: no-repeat, repeat;
+  background-size: cover, 1440px 960px;
+  opacity: .7;
+  transition: left .2s ease;
 }
 
 .app-shell--collapsed { --sidebar-width: 72px; }
@@ -2729,6 +2747,7 @@ button.mock-client-project-card:disabled { cursor: wait; }
 .nav-scrim { display: none; }
 
 .dashboard {
+  position: relative;
   min-height: 100vh;
   margin-left: var(--sidebar-width);
   transition: margin-left .2s ease;
