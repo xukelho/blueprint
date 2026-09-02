@@ -289,6 +289,26 @@ button { cursor: pointer; }
 .submit-button:active { transform: translateY(0); }
 .submit-button:disabled { cursor: wait; opacity: .72; transform: none; }
 .form-message { min-height: 18px; margin: 10px 0 0; color: #147d92; font-size: 12px; text-align: center; }
+.quick-login { margin-top: 22px; padding-top: 20px; border-top: 1px solid #d9ded9; }
+.quick-login__heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 11px; }
+.quick-login__heading h3 { margin: 0; color: #243b36; font: 700 13px/18px "Manrope", sans-serif; }
+.quick-login__heading span { padding: 3px 7px; color: #0f6677; background: #e5f3f6; border-radius: 999px; font-size: 9px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+.quick-login__actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.quick-login__actions button {
+  min-height: 42px;
+  padding: 8px;
+  color: #125f6e;
+  background: #fff;
+  border: 1px solid #bad7dd;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 15px;
+  transition: color .2s, background .2s, border-color .2s;
+}
+.quick-login__actions button:hover { color: #fff; background: #147d92; border-color: #147d92; }
+.quick-login__actions button:focus-visible { outline: 3px solid rgba(32,153,178,.2); outline-offset: 2px; }
+.quick-login__actions button:disabled { cursor: wait; opacity: .6; }
 .support-copy { margin: 22px 0 0; color: #78837f; font-size: 12px; text-align: center; }
 .support-copy .text-button { margin-left: 3px; }
 
@@ -310,6 +330,10 @@ button { cursor: pointer; }
   .mobile-brand { display: flex; }
   .login-card { padding: 56px 0 40px; }
   .login-card__heading h2 { font-size: 34px; }
+}
+
+@media (max-width: 460px) {
+  .quick-login__actions { grid-template-columns: 1fr; }
 }
 
 @media (max-height: 720px) and (min-width: 761px) {
