@@ -38,6 +38,15 @@ public static class ProjectDocumentEndpoints
             .Produces(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status502BadGateway)
             .ProducesProblem(StatusCodes.Status503ServiceUnavailable);
+        projects.MapGet("/documents/{documentId:guid}/drawing", GetDrawing)
+            .Produces<DrawingDocumentResponse>()
+            .Produces(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .ProducesProblem(StatusCodes.Status413PayloadTooLarge)
+            .ProducesProblem(StatusCodes.Status415UnsupportedMediaType)
+            .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
+            .ProducesProblem(StatusCodes.Status502BadGateway)
+            .ProducesProblem(StatusCodes.Status503ServiceUnavailable);
         projects.MapPut("/documents/{documentId:guid}/phase", Move)
             .Accepts<MoveDocumentRequest>("application/json")
             .Produces<ProjectDocumentResponse>()
@@ -138,6 +147,30 @@ public static class ProjectDocumentEndpoints
             var grant = await files.CreateDownloadGrantAsync(documentId, ct);
             return TypedResults.Ok(new DownloadGrantResponse(grant.Url, grant.ExpiresAt));
         });
+    }
+
+    private static async Task<IResult> GetDrawing(long projectId, Guid documentId, ClaimsPrincipal principal,
+        BlueprintDbContext db, DrawingPreviewService previews, CancellationToken ct)
+    {
+        var access = await FindAccessAsync(projectId, principal, db, ct);
+        if (access is null) return TypedResults.NotFound();
+        var document = await db.ProjectDocuments.AsNoTracking().Include(candidate => candidate.StoredObject)
+            .SingleOrDefaultAsync(candidate => candidate.ProjectId == projectId && candidate.Id == documentId && !candidate.IsDeleted, ct);
+        if (document is null || (!access.IsProfessional && document.StoredObject!.Status != StoredObjectStatus.Available)) return TypedResults.NotFound();
+        try
+        {
+            return TypedResults.Ok(await previews.GetAsync(document, ct));
+        }
+        catch (DrawingPreviewException exception)
+        {
+            return Results.Problem(title: exception.Message, statusCode: exception.StatusCode,
+                extensions: new Dictionary<string, object?> { ["code"] = exception.Code });
+        }
+        catch (ObjectStoreException exception)
+        {
+            return Results.Problem(title: exception.IsTransient ? "Object storage is temporarily unavailable." : "Object storage request failed.",
+                statusCode: exception.IsTransient ? StatusCodes.Status503ServiceUnavailable : StatusCodes.Status502BadGateway);
+        }
     }
 
     private static async Task<IResult> Move(long projectId, Guid documentId, MoveDocumentRequest? request,
@@ -278,7 +311,13 @@ public static class ProjectDocumentEndpoints
         document.CreatedBy,
         uploaderDisplayName,
         document.CreatedAt,
-        document.StoredObject.UploadedAt);
+        document.StoredObject.UploadedAt,
+        PreviewFor(document.StoredObject.FileName));
+
+    private static DocumentPreviewResponse? PreviewFor(string fileName) =>
+        string.Equals(Path.GetExtension(fileName), ".dxf", StringComparison.OrdinalIgnoreCase)
+            ? new DocumentPreviewResponse("drawing", "dxf")
+            : null;
 
     private static async Task<Dictionary<long, string>> UploaderNamesAsync(IEnumerable<long> userIds, BlueprintDbContext db, CancellationToken ct)
     {

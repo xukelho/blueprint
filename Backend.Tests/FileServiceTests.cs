@@ -180,6 +180,8 @@ public sealed class FileServiceTests
         public Task<ObjectMetadata?> GetMetadataAsync(string key, CancellationToken cancellationToken = default) => Task.FromResult(Metadata.GetValueOrDefault(key));
         public Task<PresignedDownloadGrant> CreateDownloadGrantAsync(string key, string downloadFileName, TimeSpan lifetime, CancellationToken cancellationToken = default) =>
             Task.FromResult(new PresignedDownloadGrant(new Uri($"https://storage.test/{key}"), clock.GetUtcNow().Add(lifetime)));
+        public Task<Stream?> OpenReadAsync(string key, CancellationToken cancellationToken = default) => Task.FromResult<Stream?>(null);
+        public Task PutAsync(string key, Stream content, string contentType, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task DeleteAsync(string key, CancellationToken cancellationToken = default)
         {
             if (DeleteFailuresRemaining-- > 0) throw new ObjectStoreException("temporary", true);

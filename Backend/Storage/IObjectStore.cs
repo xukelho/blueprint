@@ -5,6 +5,8 @@ public interface IObjectStore
     Task<PresignedUploadGrant> CreateUploadGrantAsync(string key, string contentType, TimeSpan lifetime, CancellationToken cancellationToken = default);
     Task<ObjectMetadata?> GetMetadataAsync(string key, CancellationToken cancellationToken = default);
     Task<PresignedDownloadGrant> CreateDownloadGrantAsync(string key, string downloadFileName, TimeSpan lifetime, CancellationToken cancellationToken = default);
+    Task<Stream?> OpenReadAsync(string key, CancellationToken cancellationToken = default);
+    Task PutAsync(string key, Stream content, string contentType, CancellationToken cancellationToken = default);
     Task DeleteAsync(string key, CancellationToken cancellationToken = default);
 }
 

@@ -4,8 +4,9 @@ import { useNavigate, useParams } from "react-router-dom";
 import PortalShell from "../components/PortalShell";
 import { GoogleMapPicker } from "../components/GoogleMapPicker";
 import { ProjectTimelineEditor, ProjectTimelineView, TimelinePhase, newTimelinePhase } from "../components/ProjectTimelineEditor";
-import { ProjectDocuments, ProjectDocumentsByPhase, ProjectFloorPlan, ProjectWorkspacePanel } from "../components/ProjectWorkspace";
-import { archiveProject, deleteProjectDocument, getClients, getCompanyMembers, getProject, getProjectDocuments, Project, ProjectMember, reactivateProject, updateMembers, updateProject, updateProjectPhases, uploadProjectDocument } from "../api/projects";
+import { ProjectDocuments, ProjectDocumentsByPhase, ProjectWorkspacePanel } from "../components/ProjectWorkspace";
+import { ProjectDrawingViewer } from "../components/ProjectDrawingViewer";
+import { archiveProject, deleteProjectDocument, getClients, getCompanyMembers, getProject, getProjectDocumentDrawing, getProjectDocuments, Project, ProjectDocument, ProjectMember, reactivateProject, updateMembers, updateProject, updateProjectPhases, uploadProjectDocument, DrawingDocument } from "../api/projects";
 import { useProfile } from "../profile/ProfileContext";
 import { phaseLabel, PROJECT_PHASES, QUICK_FILL_PHASE_CODES } from "../projectPhases";
 
@@ -46,6 +47,12 @@ export function CompanyProjectPage() {
   const [documents, setDocuments] = useState<ProjectDocumentsByPhase>({});
   const [documentsLoading, setDocumentsLoading] = useState(true);
   const [documentsError, setDocumentsError] = useState("");
+  const [viewerDocumentId, setViewerDocumentId] = useState<string | null>(null);
+  const [viewerPhaseId, setViewerPhaseId] = useState<string | null>(null);
+  const [drawing, setDrawing] = useState<DrawingDocument | null>(null);
+  const [drawingLoading, setDrawingLoading] = useState(false);
+  const [drawingError, setDrawingError] = useState("");
+  const [drawingRetry, setDrawingRetry] = useState(0);
   const [isEditing, setIsEditing] = useState(false);
   const [isTimelineEditing, setIsTimelineEditing] = useState(false);
   const [isTimelineExpanded, setIsTimelineExpanded] = useState(false);
@@ -92,12 +99,34 @@ export function CompanyProjectPage() {
   const projectPhases = useMemo(() => (project?.phases ?? []).map((phase) => ({ id: String(phase.id), code: phase.code })), [project?.phases]);
   const officialCurrentPhaseId = project?.phases?.find((phase) => phase.isCurrent)?.id.toString() ?? null;
   const viewedPhase = projectPhases.find((phase) => phase.id === viewedPhaseId) ?? projectPhases[0] ?? null;
+  const viewedDocuments = viewedPhase ? documents[viewedPhase.id] ?? [] : [];
+  const viewerDocument = viewedDocuments.find((document) => document.id === viewerDocumentId) ?? null;
   const currentPhaseCode = project?.phases?.find((phase) => phase.isCurrent)?.code ?? project?.currentPhaseCode;
   const currentPhaseLabel = phaseLabel(currentPhaseCode) ?? "Sem fase atual";
   const CurrentPhaseIcon = PROJECT_PHASES.find((phase) => phase.code === currentPhaseCode)?.icon ?? Milestone;
   const filteredMembers = useMemo(() => { const normalizedQuery = query.trim().toLocaleLowerCase("pt-PT"); return displayedMembers.filter((member) => member.displayName.toLocaleLowerCase("pt-PT").includes(normalizedQuery)); }, [displayedMembers, query]);
   const hasChanges = Boolean(project) && (Object.entries(projectFormData(project!)).some(([key, value]) => data[key as keyof ProjectFormData] !== value) || !sameMemberIds(selected, project!.members?.map((member) => member.employeeId) ?? []));
   const toggleMember = (employeeId: number, checked: boolean) => setSelected((current) => checked ? [...current, employeeId] : current.filter((memberId) => memberId !== employeeId));
+  const oldestPreview = (items: ProjectDocument[]) => items.filter((document) => document.preview?.kind === "drawing" && document.status === "Available").sort((left, right) => {
+    const leftDate = left.uploadedAt ?? left.createdAt;
+    const rightDate = right.uploadedAt ?? right.createdAt;
+    return leftDate.localeCompare(rightDate) || left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id);
+  })[0] ?? null;
+  useEffect(() => {
+    if (!viewedPhase) { setViewerDocumentId(null); setViewerPhaseId(null); return; }
+    if (viewerPhaseId === viewedPhase.id && viewerDocument) return;
+    setViewerDocumentId(oldestPreview(viewedDocuments)?.id ?? null);
+    setViewerPhaseId(viewedPhase.id);
+  }, [viewedPhase?.id, viewerPhaseId, viewerDocumentId, viewedDocuments]);
+  useEffect(() => {
+    if (!id || !viewerDocument?.preview) { setDrawing(null); setDrawingError(""); setDrawingLoading(false); return; }
+    let active = true;
+    setDrawingLoading(true); setDrawingError("");
+    getProjectDocumentDrawing(id, viewerDocument.id).then((loaded) => { if (active) setDrawing(loaded); })
+      .catch((caught) => { if (active) { setDrawing(null); setDrawingError(caught instanceof Error ? caught.message : "Não foi possível carregar o desenho."); } })
+      .finally(() => { if (active) setDrawingLoading(false); });
+    return () => { active = false; };
+  }, [id, viewerDocument?.id, viewerDocument?.preview?.kind, drawingRetry]);
   const uploadDocument = async (phaseId: string, file: File) => {
     if (!id) throw new Error("Projeto indisponível.");
     const uploaded = await uploadProjectDocument(id, phaseId, file);
@@ -201,8 +230,8 @@ export function CompanyProjectPage() {
             </div>
             {isTimelineEditing ? <><ProjectTimelineEditor phases={timelinePhases} currentPhaseId={currentPhaseId} onPhasesChange={setTimelinePhases} onCurrentPhaseIdChange={setCurrentPhaseId} onQuickFill={() => { setTimelinePhases(QUICK_FILL_PHASE_CODES.map(newTimelinePhase)); setCurrentPhaseId(null); }} /><div className="mock-project-form-actions"><button type="button" className="secondary-action" onClick={cancelTimeline}>Cancelar</button><button type="button" className="primary-action" disabled={isSavingTimeline} onClick={saveTimeline}>{isSavingTimeline ? "A guardar…" : "Guardar timeline"}</button></div></> : projectPhases.length ? <ProjectTimelineView phases={projectPhases} currentPhaseId={officialCurrentPhaseId} viewedPhaseId={viewedPhaseId} expanded={isTimelineExpanded} onPhaseSelect={setViewedPhaseId} /> : <p className="mock-empty-state">Timeline opcional ainda não configurada.</p>}
           </section>
-          <ProjectFloorPlan phaseCode={viewedPhase?.code ?? null} />
-          <ProjectDocuments phases={projectPhases} viewedPhaseId={viewedPhaseId} documents={documents} loading={documentsLoading} error={documentsError} readOnly={project.isArchived} onUploadFile={uploadDocument} onDeleteDocument={removeDocument} />
+          <ProjectDrawingViewer phaseCode={viewedPhase?.code ?? null} document={viewerDocument} drawing={drawing} loading={drawingLoading} error={drawingError} onRetry={() => setDrawingRetry((current) => current + 1)} />
+          <ProjectDocuments phases={projectPhases} viewedPhaseId={viewedPhaseId} documents={documents} loading={documentsLoading} error={documentsError} readOnly={project.isArchived} previewDocumentId={viewerDocumentId} onUploadFile={uploadDocument} onDeleteDocument={removeDocument} onPreviewDocumentSelect={(document) => { setViewerDocumentId(document.id); setViewerPhaseId(String(document.phaseId)); }} />
         </div>
         <ProjectWorkspacePanel projectTitle={project.title} phases={projectPhases} viewedPhaseId={viewedPhaseId} currentUser={profile?.displayName ?? "Utilizador"} documents={documents} onCollapsedChange={setIsWorkspaceCollapsed} />
       </div>

@@ -10,7 +10,8 @@ public sealed record ProjectDocumentResponse(
     long CreatedBy,
     string CreatedByDisplayName,
     DateTimeOffset CreatedAt,
-    DateTimeOffset? UploadedAt);
+    DateTimeOffset? UploadedAt,
+    DocumentPreviewResponse? Preview = null);
 
 public sealed record CreateDocumentUploadRequest(string FileName, string ContentType, long Length);
 public sealed record UploadGrantResponse(Uri Url, DateTimeOffset ExpiresAt, IReadOnlyDictionary<string, string> RequiredHeaders);

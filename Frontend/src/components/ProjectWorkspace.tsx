@@ -121,13 +121,15 @@ type ProjectDocumentsProps = {
   loading?: boolean;
   error?: string;
   readOnly?: boolean;
+  previewDocumentId?: string | null;
   onUploadFile: (phaseId: string, file: File) => Promise<void>;
   onDeleteDocument: (documentId: string) => Promise<void>;
+  onPreviewDocumentSelect?: (document: ProjectDocument) => void;
 };
 
 type PendingFile = { id: string; name: string; size: number };
 
-export function ProjectDocuments({ phases, viewedPhaseId, documents, loading = false, error = "", readOnly = false, onUploadFile, onDeleteDocument }: ProjectDocumentsProps) {
+export function ProjectDocuments({ phases, viewedPhaseId, documents, loading = false, error = "", readOnly = false, previewDocumentId = null, onUploadFile, onDeleteDocument, onPreviewDocumentSelect }: ProjectDocumentsProps) {
   const phase = phases.find((candidate) => candidate.id === viewedPhaseId) ?? null;
   const phaseDocuments = phase ? documents[phase.id] ?? [] : [];
   const [expandedByPhase, setExpandedByPhase] = useState<Record<string, boolean>>(() => Object.fromEntries(phases.map((item) => [item.id, true])));
@@ -242,7 +244,7 @@ export function ProjectDocuments({ phases, viewedPhaseId, documents, loading = f
     {expanded && phase && <div className="project-documents__content" id={panelId}>
       {(error || operationError) && <p className="project-documents__error" role="alert">{operationError || error}</p>}
       {loading ? <div className="project-documents__loading" role="status"><LoaderCircle size={24} aria-hidden="true" />A carregar documentos…</div> : phaseDocuments.length || pendingFiles.length ? <div className="project-documents__list" role="listbox" aria-label="Documentos da fase" aria-multiselectable="true">
-        {phaseDocuments.map((document) => <button type="button" role="option" aria-selected={selectedIds.includes(document.id)} className={selectedIds.includes(document.id) ? "is-selected" : ""} key={document.id} onClick={(event) => selectDocument(event, document.id)}>
+        {phaseDocuments.map((document) => <button type="button" role="option" aria-selected={selectedIds.includes(document.id)} aria-current={previewDocumentId === document.id ? "true" : undefined} className={`${selectedIds.includes(document.id) ? "is-selected" : ""} ${previewDocumentId === document.id ? "is-previewing" : ""}`} key={document.id} onClick={(event) => { selectDocument(event, document.id); onPreviewDocumentSelect?.(document); }}>
           <span className={`project-document__file project-document__file--${documentKind(document.fileName)}`}>{documentIcon(document.fileName)}</span>
           <span className="project-document__name"><strong title={document.fileName}>{document.fileName}</strong><small>{document.createdByDisplayName} · {fileDate(document.uploadedAt ?? document.createdAt)}</small><small>{fileSize(document.length)}{document.status !== "Available" ? ` · ${document.status}` : ""}</small></span>
         </button>)}

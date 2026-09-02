@@ -36,6 +36,7 @@ public sealed class FileMaintenanceProcessor(BlueprintDbContext db, IObjectStore
             try
             {
                 await objectStore.DeleteAsync(storedObject.ObjectKey, cancellationToken);
+                await objectStore.DeleteAsync(DrawingPreviewService.ArtifactKey(storedObject), cancellationToken);
                 storedObject.Status = StoredObjectStatus.Deleted;
                 storedObject.DeletedAt = timeProvider.GetUtcNow();
                 storedObject.RetryAfter = null;
