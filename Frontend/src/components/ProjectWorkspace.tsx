@@ -1,5 +1,5 @@
 import { ChangeEvent, DragEvent, FormEvent, KeyboardEvent, MouseEvent, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Box, ChevronDown, File, FileArchive, FileImage, FilePlus2, FileSpreadsheet, FileText, FileType2, Folder, FolderOpen, LoaderCircle, LockKeyhole, MessageSquare, MessagesSquare, PanelRightClose, PanelRightOpen, PanelsTopLeft, Plus, Presentation, Send, Trash2, X } from "lucide-react";
+import { ArrowLeft, Box, ChevronDown, Download, File, FileArchive, FileImage, FilePlus2, FileSpreadsheet, FileText, FileType2, Folder, FolderOpen, LoaderCircle, LockKeyhole, MessageSquare, MessagesSquare, PanelRightClose, PanelRightOpen, PanelsTopLeft, Plus, Presentation, Send, Trash2, X } from "lucide-react";
 import type { ProjectDocument } from "../api/projects";
 import { phaseLabel } from "../projectPhases";
 import type { TimelinePhase } from "./ProjectTimelineEditor";
@@ -74,12 +74,13 @@ type ProjectDocumentsProps = {
   previewDocumentId?: string | null;
   onUploadFile: (phaseId: string, file: File) => Promise<void>;
   onDeleteDocument: (documentId: string) => Promise<void>;
+  onDownloadDocument?: (document: ProjectDocument) => Promise<void>;
   onPreviewDocumentSelect?: (document: ProjectDocument) => void;
 };
 
 type PendingFile = { id: string; name: string; size: number };
 
-export function ProjectDocuments({ phases, viewedPhaseId, documents, loading = false, error = "", readOnly = false, previewDocumentId = null, onUploadFile, onDeleteDocument, onPreviewDocumentSelect }: ProjectDocumentsProps) {
+export function ProjectDocuments({ phases, viewedPhaseId, documents, loading = false, error = "", readOnly = false, previewDocumentId = null, onUploadFile, onDeleteDocument, onDownloadDocument, onPreviewDocumentSelect }: ProjectDocumentsProps) {
   const phase = phases.find((candidate) => candidate.id === viewedPhaseId) ?? null;
   const phaseDocuments = phase ? documents[phase.id] ?? [] : [];
   const [expandedByPhase, setExpandedByPhase] = useState<Record<string, boolean>>(() => Object.fromEntries(phases.map((item) => [item.id, true])));
@@ -90,6 +91,7 @@ export function ProjectDocuments({ phases, viewedPhaseId, documents, loading = f
   const [dragging, setDragging] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [downloadingDocumentIds, setDownloadingDocumentIds] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const dragDepth = useRef(0);
   const expanded = phase ? expandedByPhase[phase.id] ?? true : false;
@@ -154,6 +156,15 @@ export function ProjectDocuments({ phases, viewedPhaseId, documents, loading = f
     if (failedIds.length) setOperationError(`Não foi possível eliminar ${failedIds.length === 1 ? "o ficheiro selecionado" : `${failedIds.length} ficheiros`}.`);
   };
 
+  const downloadDocument = async (document: ProjectDocument) => {
+    if (!onDownloadDocument || downloadingDocumentIds.includes(document.id)) return;
+    setOperationError("");
+    setDownloadingDocumentIds((current) => [...current, document.id]);
+    try { await onDownloadDocument(document); }
+    catch { setOperationError(`Não foi possível transferir ${document.fileName}.`); }
+    finally { setDownloadingDocumentIds((current) => current.filter((id) => id !== document.id)); }
+  };
+
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     const target = event.target as HTMLElement;
     if (event.key !== "Delete" || !selectedIds.length || readOnly || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable) return;
@@ -194,10 +205,16 @@ export function ProjectDocuments({ phases, viewedPhaseId, documents, loading = f
     {expanded && phase && <div className="project-documents__content" id={panelId}>
       {(error || operationError) && <p className="project-documents__error" role="alert">{operationError || error}</p>}
       {loading ? <div className="project-documents__loading" role="status"><LoaderCircle size={24} aria-hidden="true" />A carregar documentos…</div> : phaseDocuments.length || pendingFiles.length ? <div className="project-documents__list" role="listbox" aria-label="Documentos da fase" aria-multiselectable="true">
-        {phaseDocuments.map((document) => <button type="button" role="option" aria-selected={selectedIds.includes(document.id)} aria-current={previewDocumentId === document.id ? "true" : undefined} className={`${selectedIds.includes(document.id) ? "is-selected" : ""} ${previewDocumentId === document.id ? "is-previewing" : ""}`} key={document.id} onClick={(event) => { selectDocument(event, document.id); onPreviewDocumentSelect?.(document); }}>
+        {phaseDocuments.map((document) => {
+          const downloading = downloadingDocumentIds.includes(document.id);
+          return <div className={`project-document ${selectedIds.includes(document.id) ? "is-selected" : ""} ${previewDocumentId === document.id ? "is-previewing" : ""}`} key={document.id}>
+            <button type="button" role="option" aria-selected={selectedIds.includes(document.id)} aria-current={previewDocumentId === document.id ? "true" : undefined} className="project-document__select" onClick={(event) => { selectDocument(event, document.id); onPreviewDocumentSelect?.(document); }}>
           <span className={`project-document__file project-document__file--${documentKind(document.fileName)}`}>{documentIcon(document.fileName)}</span>
           <span className="project-document__name"><strong title={document.fileName}>{document.fileName}</strong><small>{document.createdByDisplayName} · {fileDate(document.uploadedAt ?? document.createdAt)}</small><small>{fileSize(document.length)}{document.status !== "Available" ? ` · ${document.status}` : ""}</small></span>
-        </button>)}
+            </button>
+            {document.status === "Available" && onDownloadDocument && <button type="button" className="project-document__download" aria-label={downloading ? `A transferir ${document.fileName}` : `Transferir ${document.fileName}`} title={`Transferir ${document.fileName}`} disabled={downloading} onClick={() => void downloadDocument(document)}>{downloading ? <LoaderCircle className="project-document__download-spinner" size={16} aria-hidden="true" /> : <Download size={16} aria-hidden="true" />}</button>}
+          </div>;
+        })}
         {pendingFiles.map((pending) => <div className="project-document--uploading" role="status" key={pending.id}>
           <span className="project-document__file"><LoaderCircle size={25} aria-hidden="true" /></span>
           <span className="project-document__name"><strong title={pending.name}>{pending.name}</strong><small>A carregar… · {fileSize(pending.size)}</small></span>

@@ -6,7 +6,7 @@ import { GoogleMapPicker } from "../components/GoogleMapPicker";
 import { ProjectTimelineEditor, ProjectTimelineView, TimelinePhase, newTimelinePhase } from "../components/ProjectTimelineEditor";
 import { ProjectDocuments, ProjectDocumentsByPhase, ProjectWorkspacePanel } from "../components/ProjectWorkspace";
 import { ProjectDocumentViewer } from "../components/ProjectDocumentViewer";
-import { archiveProject, deleteProjectDocument, getClients, getCompanyMembers, getProject, getProjectDocumentDrawing, getProjectDocuments, Project, ProjectDocument, ProjectMember, reactivateProject, updateMembers, updateProject, updateProjectPhases, uploadProjectDocument, DrawingDocument } from "../api/projects";
+import { archiveProject, createProjectDocumentDownload, deleteProjectDocument, getClients, getCompanyMembers, getProject, getProjectDocumentDrawing, getProjectDocuments, Project, ProjectDocument, ProjectMember, reactivateProject, updateMembers, updateProject, updateProjectPhases, uploadProjectDocument, DrawingDocument } from "../api/projects";
 import { useProfile } from "../profile/ProfileContext";
 import { phaseLabel, PROJECT_PHASES, QUICK_FILL_PHASE_CODES } from "../projectPhases";
 
@@ -142,6 +142,17 @@ export function CompanyProjectPage() {
     await deleteProjectDocument(id, documentId);
     setDocuments((current) => Object.fromEntries(Object.entries(current).map(([phaseId, phaseDocuments]) => [phaseId, phaseDocuments.filter((document) => document.id !== documentId)])));
   };
+  const downloadDocument = async (projectDocument: ProjectDocument) => {
+    if (!id) throw new Error("Projeto indisponível.");
+    const grant = await createProjectDocumentDownload(id, projectDocument.id);
+    const link = window.document.createElement("a");
+    link.href = grant.url;
+    link.download = projectDocument.fileName;
+    link.style.display = "none";
+    window.document.body.append(link);
+    link.click();
+    link.remove();
+  };
   const startEditing = () => { setNotice(null); setQuery(""); setIsEditing(true); };
   const discardChanges = () => { if (project) { setData(projectFormData(project)); setSelected(project.members?.map((member) => member.employeeId) ?? []); } setQuery(""); setDiscardDialogOpen(false); setIsEditing(false); };
   const cancelEditing = () => { if (hasChanges) setDiscardDialogOpen(true); else discardChanges(); };
@@ -234,7 +245,7 @@ export function CompanyProjectPage() {
             {isTimelineEditing ? <><ProjectTimelineEditor phases={timelinePhases} currentPhaseId={currentPhaseId} onPhasesChange={setTimelinePhases} onCurrentPhaseIdChange={setCurrentPhaseId} onQuickFill={() => { setTimelinePhases(QUICK_FILL_PHASE_CODES.map(newTimelinePhase)); setCurrentPhaseId(null); }} /><div className="mock-project-form-actions"><button type="button" className="secondary-action" onClick={cancelTimeline}>Cancelar</button><button type="button" className="primary-action" disabled={isSavingTimeline} onClick={saveTimeline}>{isSavingTimeline ? "A guardar…" : "Guardar timeline"}</button></div></> : projectPhases.length ? <ProjectTimelineView phases={projectPhases} currentPhaseId={officialCurrentPhaseId} viewedPhaseId={viewedPhaseId} expanded={isTimelineExpanded} onPhaseSelect={setViewedPhaseId} /> : <p className="mock-empty-state">Timeline opcional ainda não configurada.</p>}
           </section>
         <ProjectDocumentViewer phaseCode={viewedPhase?.code ?? null} document={viewerDocument} drawing={documentPreview} loading={documentPreviewLoading} error={documentPreviewError} onRetry={() => setDocumentPreviewRetry((current) => current + 1)} isMaximized={isDocumentViewerMaximized} onMaximizedChange={setIsDocumentViewerMaximized} />
-        <ProjectDocuments phases={projectPhases} viewedPhaseId={viewedPhaseId} documents={documents} loading={documentsLoading} error={documentsError} readOnly={project.isArchived} previewDocumentId={viewerDocumentId} onUploadFile={uploadDocument} onDeleteDocument={removeDocument} onPreviewDocumentSelect={(document) => { setViewerDocumentId(document.id); setViewerPhaseId(String(document.phaseId)); }} />
+        <ProjectDocuments phases={projectPhases} viewedPhaseId={viewedPhaseId} documents={documents} loading={documentsLoading} error={documentsError} readOnly={project.isArchived} previewDocumentId={viewerDocumentId} onUploadFile={uploadDocument} onDeleteDocument={removeDocument} onDownloadDocument={downloadDocument} onPreviewDocumentSelect={(document) => { setViewerDocumentId(document.id); setViewerPhaseId(String(document.phaseId)); }} />
         <ProjectWorkspacePanel projectTitle={project.title} phases={projectPhases} viewedPhaseId={viewedPhaseId} currentUser={profile?.displayName ?? "Utilizador"} documents={documents} onCollapsedChange={setIsWorkspaceCollapsed} />
       </div>
       {owner && isEditing && <div className="mock-project-form-actions project-page-actions"><button className="secondary-action" type="button" onClick={() => setArchiveStatusDialogOpen(true)}>{project.isArchived ? "Reativar" : "Arquivar"}</button><button className="secondary-action" type="button" onClick={cancelEditing}>Cancelar</button><button className="primary-action" type="submit" form="project-details-form" disabled={isSaving}>{isSaving ? "A guardar…" : "Guardar"}</button></div>}

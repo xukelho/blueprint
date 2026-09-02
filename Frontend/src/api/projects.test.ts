@@ -1,9 +1,18 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { uploadProjectDocument } from "./projects";
+import { createProjectDocumentDownload, uploadProjectDocument } from "./projects";
 
 afterEach(() => vi.restoreAllMocks());
 
 describe("project document API", () => {
+  it("creates a temporary download grant for a document", async () => {
+    const grant = { url: "https://storage.test/download", expiresAt: "2026-08-12T10:15:00Z" };
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify(grant), { headers: { "Content-Type": "application/json" } }));
+
+    await expect(createProjectDocumentDownload("1", "document-1")).resolves.toEqual(grant);
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/projects/1/documents/document-1/download", { method: "POST" });
+  });
+
   it("uses a binary MIME fallback and forwards every required upload header", async () => {
     const completedDocument = { id: "document-1", phaseId: 12, fileName: "drawing.unknown", contentType: "application/octet-stream", length: 3, status: "Available", createdBy: 1, createdByDisplayName: "Ana", createdAt: "2026-08-12T10:00:00Z", uploadedAt: "2026-08-12T10:00:01Z" };
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {

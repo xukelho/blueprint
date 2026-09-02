@@ -79,6 +79,44 @@ describe("ProjectDocuments", () => {
     expect(second).toHaveAttribute("aria-selected", "true");
   });
 
+  it("downloads an available document without changing its selection or preview", async () => {
+    const user = userEvent.setup();
+    const onDownloadDocument = vi.fn().mockResolvedValue(undefined);
+    const onPreviewDocumentSelect = vi.fn();
+    render(<ProjectDocuments phases={phases} viewedPhaseId="11" documents={documents} onUploadFile={vi.fn()} onDeleteDocument={vi.fn()} onDownloadDocument={onDownloadDocument} onPreviewDocumentSelect={onPreviewDocumentSelect} />);
+
+    await user.click(screen.getByRole("button", { name: "Transferir one.pdf" }));
+
+    expect(onDownloadDocument).toHaveBeenCalledWith(documents["11"][0]);
+    expect(onPreviewDocumentSelect).not.toHaveBeenCalled();
+    expect(screen.getByRole("option", { name: /one\.pdf/ })).toHaveAttribute("aria-selected", "false");
+  });
+
+  it("disables an in-progress download, reports failures, and hides unavailable downloads", async () => {
+    const user = userEvent.setup();
+    let resolveDownload: (() => void) | undefined;
+    const onDownloadDocument = vi.fn(() => new Promise<void>((resolve) => { resolveDownload = resolve; }));
+    const { rerender } = render(<ProjectDocuments phases={phases} viewedPhaseId="11" documents={documents} onUploadFile={vi.fn()} onDeleteDocument={vi.fn()} onDownloadDocument={onDownloadDocument} />);
+    const download = screen.getByRole("button", { name: "Transferir one.pdf" });
+
+    await user.click(download);
+    await user.click(download);
+    expect(onDownloadDocument).toHaveBeenCalledTimes(1);
+    expect(download).toBeDisabled();
+    resolveDownload?.();
+    await waitFor(() => expect(download).not.toBeDisabled());
+
+    rerender(<ProjectDocuments phases={phases} viewedPhaseId="11" documents={{ "11": [{ ...documents["11"][0], id: "failed", fileName: "failed.pdf" }] }} onUploadFile={vi.fn()} onDeleteDocument={vi.fn()} onDownloadDocument={vi.fn().mockRejectedValue(new Error("failed"))} />);
+    await user.click(screen.getByRole("button", { name: "Transferir failed.pdf" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Não foi possível transferir failed.pdf.");
+
+    rerender(<ProjectDocuments phases={phases} viewedPhaseId="11" documents={{ "11": [{ ...documents["11"][0], status: "Pending" }] }} onUploadFile={vi.fn()} onDeleteDocument={vi.fn()} onDownloadDocument={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: "Transferir one.pdf" })).not.toBeInTheDocument();
+
+    rerender(<ProjectDocuments phases={phases} viewedPhaseId="11" documents={{ "11": [documents["11"][0]] }} readOnly onUploadFile={vi.fn()} onDeleteDocument={vi.fn()} onDownloadDocument={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Transferir one.pdf" })).toBeInTheDocument();
+  });
+
   it("uses category classes for common formats and a generic fallback", () => {
     const categorized: ProjectDocumentsByPhase = { "11": [
       document("pdf", "plan.pdf"), document("word", "brief.odt"), document("sheet", "costs.xlsx"),
