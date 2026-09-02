@@ -77,6 +77,45 @@ public sealed class S3ObjectStore(IAmazonS3 client, IAmazonS3 grantClient, IOpti
         }
     }
 
+    public async Task<Stream?> OpenReadAsync(string key, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var response = await client.GetObjectAsync(_options.Bucket, key, cancellationToken);
+            var stream = new MemoryStream();
+            await response.ResponseStream.CopyToAsync(stream, cancellationToken);
+            stream.Position = 0;
+            return stream;
+        }
+        catch (AmazonS3Exception exception) when (exception.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+        catch (AmazonS3Exception exception)
+        {
+            throw Translate("Could not read object content.", exception);
+        }
+    }
+
+    public async Task PutAsync(string key, Stream content, string contentType, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await client.PutObjectAsync(new PutObjectRequest
+            {
+                BucketName = _options.Bucket,
+                Key = key,
+                InputStream = content,
+                ContentType = contentType,
+                AutoCloseStream = false
+            }, cancellationToken);
+        }
+        catch (AmazonS3Exception exception)
+        {
+            throw Translate("Could not write object content.", exception);
+        }
+    }
+
     public async Task DeleteAsync(string key, CancellationToken cancellationToken = default)
     {
         try

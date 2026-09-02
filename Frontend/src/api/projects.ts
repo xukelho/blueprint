@@ -17,7 +17,15 @@ export type ProjectDocument = {
   createdByDisplayName: string;
   createdAt: string;
   uploadedAt: string | null;
+  preview?: { kind: "drawing"; sourceFormat: string } | null;
 };
+export type DrawingPoint = { x: number; y: number };
+export type DrawingBounds = { minX: number; minY: number; maxX: number; maxY: number };
+export type DrawingStyle = { stroke: string; lineWeight: number; dash?: number[] | null; fill?: string | null };
+export type DrawingSegment = { kind: string; start?: DrawingPoint | null; end?: DrawingPoint | null; center?: DrawingPoint | null; radius?: number | null; radiusY?: number | null; rotation?: number | null; startAngle?: number | null; endAngle?: number | null; control1?: DrawingPoint | null; control2?: DrawingPoint | null };
+export type DrawingPath = { layerId: string; style: DrawingStyle; closed: boolean; segments: DrawingSegment[] };
+export type DrawingText = { layerId: string; style: DrawingStyle; value: string; position: DrawingPoint; height: number; rotation: number };
+export type DrawingDocument = { schemaVersion: number; converterVersion: string; documentId: string; sourceFormat: string; units: string | null; bounds: DrawingBounds; layers: Array<{ id: string; name: string; visible: boolean; color: string }>; paths: DrawingPath[]; text: DrawingText[]; warnings: Array<{ code: string; count: number }> };
 export type UploadGrant = { url: string; expiresAt: string; requiredHeaders: Record<string, string> };
 export type PendingDocumentUpload = { documentId: string; storedObjectId: string; upload: UploadGrant };
 export type CompleteDocumentUpload = { document: ProjectDocument };
@@ -76,6 +84,7 @@ export const updateMembers = (id: string, employeeIds: number[]) => request<Proj
 export const archiveProject = (id: string) => request<void>(`/api/projects/${id}/archive`, { method: "POST" });
 export const reactivateProject = (id: string) => request<void>(`/api/projects/${id}/reactivate`, { method: "POST" });
 export const getProjectDocuments = (id: string) => request<ProjectDocument[]>(`/api/projects/${id}/documents`);
+export const getProjectDocumentDrawing = (projectId: string, documentId: string) => request<DrawingDocument>(`/api/projects/${projectId}/documents/${documentId}/drawing`);
 export const createProjectDocumentUpload = (projectId: string, phaseId: string, file: File) => request<PendingDocumentUpload>(
   `/api/projects/${projectId}/phases/${phaseId}/documents/uploads`,
   json("POST", { fileName: file.name, contentType: file.type || "application/octet-stream", length: file.size }),

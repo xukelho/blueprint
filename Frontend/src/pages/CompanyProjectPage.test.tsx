@@ -172,13 +172,14 @@ describe("CompanyProjectPage", () => {
       { id: 11, code: "preliminary-study", label: "Estudo Prévio", position: 0, isCurrent: true },
       { id: 12, code: "licensing-project", label: "Projeto de Licenciamento", position: 1, isCurrent: false },
     ] };
-    const planDocument = { id: "document-1", phaseId: 11, fileName: "Planta_Piso_0_R03.pdf", contentType: "application/pdf", length: 8400000, status: "Available", createdBy: 1, createdByDisplayName: "Ana Martins", createdAt: "2026-08-12T09:38:00Z", uploadedAt: "2026-08-12T09:38:00Z" };
-    const uploadedDocument = { ...planDocument, id: "document-2", phaseId: 12, fileName: "Licenca_Municipal.pdf", length: 7 };
+    const planDocument = { id: "document-1", phaseId: 11, fileName: "Planta_Piso_0_R03.dxf", contentType: "application/dxf", length: 8400000, status: "Available", createdBy: 1, createdByDisplayName: "Ana Martins", createdAt: "2026-08-12T09:38:00Z", uploadedAt: "2026-08-12T09:38:00Z", preview: { kind: "drawing", sourceFormat: "dxf" } };
+    const uploadedDocument = { ...planDocument, id: "document-2", phaseId: 12, fileName: "Licenca_Municipal.pdf", contentType: "application/pdf", preview: null, length: 7 };
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
       if (url === "/api/profile") return response(profile("employee"));
       if (url === "/api/projects/1" && !init?.method) return response(phasedProject);
       if (url === "/api/projects/1/documents") return response([planDocument]);
+      if (url === "/api/projects/1/documents/document-1/drawing") return response({ schemaVersion: 1, converterVersion: "test", documentId: "document-1", sourceFormat: "dxf", units: null, bounds: { minX: 0, minY: 0, maxX: 100, maxY: 100 }, layers: [], paths: [], text: [], warnings: [] });
       if (url === "/api/projects/1/phases/12/documents/uploads" && init?.method === "POST") return response({ documentId: "document-2", storedObjectId: "object-2", upload: { url: "https://storage.test/document-2", expiresAt: "2026-08-12T10:00:00Z", requiredHeaders: { "Content-Type": "application/pdf", "X-Upload": "required" } } }, 201);
       if (url === "https://storage.test/document-2" && init?.method === "PUT") return new Response(null, { status: 200 });
       if (url === "/api/projects/1/documents/document-2/complete" && init?.method === "POST") return response({ document: uploadedDocument });
@@ -187,10 +188,10 @@ describe("CompanyProjectPage", () => {
     const user = userEvent.setup();
     renderPage();
 
-    expect(await screen.findByRole("img", { name: "Planta ilustrativa do piso térreo" })).toBeInTheDocument();
+    expect(await screen.findByRole("img", { name: "Desenho de Planta_Piso_0_R03.dxf" })).toBeInTheDocument();
     const documentsToggle = screen.getByRole("button", { name: "Documentos" });
     expect(documentsToggle).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByText("Planta_Piso_0_R03.pdf")).toBeInTheDocument();
+    expect(screen.getAllByText("Planta_Piso_0_R03.dxf")).toHaveLength(2);
     expect(screen.getByRole("tab", { name: "Geral" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("region", { name: "Conversa geral do projeto" })).toBeInTheDocument();
     expect(screen.queryByText("Informação essencial, participantes e fases do projeto.")).not.toBeInTheDocument();
