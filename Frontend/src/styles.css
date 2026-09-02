@@ -915,45 +915,32 @@ button { cursor: pointer; }
 .project-hero__architect-editor .mock-project-members-toolbar { margin: 0; }
 .project-hero__architect-editor .mock-project-member-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .project-hero__architect-editor .mock-project-member-card { min-height: 70px; padding: 12px; }
-.project-workspace { display: grid; grid-template-columns: minmax(0, 3fr) minmax(340px, 2fr); gap: 22px; align-items: stretch; }
+.project-workspace { display: grid; grid-template-columns: minmax(0, 3fr) minmax(340px, 2fr); grid-template-areas: "timeline project-area" "document-viewer project-area" "documents project-area"; gap: 22px; align-items: start; }
 .project-workspace.is-sidebar-collapsed { grid-template-columns: minmax(0, 1fr) 64px; }
-.project-workspace__main { min-width: 0; display: grid; grid-template-rows: auto auto auto; gap: 22px; }
+.project-workspace.is-document-viewer-maximized { grid-template-areas: "timeline timeline" "document-viewer document-viewer" "documents project-area"; }
 .project-workspace-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 20px 22px 0; }
 .project-workspace-heading h2, .project-conversations h2, .project-documents__toggle strong, .project-timeline-heading h2 { margin: 0; color: #202124; font-size: 16px; }
 .project-workspace-heading p, .project-conversations__header p { margin: 4px 0 0; color: #92959a; font-size: 11px; }
 .project-context-label { max-width: 52%; display: inline-flex; align-items: center; gap: 7px; padding: 6px 9px; color: #005864; background: #edf7f8; border-radius: 6px; font-size: 10px; font-weight: 600; }
-.project-floor-plan { min-width: 0; overflow: hidden; }
-.project-floor-plan__canvas { padding: 8px 18px 16px; }
-.project-floor-plan__canvas svg { width: 100%; height: auto; display: block; color: #26383b; }
-.project-drawing-viewer { min-width: 0; overflow: hidden; }
-.project-drawing-viewer__canvas { position: relative; min-height: 430px; margin: 12px 18px 18px; overflow: hidden; overscroll-behavior: contain; background: #f8fbfb; border: 1px solid #dbe7e9; border-radius: 8px; }
-.project-drawing-viewer__canvas canvas { width: 100%; height: 430px; display: block; touch-action: none; cursor: grab; }
-.project-drawing-viewer__canvas.is-dragging canvas { cursor: grabbing; }
-.project-drawing-viewer__controls { position: absolute; right: 12px; bottom: 12px; display: grid; gap: 6px; }
-.project-drawing-viewer__controls button, .project-drawing-viewer__state button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; color: #005864; background: #fff; border: 1px solid #b9d7db; border-radius: 7px; box-shadow: 0 2px 8px rgba(34, 68, 73, .12); }
-.project-drawing-viewer__controls button { width: 36px; height: 36px; }
-.project-drawing-viewer__controls button:hover, .project-drawing-viewer__state button:hover { background: #edf7f8; }
-.project-drawing-viewer__state { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; gap: 8px; padding: 30px; color: #6e8185; text-align: center; background: #f8fbfb; }
-.project-drawing-viewer__state > svg { color: #5c9299; }
-.project-drawing-viewer__state strong { color: #344a4e; font-size: 14px; }
-.project-drawing-viewer__state span { max-width: 350px; font-size: 11px; line-height: 17px; }
-.project-drawing-viewer__state button { min-height: 34px; margin-top: 4px; padding: 0 12px; font-size: 11px; }
-.project-drawing-viewer__state.is-error > svg, .project-drawing-viewer__state.is-error strong { color: #a33e3e; }
-.floor-plan-grid { fill: url(#floor-plan-grid); opacity: .4; }
-#floor-plan-grid path { fill: none; stroke: #dcecef; stroke-width: 1; }
-.floor-plan-walls { fill: none; stroke: currentColor; stroke-width: 10; stroke-linecap: square; stroke-linejoin: miter; }
-.floor-plan-windows { fill: none; stroke: #52a0aa; stroke-width: 5; stroke-linecap: square; }
-.floor-plan-doors { fill: none; stroke: #7d8789; stroke-width: 2.5; }
-.floor-plan-fixtures { fill: #f0f5f5; stroke: #9eaaac; stroke-width: 2; }
-.floor-plan-labels { fill: #596366; font-size: 13px; font-weight: 600; text-anchor: middle; }
-.floor-plan-annotations circle, .floor-plan-annotations rect { fill: #006d77; }
-.floor-plan-annotations path { fill: none; stroke: #006d77; stroke-width: 2; }
-.floor-plan-annotations text { fill: #fff; font-size: 11px; text-anchor: middle; }
-.floor-plan-annotations text:not(:first-of-type) { text-anchor: start; }
-.floor-plan-annotations .floor-plan-annotation-title { font-weight: 700; }
-.floor-plan-scale { fill: #686b70; stroke: #686b70; stroke-width: 2; font-size: 10px; }
+.project-timeline-section--workspace { grid-area: timeline; }
+.project-document-viewer { grid-area: document-viewer; min-width: 0; overflow: hidden; }
+.project-document-viewer__header-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.project-document-viewer__canvas { position: relative; height: 430px; margin: 12px 18px 18px; overflow: hidden; overscroll-behavior: contain; background: #f8fbfb; border: 1px solid #dbe7e9; border-radius: 8px; }
+.project-document-viewer__canvas canvas { width: 100%; height: 430px; display: block; touch-action: none; cursor: grab; }
+.project-document-viewer__canvas.is-dragging canvas { cursor: grabbing; }
+.project-workspace.is-document-viewer-maximized .project-document-viewer__canvas, .project-workspace.is-document-viewer-maximized .project-document-viewer__canvas canvas { height: 645px; }
+.project-document-viewer__controls { position: absolute; right: 12px; bottom: 12px; display: grid; gap: 6px; }
+.project-document-viewer__controls button, .project-document-viewer__state button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; color: #005864; background: #fff; border: 1px solid #b9d7db; border-radius: 7px; box-shadow: 0 2px 8px rgba(34, 68, 73, .12); }
+.project-document-viewer__controls button { width: 36px; height: 36px; }
+.project-document-viewer__controls button:hover, .project-document-viewer__state button:hover { background: #edf7f8; }
+.project-document-viewer__state { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; gap: 8px; padding: 30px; color: #6e8185; text-align: center; background: #f8fbfb; }
+.project-document-viewer__state > svg { color: #5c9299; }
+.project-document-viewer__state strong { color: #344a4e; font-size: 14px; }
+.project-document-viewer__state span { max-width: 350px; font-size: 11px; line-height: 17px; }
+.project-document-viewer__state button { min-height: 34px; margin-top: 4px; padding: 0 12px; font-size: 11px; }
+.project-document-viewer__state.is-error > svg, .project-document-viewer__state.is-error strong { color: #a33e3e; }
 
-.project-documents { min-width: 0; overflow: hidden; }
+.project-documents { grid-area: documents; min-width: 0; overflow: hidden; }
 .project-documents.is-dragging { outline: 3px solid #6bb8bf; outline-offset: -3px; background: #f2fbfc; }
 .project-documents__bar { min-height: 58px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 10px; }
 .project-documents__toggle { min-width: 0; flex: 1; display: flex; align-items: center; gap: 11px; padding: 8px; color: #34383b; background: transparent; border: 0; border-radius: 7px; text-align: left; }
@@ -1002,7 +989,6 @@ button { cursor: pointer; }
 
 .project-timeline-section--workspace { min-width: 0; padding: 9px 10px 10px; }
 .project-timeline-section--workspace.is-expanded, .project-timeline-section--workspace.is-editing { padding: 18px 20px 20px; }
-.project-timeline-section--workspace.is-editing { grid-column: 1 / -1; }
 .project-timeline-heading { align-items: center !important; }
 .project-timeline-heading p { margin: 4px 0 0; }
 .project-timeline-options { position: relative; flex: 0 0 auto; }
@@ -1034,7 +1020,7 @@ button { cursor: pointer; }
 .project-timeline-view:not(.is-expanded) .project-timeline-node { padding-bottom: 2.5px; }
 .project-timeline-section--workspace.is-expanded .project-timeline-view:not(.is-expanded) .project-timeline-node { padding-bottom: 5px; }
 
-.project-conversations { min-width: 0; min-height: 640px; display: grid; grid-template-rows: auto auto minmax(0, 1fr); align-self: stretch; overflow: hidden; }
+.project-conversations { grid-area: project-area; min-width: 0; min-height: 640px; display: grid; grid-template-rows: auto auto minmax(0, 1fr); align-self: stretch; overflow: hidden; }
 .project-conversations__header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 22px 16px; border-bottom: 1px solid #e5eff1; }
 .project-conversations__header-content { min-width: 0; display: flex; align-items: center; gap: 10px; }
 .project-conversations__header-icon { flex: 0 0 auto; color: #006d77; }
@@ -2466,8 +2452,7 @@ button.mock-client-project-card:disabled { cursor: wait; }
   .project-hero { padding: 26px; }
   .project-hero.is-editing { grid-template-columns: minmax(0, 1.2fr) minmax(330px, .8fr); }
   .project-hero h1 { font-size: 34px; line-height: 42px; }
-  .project-workspace { grid-template-columns: 1fr; }
-  .project-workspace.is-sidebar-collapsed { grid-template-columns: 1fr; }
+  .project-workspace, .project-workspace.is-sidebar-collapsed, .project-workspace.is-document-viewer-maximized { grid-template-columns: 1fr; grid-template-areas: "timeline" "document-viewer" "documents" "project-area"; }
   .project-conversations.is-collapsed { min-width: 0; min-height: auto; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto; align-items: stretch; }
   .project-conversations.is-collapsed .project-conversations__header { padding: 8px; border-right: 1px solid #e5eff1; border-bottom: 0; }
   .project-conversations.is-collapsed .project-workspace-tabs { grid-template-columns: repeat(3, 42px); align-items: center; padding: 8px; }
@@ -2527,7 +2512,7 @@ button.mock-client-project-card:disabled { cursor: wait; }
   .mock-timeline-toggle { min-width: 520px; }
   .project-workspace-heading { align-items: flex-start; flex-direction: column; }
   .project-context-label { max-width: 100%; }
-  .project-floor-plan__canvas { padding-right: 8px; padding-left: 8px; }
+  .project-document-viewer__header-actions { width: 100%; justify-content: space-between; }
   .project-timeline-view { gap: 70px; }
   .project-conversations { min-height: 760px; }
   .project-documents__bar { align-items: stretch; flex-direction: column; padding: 10px; }

@@ -1,5 +1,5 @@
 import { PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
-import { Box, LoaderCircle, RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
+import { Box, LoaderCircle, Maximize2, Minimize2, RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
 import type { DrawingDocument, DrawingPath, ProjectDocument } from "../api/projects";
 import { phaseDefinition } from "../projectPhases";
 
@@ -10,12 +10,14 @@ type Props = {
   loading: boolean;
   error: string;
   onRetry: () => void;
+  isMaximized: boolean;
+  onMaximizedChange: (maximized: boolean) => void;
 };
 type Viewport = { scale: number; tx: number; ty: number; fitScale: number };
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
-export function ProjectDrawingViewer({ phaseCode, document, drawing, loading, error, onRetry }: Props) {
+export function ProjectDocumentViewer({ phaseCode, document, drawing, loading, error, onRetry, isMaximized, onMaximizedChange }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null);
@@ -112,18 +114,23 @@ export function ProjectDrawingViewer({ phaseCode, document, drawing, loading, er
 
   const phaseLabel = phase?.label ?? "Fase do projeto";
   const unsupported = document && !document.preview;
-  return <section className="mock-surface project-drawing-viewer" aria-labelledby="drawing-viewer-title">
+  return <section className={`mock-surface project-document-viewer ${isMaximized ? "is-maximized" : ""}`} aria-labelledby="document-visualizer-title">
     <header className="project-workspace-heading">
-      <div><h2 id="drawing-viewer-title">Planta do projeto</h2><p>{document?.fileName ?? "Pré-visualização CAD"}</p></div>
-      {phase && <span className="project-context-label">{phaseLabel}</span>}
+      <div><h2 id="document-visualizer-title">Visualizador de documentos</h2><p>{document?.fileName ?? "Pré-visualização de documentos"}</p></div>
+      <div className="project-document-viewer__header-actions">
+        {phase && <span className="project-context-label">{phaseLabel}</span>}
+        <button type="button" className="project-icon-action" aria-label={isMaximized ? "Repor tamanho do visualizador de documentos" : "Maximizar visualizador de documentos"} aria-pressed={isMaximized} onClick={() => onMaximizedChange(!isMaximized)}>
+          {isMaximized ? <Minimize2 size={18} aria-hidden="true" /> : <Maximize2 size={18} aria-hidden="true" />}
+        </button>
+      </div>
     </header>
-    <div ref={viewportRef} className={`project-drawing-viewer__canvas ${dragging ? "is-dragging" : ""}`}>
-      {drawing && !loading && <><canvas ref={canvasRef} role="img" aria-label={`Desenho de ${document?.fileName ?? "projeto"}`} onPointerDown={startPan} onPointerMove={pan} onPointerUp={endPan} onPointerCancel={endPan} />
-        <div className="project-drawing-viewer__controls" aria-label="Controlos de zoom"><button type="button" aria-label="Aumentar zoom" onClick={() => changeScale(1.2)}><ZoomIn size={18} /></button><button type="button" aria-label="Diminuir zoom" onClick={() => changeScale(1 / 1.2)}><ZoomOut size={18} /></button></div></>}
-      {loading && <div className="project-drawing-viewer__state" role="status"><LoaderCircle size={42} aria-hidden="true" /><strong>A preparar desenho…</strong><span>O ficheiro está a ser convertido para visualização.</span></div>}
-      {!loading && error && <div className="project-drawing-viewer__state is-error" role="alert"><Box size={48} aria-hidden="true" /><strong>Não foi possível apresentar este desenho.</strong><span>{error}</span><button type="button" onClick={onRetry}><RotateCcw size={16} />Tentar novamente</button></div>}
-      {!loading && !error && unsupported && <div className="project-drawing-viewer__state"><Box size={52} aria-hidden="true" /><strong>Este ficheiro não pode ser visualizado.</strong><span>Selecione um ficheiro CAD compatível para o apresentar aqui.</span></div>}
-      {!loading && !error && !drawing && !unsupported && <div className="project-drawing-viewer__state"><Box size={64} aria-hidden="true" /><strong>Sem planta para visualizar</strong><span>Adicione um ficheiro DXF aos documentos desta fase.</span></div>}
+    <div ref={viewportRef} className={`project-document-viewer__canvas ${dragging ? "is-dragging" : ""}`}>
+      {drawing && !loading && <><canvas ref={canvasRef} role="img" aria-label={`Pré-visualização de ${document?.fileName ?? "documento"}`} onPointerDown={startPan} onPointerMove={pan} onPointerUp={endPan} onPointerCancel={endPan} />
+        <div className="project-document-viewer__controls" aria-label="Controlos de zoom"><button type="button" aria-label="Aumentar zoom" onClick={() => changeScale(1.2)}><ZoomIn size={18} /></button><button type="button" aria-label="Diminuir zoom" onClick={() => changeScale(1 / 1.2)}><ZoomOut size={18} /></button></div></>}
+      {loading && <div className="project-document-viewer__state" role="status"><LoaderCircle size={42} aria-hidden="true" /><strong>A preparar documento…</strong><span>O ficheiro está a ser convertido para visualização.</span></div>}
+      {!loading && error && <div className="project-document-viewer__state is-error" role="alert"><Box size={48} aria-hidden="true" /><strong>Não foi possível apresentar este documento.</strong><span>{error}</span><button type="button" onClick={onRetry}><RotateCcw size={16} />Tentar novamente</button></div>}
+      {!loading && !error && unsupported && <div className="project-document-viewer__state"><Box size={52} aria-hidden="true" /><strong>Este ficheiro não pode ser visualizado.</strong><span>Selecione um ficheiro DXF compatível para o apresentar aqui.</span></div>}
+      {!loading && !error && !drawing && !unsupported && <div className="project-document-viewer__state"><Box size={64} aria-hidden="true" /><strong>Sem documento para visualizar</strong><span>Adicione um ficheiro DXF aos documentos desta fase.</span></div>}
     </div>
   </section>;
 }

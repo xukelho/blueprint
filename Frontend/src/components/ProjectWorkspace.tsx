@@ -1,10 +1,9 @@
 import { ChangeEvent, DragEvent, FormEvent, KeyboardEvent, MouseEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Box, ChevronDown, File, FileArchive, FileImage, FilePlus2, FileSpreadsheet, FileText, FileType2, Folder, FolderOpen, LoaderCircle, LockKeyhole, MessageSquare, MessagesSquare, PanelRightClose, PanelRightOpen, PanelsTopLeft, Plus, Presentation, Send, Trash2, X } from "lucide-react";
 import type { ProjectDocument } from "../api/projects";
-import { phaseDefinition, phaseLabel } from "../projectPhases";
+import { phaseLabel } from "../projectPhases";
 import type { TimelinePhase } from "./ProjectTimelineEditor";
 
-type ProjectFloorPlanProps = { phaseCode: string | null };
 type MockMessage = { id: string; author: string; time: string; body: string; own?: boolean };
 type MockConversation = { id: string; title: string; scope: "global" | string; messages: MockMessage[] };
 export type ProjectDocumentsByPhase = Record<string, ProjectDocument[]>;
@@ -64,55 +63,6 @@ const documentIcon = (name: string, size = 25) => {
   if (kind === "model") return <Box size={size} aria-hidden="true" />;
   return <File size={size} aria-hidden="true" />;
 };
-
-export function ProjectFloorPlan({ phaseCode }: ProjectFloorPlanProps) {
-  const phase = phaseCode ? phaseDefinition(phaseCode) : null;
-  const PhaseIcon = phase?.icon;
-  return <section className="mock-surface project-floor-plan" aria-labelledby="floor-plan-title">
-    <header className="project-workspace-heading">
-      <div><h2 id="floor-plan-title">Planta do projeto</h2><p>Planta ilustrativa · Piso 0</p></div>
-      {phase && <span className="project-context-label">{PhaseIcon && <PhaseIcon size={15} aria-hidden="true" />}{phase.label}</span>}
-    </header>
-    <div className="project-floor-plan__canvas">
-      <svg viewBox="0 0 920 560" role="img" aria-label="Planta ilustrativa do piso térreo">
-        <title id="floor-plan-svg-title">Planta ilustrativa do piso térreo</title>
-        <desc id="floor-plan-svg-description">Distribuição de sala, cozinha, escritório, quartos, instalações sanitárias e circulação.</desc>
-        <defs>
-          <pattern id="floor-plan-grid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M 24 0 L 0 0 0 24" /></pattern>
-        </defs>
-        <rect className="floor-plan-grid" x="0" y="0" width="920" height="560" />
-        <g className="floor-plan-walls">
-          <path d="M90 58H830V500H90Z" />
-          <path d="M90 300H545M545 58V500M690 58V300M545 196H830M295 300V500" />
-        </g>
-        <g className="floor-plan-windows">
-          <path d="M170 58H310M380 58H500M830 105V165M830 350V430M365 500H485M130 500H230" />
-        </g>
-        <g className="floor-plan-doors">
-          <path d="M545 236V294A58 58 0 0 1 487 236M690 142V194A52 52 0 0 1 638 142M295 385V438A53 53 0 0 1 242 385M545 385V442A57 57 0 0 1 488 385" />
-        </g>
-        <g className="floor-plan-fixtures">
-          <rect x="115" y="84" width="174" height="42" rx="3" /><circle cx="145" cy="105" r="13" /><circle cx="185" cy="105" r="13" />
-          <rect x="344" y="105" width="116" height="66" rx="3" /><rect x="365" y="120" width="74" height="36" rx="2" />
-          <rect x="584" y="84" width="68" height="35" rx="3" /><rect x="720" y="89" width="74" height="78" rx="3" />
-          <rect x="122" y="349" width="122" height="64" rx="4" /><rect x="334" y="350" width="164" height="90" rx="4" />
-          <rect x="608" y="345" width="165" height="94" rx="4" /><circle cx="723" cy="247" r="23" />
-        </g>
-        <g className="floor-plan-labels">
-          <text x="318" y="248">Sala de estar</text><text x="195" y="175">Cozinha</text><text x="612" y="156">I.S.</text>
-          <text x="758" y="247">Escritório</text><text x="190" y="466">Quarto 1</text><text x="420" y="466">Quarto 2</text>
-          <text x="688" y="468">Suite</text><text x="607" y="285">Circulação</text>
-        </g>
-        {phaseCode && <g className="floor-plan-annotations">
-          <circle cx="545" cy="300" r="17" /><text x="545" y="305">1</text>
-          <path d="M562 300H635" /><rect x="635" y="276" width="170" height="48" rx="5" />
-          <text className="floor-plan-annotation-title" x="649" y="296">Ponto em revisão</text><text x="649" y="313">Encontro entre espaços</text>
-        </g>}
-        <g className="floor-plan-scale"><path d="M716 528H816M716 522V534M766 522V534M816 522V534" /><text x="716" y="551">0</text><text x="808" y="551">5 m</text></g>
-      </svg>
-    </div>
-  </section>;
-}
 
 type ProjectDocumentsProps = {
   phases: TimelinePhase[];

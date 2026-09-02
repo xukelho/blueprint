@@ -188,7 +188,17 @@ describe("CompanyProjectPage", () => {
     const user = userEvent.setup();
     renderPage();
 
-    expect(await screen.findByRole("img", { name: "Desenho de Planta_Piso_0_R03.dxf" })).toBeInTheDocument();
+    expect(await screen.findByRole("img", { name: "Pré-visualização de Planta_Piso_0_R03.dxf" })).toBeInTheDocument();
+    const visualizerHeading = screen.getByRole("heading", { name: "Visualizador de documentos" });
+    const workspace = visualizerHeading.closest(".project-workspace");
+    expect(workspace).not.toBeNull();
+    const maximize = screen.getByRole("button", { name: "Maximizar visualizador de documentos" });
+    expect(maximize).toHaveAttribute("aria-pressed", "false");
+    await user.click(maximize);
+    expect(workspace).toHaveClass("is-document-viewer-maximized");
+    expect(screen.getByRole("button", { name: "Repor tamanho do visualizador de documentos" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: "Repor tamanho do visualizador de documentos" }));
+    expect(workspace).not.toHaveClass("is-document-viewer-maximized");
     const documentsToggle = screen.getByRole("button", { name: "Documentos" });
     expect(documentsToggle).toHaveAttribute("aria-expanded", "true");
     expect(screen.getAllByText("Planta_Piso_0_R03.dxf")).toHaveLength(2);
