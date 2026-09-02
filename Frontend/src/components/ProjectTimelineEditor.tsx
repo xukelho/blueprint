@@ -126,18 +126,45 @@ type TimelineViewProps = {
 
 export function ProjectTimelineView({ phases, currentPhaseId, viewedPhaseId = currentPhaseId, expanded = false, onPhaseSelect }: TimelineViewProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
+  const viewRef = useRef<HTMLDivElement>(null);
   const currentNodeRef = useRef<HTMLButtonElement | null>(null);
+  const nodeRefs = useRef(new Map<string, HTMLButtonElement>());
   const dragRef = useRef<{ pointerId: number; startX: number; scrollLeft: number; moved: boolean } | null>(null);
   const suppressClickRef = useRef(false);
   const [isPanning, setIsPanning] = useState(false);
+  const [selectionRing, setSelectionRing] = useState<{ x: number; y: number; diameter: number } | null>(null);
   const currentPhaseIndex = phases.findIndex((phase) => phase.id === currentPhaseId);
 
   useEffect(() => {
     currentNodeRef.current?.scrollIntoView?.({ block: "nearest", inline: "center" });
   }, [currentPhaseId, phases.length]);
 
+  useLayoutEffect(() => {
+    const view = viewRef.current;
+    const node = viewedPhaseId ? nodeRefs.current.get(viewedPhaseId) : null;
+    if (!view || !node) { setSelectionRing(null); return; }
+
+    const measure = () => {
+      const icon = node.querySelector<HTMLElement>(".project-timeline-node__icon");
+      if (!icon) return;
+      const root = view.getBoundingClientRect();
+      const rect = icon.getBoundingClientRect();
+      const diameter = rect.width + (expanded ? 14 : 10);
+      const next = { x: rect.left - root.left + rect.width / 2, y: rect.top - root.top + rect.height / 2, diameter };
+      setSelectionRing((current) => current && current.x === next.x && current.y === next.y && current.diameter === next.diameter ? current : next);
+    };
+
+    measure();
+    const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(measure);
+    observer?.observe(view);
+    observer?.observe(node);
+    window.addEventListener("resize", measure);
+    return () => { observer?.disconnect(); window.removeEventListener("resize", measure); };
+  }, [expanded, phases, viewedPhaseId]);
+
   const startPanning = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
+    if (event.target instanceof Element && event.target.closest(".project-timeline-node")) return;
     dragRef.current = { pointerId: event.pointerId, startX: event.clientX, scrollLeft: event.currentTarget.scrollLeft, moved: false };
     event.currentTarget.setPointerCapture?.(event.pointerId);
   };
@@ -167,7 +194,12 @@ export function ProjectTimelineView({ phases, currentPhaseId, viewedPhaseId = cu
     onPointerUp={stopPanning}
     onPointerCancel={stopPanning}
   >
-    <div className={`project-timeline-view ${expanded ? "is-expanded" : ""}`}>
+    <div ref={viewRef} className={`project-timeline-view ${expanded ? "is-expanded" : ""}`}>
+      {selectionRing && <span
+        className="project-timeline-selection-ring"
+        aria-hidden="true"
+        style={{ width: selectionRing.diameter, height: selectionRing.diameter, transform: `translate(${selectionRing.x}px, ${selectionRing.y}px) translate(-50%, -50%)` }}
+      />}
       {phases.map((phase, index) => {
         const definition = phaseDefinition(phase.code); const Icon = definition.icon;
         const isCurrent = currentPhaseId === phase.id;
@@ -175,7 +207,10 @@ export function ProjectTimelineView({ phases, currentPhaseId, viewedPhaseId = cu
         const isCompleted = currentPhaseIndex >= 0 && index < currentPhaseIndex;
         return <button
           key={phase.id}
-          ref={isCurrent ? currentNodeRef : undefined}
+          ref={(node) => {
+            if (node) nodeRefs.current.set(phase.id, node); else nodeRefs.current.delete(phase.id);
+            if (isCurrent) currentNodeRef.current = node;
+          }}
           className={`project-timeline-node ${isCompleted ? "is-completed" : ""} ${isCurrent ? "is-current" : ""} ${isViewed ? "is-viewed" : ""}`.trim()}
           type="button"
           aria-label={`${definition.label}${isCurrent ? ", fase atual" : ""}`}

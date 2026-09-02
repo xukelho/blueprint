@@ -14,6 +14,14 @@ type ProjectFormData = { title: string; code: string; address: string; googleMap
 const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toLocaleUpperCase("pt-PT");
 const projectFormData = (project: Project): ProjectFormData => ({ title: project.title, code: project.code, address: project.address, googleMapsUrl: project.googleMapsUrl ?? "", clientId: String(project.client?.id ?? "") });
 const sameMemberIds = (left: number[], right: number[]) => left.length === right.length && left.every((id) => right.includes(id));
+const newestAvailableDocument = (items: ProjectDocument[]) => {
+  const available = items.filter((document) => document.status === "Available").sort((left, right) => {
+    const leftDate = left.uploadedAt ?? left.createdAt;
+    const rightDate = right.uploadedAt ?? right.createdAt;
+    return rightDate.localeCompare(leftDate) || right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id);
+  });
+  return available.find((document) => document.preview?.kind === "drawing") ?? available[0] ?? null;
+};
 
 const googleMapsEmbedUrl = (googleMapsUrl: string, address: string) => {
   let query = address.trim();
@@ -108,15 +116,10 @@ export function CompanyProjectPage() {
   const filteredMembers = useMemo(() => { const normalizedQuery = query.trim().toLocaleLowerCase("pt-PT"); return displayedMembers.filter((member) => member.displayName.toLocaleLowerCase("pt-PT").includes(normalizedQuery)); }, [displayedMembers, query]);
   const hasChanges = Boolean(project) && (Object.entries(projectFormData(project!)).some(([key, value]) => data[key as keyof ProjectFormData] !== value) || !sameMemberIds(selected, project!.members?.map((member) => member.employeeId) ?? []));
   const toggleMember = (employeeId: number, checked: boolean) => setSelected((current) => checked ? [...current, employeeId] : current.filter((memberId) => memberId !== employeeId));
-  const oldestPreview = (items: ProjectDocument[]) => items.filter((document) => document.preview?.kind === "drawing" && document.status === "Available").sort((left, right) => {
-    const leftDate = left.uploadedAt ?? left.createdAt;
-    const rightDate = right.uploadedAt ?? right.createdAt;
-    return leftDate.localeCompare(rightDate) || left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id);
-  })[0] ?? null;
   useEffect(() => {
     if (!viewedPhase) { setViewerDocumentId(null); setViewerPhaseId(null); return; }
     if (viewerPhaseId === viewedPhase.id && viewerDocument) return;
-    setViewerDocumentId(oldestPreview(viewedDocuments)?.id ?? null);
+    setViewerDocumentId(newestAvailableDocument(viewedDocuments)?.id ?? null);
     setViewerPhaseId(viewedPhase.id);
   }, [viewedPhase?.id, viewerPhaseId, viewerDocumentId, viewedDocuments]);
   useEffect(() => {

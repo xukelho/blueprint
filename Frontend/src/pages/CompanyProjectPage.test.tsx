@@ -166,6 +166,42 @@ describe("CompanyProjectPage", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/projects/1/phases", expect.objectContaining({ body: expect.stringContaining('"currentPhaseIndex":1') })));
   });
 
+  it("selects the newest DXF for each phase and falls back to an unsupported document", async () => {
+    setAuthenticatedRoles(["employee"]);
+    const phasedProject = { ...emptyProject, phases: [
+      { id: 11, code: "preliminary-study", label: "Estudo PrÃ©vio", position: 0, isCurrent: true },
+      { id: 12, code: "licensing-project", label: "Projeto de Licenciamento", position: 1, isCurrent: false },
+      { id: 13, code: "execution-project", label: "Projeto de ExecuÃ§Ã£o", position: 2, isCurrent: false },
+    ] };
+    const document = (id: string, phaseId: number, fileName: string, uploadedAt: string, preview: { kind: "drawing"; sourceFormat: string } | null) => ({ id, phaseId, fileName, contentType: preview ? "application/dxf" : "application/pdf", length: 100, status: "Available", createdBy: 1, createdByDisplayName: "Ana Martins", createdAt: uploadedAt, uploadedAt, preview });
+    const initialDrawing = document("initial-drawing", 11, "Inicial.dxf", "2026-08-12T09:00:00Z", { kind: "drawing", sourceFormat: "dxf" });
+    const licensingPdf = document("licensing-pdf", 12, "Memoria.pdf", "2026-08-12T13:00:00Z", null);
+    const licensingOldDrawing = document("licensing-old", 12, "Licenca_R01.dxf", "2026-08-12T11:00:00Z", { kind: "drawing", sourceFormat: "dxf" });
+    const licensingNewDrawing = document("licensing-new", 12, "Licenca_R02.dxf", "2026-08-12T12:00:00Z", { kind: "drawing", sourceFormat: "dxf" });
+    const executionPdf = document("execution-pdf", 13, "Caderno.pdf", "2026-08-12T14:00:00Z", null);
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url === "/api/profile") return response(profile("employee"));
+      if (url === "/api/projects/1" && !init?.method) return response(phasedProject);
+      if (url === "/api/projects/1/documents") return response([initialDrawing, licensingPdf, licensingOldDrawing, licensingNewDrawing, executionPdf]);
+      if (url === "/api/projects/1/documents/initial-drawing/drawing" || url === "/api/projects/1/documents/licensing-new/drawing") return response({ schemaVersion: 1, converterVersion: "test", documentId: url.includes("initial") ? "initial-drawing" : "licensing-new", sourceFormat: "dxf", units: null, bounds: { minX: 0, minY: 0, maxX: 100, maxY: 100 }, layers: [], paths: [], text: [], warnings: [] });
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    expect(await screen.findByRole("img", { name: /Inicial\.dxf/ })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Projeto de Licenciamento" }));
+    expect(await screen.findByRole("img", { name: /Licenca_R02\.dxf/ })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Memoria\.pdf/ })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Licenca_R02\.dxf/ })).toHaveAttribute("aria-current", "true");
+    expect(screen.queryByRole("option", { name: /Inicial\.dxf/ })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Projeto de Execu/ }));
+    expect(await screen.findByText(/visualizado/)).toBeInTheDocument();
+    expect(screen.getAllByText("Caderno.pdf")).toHaveLength(2);
+  });
+
   it("switches phase documents and keeps the global conversation available", async () => {
     setAuthenticatedRoles(["employee"]);
     const phasedProject = { ...emptyProject, phases: [
@@ -211,7 +247,7 @@ describe("CompanyProjectPage", () => {
     expect(emptyDocumentsToggle).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("button", { name: /Adicionar documentos/ })).toBeInTheDocument();
     await user.upload(screen.getByLabelText("Adicionar documentos"), new File(["licença"], "Licenca_Municipal.pdf", { type: "application/pdf" }));
-    expect(await screen.findByText("Licenca_Municipal.pdf")).toBeInTheDocument();
+    expect(await screen.findByRole("option", { name: /Licenca_Municipal\.pdf/ })).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith("https://storage.test/document-2", expect.objectContaining({ method: "PUT", headers: { "Content-Type": "application/pdf", "X-Upload": "required" } }));
     expect(emptyDocumentsToggle).toHaveAttribute("aria-expanded", "true");
 
