@@ -5,8 +5,8 @@ import PortalShell from "../components/PortalShell";
 import { GoogleMapPicker } from "../components/GoogleMapPicker";
 import { ProjectTimelineEditor, ProjectTimelineView, TimelinePhase, newTimelinePhase } from "../components/ProjectTimelineEditor";
 import { ProjectDocuments, ProjectDocumentsByPhase, ProjectWorkspacePanel } from "../components/ProjectWorkspace";
-import { ProjectDrawingViewer } from "../components/ProjectDrawingViewer";
-import { archiveProject, deleteProjectDocument, getClients, getCompanyMembers, getProject, getProjectDocumentDrawing, getProjectDocuments, Project, ProjectDocument, ProjectMember, reactivateProject, updateMembers, updateProject, updateProjectPhases, uploadProjectDocument, DrawingDocument } from "../api/projects";
+import { ProjectDocumentViewer } from "../components/ProjectDocumentViewer";
+import { archiveProject, createProjectDocumentDownload, deleteProjectDocument, getClients, getCompanyMembers, getProject, getProjectDocumentDrawing, getProjectDocuments, Project, ProjectDocument, ProjectMember, reactivateProject, updateMembers, updateProject, updateProjectPhases, uploadProjectDocument, DrawingDocument } from "../api/projects";
 import { useProfile } from "../profile/ProfileContext";
 import { phaseLabel, PROJECT_PHASES, QUICK_FILL_PHASE_CODES } from "../projectPhases";
 
@@ -14,6 +14,14 @@ type ProjectFormData = { title: string; code: string; address: string; googleMap
 const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toLocaleUpperCase("pt-PT");
 const projectFormData = (project: Project): ProjectFormData => ({ title: project.title, code: project.code, address: project.address, googleMapsUrl: project.googleMapsUrl ?? "", clientId: String(project.client?.id ?? "") });
 const sameMemberIds = (left: number[], right: number[]) => left.length === right.length && left.every((id) => right.includes(id));
+const newestAvailableDocument = (items: ProjectDocument[]) => {
+  const available = items.filter((document) => document.status === "Available").sort((left, right) => {
+    const leftDate = left.uploadedAt ?? left.createdAt;
+    const rightDate = right.uploadedAt ?? right.createdAt;
+    return rightDate.localeCompare(leftDate) || right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id);
+  });
+  return available.find((document) => document.preview?.kind === "drawing") ?? available[0] ?? null;
+};
 
 const googleMapsEmbedUrl = (googleMapsUrl: string, address: string) => {
   let query = address.trim();
@@ -49,10 +57,11 @@ export function CompanyProjectPage() {
   const [documentsError, setDocumentsError] = useState("");
   const [viewerDocumentId, setViewerDocumentId] = useState<string | null>(null);
   const [viewerPhaseId, setViewerPhaseId] = useState<string | null>(null);
-  const [drawing, setDrawing] = useState<DrawingDocument | null>(null);
-  const [drawingLoading, setDrawingLoading] = useState(false);
-  const [drawingError, setDrawingError] = useState("");
-  const [drawingRetry, setDrawingRetry] = useState(0);
+  const [documentPreview, setDocumentPreview] = useState<DrawingDocument | null>(null);
+  const [documentPreviewLoading, setDocumentPreviewLoading] = useState(false);
+  const [documentPreviewError, setDocumentPreviewError] = useState("");
+  const [documentPreviewRetry, setDocumentPreviewRetry] = useState(0);
+  const [isDocumentViewerMaximized, setIsDocumentViewerMaximized] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isTimelineEditing, setIsTimelineEditing] = useState(false);
   const [isTimelineExpanded, setIsTimelineExpanded] = useState(false);
@@ -107,26 +116,21 @@ export function CompanyProjectPage() {
   const filteredMembers = useMemo(() => { const normalizedQuery = query.trim().toLocaleLowerCase("pt-PT"); return displayedMembers.filter((member) => member.displayName.toLocaleLowerCase("pt-PT").includes(normalizedQuery)); }, [displayedMembers, query]);
   const hasChanges = Boolean(project) && (Object.entries(projectFormData(project!)).some(([key, value]) => data[key as keyof ProjectFormData] !== value) || !sameMemberIds(selected, project!.members?.map((member) => member.employeeId) ?? []));
   const toggleMember = (employeeId: number, checked: boolean) => setSelected((current) => checked ? [...current, employeeId] : current.filter((memberId) => memberId !== employeeId));
-  const oldestPreview = (items: ProjectDocument[]) => items.filter((document) => document.preview?.kind === "drawing" && document.status === "Available").sort((left, right) => {
-    const leftDate = left.uploadedAt ?? left.createdAt;
-    const rightDate = right.uploadedAt ?? right.createdAt;
-    return leftDate.localeCompare(rightDate) || left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id);
-  })[0] ?? null;
   useEffect(() => {
     if (!viewedPhase) { setViewerDocumentId(null); setViewerPhaseId(null); return; }
     if (viewerPhaseId === viewedPhase.id && viewerDocument) return;
-    setViewerDocumentId(oldestPreview(viewedDocuments)?.id ?? null);
+    setViewerDocumentId(newestAvailableDocument(viewedDocuments)?.id ?? null);
     setViewerPhaseId(viewedPhase.id);
   }, [viewedPhase?.id, viewerPhaseId, viewerDocumentId, viewedDocuments]);
   useEffect(() => {
-    if (!id || !viewerDocument?.preview) { setDrawing(null); setDrawingError(""); setDrawingLoading(false); return; }
+    if (!id || !viewerDocument?.preview) { setDocumentPreview(null); setDocumentPreviewError(""); setDocumentPreviewLoading(false); return; }
     let active = true;
-    setDrawingLoading(true); setDrawingError("");
-    getProjectDocumentDrawing(id, viewerDocument.id).then((loaded) => { if (active) setDrawing(loaded); })
-      .catch((caught) => { if (active) { setDrawing(null); setDrawingError(caught instanceof Error ? caught.message : "Não foi possível carregar o desenho."); } })
-      .finally(() => { if (active) setDrawingLoading(false); });
+    setDocumentPreviewLoading(true); setDocumentPreviewError("");
+    getProjectDocumentDrawing(id, viewerDocument.id).then((loaded) => { if (active) setDocumentPreview(loaded); })
+      .catch((caught) => { if (active) { setDocumentPreview(null); setDocumentPreviewError(caught instanceof Error ? caught.message : "Não foi possível carregar o documento."); } })
+      .finally(() => { if (active) setDocumentPreviewLoading(false); });
     return () => { active = false; };
-  }, [id, viewerDocument?.id, viewerDocument?.preview?.kind, drawingRetry]);
+  }, [id, viewerDocument?.id, viewerDocument?.preview?.kind, documentPreviewRetry]);
   const uploadDocument = async (phaseId: string, file: File) => {
     if (!id) throw new Error("Projeto indisponível.");
     const uploaded = await uploadProjectDocument(id, phaseId, file);
@@ -137,6 +141,17 @@ export function CompanyProjectPage() {
     if (!id) throw new Error("Projeto indisponível.");
     await deleteProjectDocument(id, documentId);
     setDocuments((current) => Object.fromEntries(Object.entries(current).map(([phaseId, phaseDocuments]) => [phaseId, phaseDocuments.filter((document) => document.id !== documentId)])));
+  };
+  const downloadDocument = async (projectDocument: ProjectDocument) => {
+    if (!id) throw new Error("Projeto indisponível.");
+    const grant = await createProjectDocumentDownload(id, projectDocument.id);
+    const link = window.document.createElement("a");
+    link.href = grant.url;
+    link.download = projectDocument.fileName;
+    link.style.display = "none";
+    window.document.body.append(link);
+    link.click();
+    link.remove();
   };
   const startEditing = () => { setNotice(null); setQuery(""); setIsEditing(true); };
   const discardChanges = () => { if (project) { setData(projectFormData(project)); setSelected(project.members?.map((member) => member.employeeId) ?? []); } setQuery(""); setDiscardDialogOpen(false); setIsEditing(false); };
@@ -216,8 +231,7 @@ export function CompanyProjectPage() {
           <span><small>Fase atual</small><strong>{currentPhaseLabel}</strong></span>
         </aside>}
       </form>
-      <div className={`project-workspace ${isWorkspaceCollapsed ? "is-sidebar-collapsed" : ""}`}>
-        <div className="project-workspace__main">
+      <div className={`project-workspace ${isWorkspaceCollapsed ? "is-sidebar-collapsed" : ""} ${isDocumentViewerMaximized ? "is-document-viewer-maximized" : ""}`}>
           <section className={`mock-surface project-timeline-section project-timeline-section--workspace ${isTimelineEditing ? "is-editing" : ""} ${isTimelineExpanded ? "is-expanded" : ""}`}>
             <div className="mock-section-title project-timeline-heading"><div><h2>Timeline do projeto</h2></div>
               {!isTimelineEditing && <div className="project-timeline-options" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setTimelineMenuOpen(false); }} onKeyDown={(event) => { if (event.key === "Escape") { setTimelineMenuOpen(false); event.currentTarget.querySelector<HTMLButtonElement>(".project-icon-action")?.focus(); } }}>
@@ -230,9 +244,8 @@ export function CompanyProjectPage() {
             </div>
             {isTimelineEditing ? <><ProjectTimelineEditor phases={timelinePhases} currentPhaseId={currentPhaseId} onPhasesChange={setTimelinePhases} onCurrentPhaseIdChange={setCurrentPhaseId} onQuickFill={() => { setTimelinePhases(QUICK_FILL_PHASE_CODES.map(newTimelinePhase)); setCurrentPhaseId(null); }} /><div className="mock-project-form-actions"><button type="button" className="secondary-action" onClick={cancelTimeline}>Cancelar</button><button type="button" className="primary-action" disabled={isSavingTimeline} onClick={saveTimeline}>{isSavingTimeline ? "A guardar…" : "Guardar timeline"}</button></div></> : projectPhases.length ? <ProjectTimelineView phases={projectPhases} currentPhaseId={officialCurrentPhaseId} viewedPhaseId={viewedPhaseId} expanded={isTimelineExpanded} onPhaseSelect={setViewedPhaseId} /> : <p className="mock-empty-state">Timeline opcional ainda não configurada.</p>}
           </section>
-          <ProjectDrawingViewer phaseCode={viewedPhase?.code ?? null} document={viewerDocument} drawing={drawing} loading={drawingLoading} error={drawingError} onRetry={() => setDrawingRetry((current) => current + 1)} />
-          <ProjectDocuments phases={projectPhases} viewedPhaseId={viewedPhaseId} documents={documents} loading={documentsLoading} error={documentsError} readOnly={project.isArchived} previewDocumentId={viewerDocumentId} onUploadFile={uploadDocument} onDeleteDocument={removeDocument} onPreviewDocumentSelect={(document) => { setViewerDocumentId(document.id); setViewerPhaseId(String(document.phaseId)); }} />
-        </div>
+        <ProjectDocumentViewer phaseCode={viewedPhase?.code ?? null} document={viewerDocument} drawing={documentPreview} loading={documentPreviewLoading} error={documentPreviewError} onRetry={() => setDocumentPreviewRetry((current) => current + 1)} isMaximized={isDocumentViewerMaximized} onMaximizedChange={setIsDocumentViewerMaximized} />
+        <ProjectDocuments phases={projectPhases} viewedPhaseId={viewedPhaseId} documents={documents} loading={documentsLoading} error={documentsError} readOnly={project.isArchived} previewDocumentId={viewerDocumentId} onUploadFile={uploadDocument} onDeleteDocument={removeDocument} onDownloadDocument={downloadDocument} onPreviewDocumentSelect={(document) => { setViewerDocumentId(document.id); setViewerPhaseId(String(document.phaseId)); }} />
         <ProjectWorkspacePanel projectTitle={project.title} phases={projectPhases} viewedPhaseId={viewedPhaseId} currentUser={profile?.displayName ?? "Utilizador"} documents={documents} onCollapsedChange={setIsWorkspaceCollapsed} />
       </div>
       {owner && isEditing && <div className="mock-project-form-actions project-page-actions"><button className="secondary-action" type="button" onClick={() => setArchiveStatusDialogOpen(true)}>{project.isArchived ? "Reativar" : "Arquivar"}</button><button className="secondary-action" type="button" onClick={cancelEditing}>Cancelar</button><button className="primary-action" type="submit" form="project-details-form" disabled={isSaving}>{isSaving ? "A guardar…" : "Guardar"}</button></div>}

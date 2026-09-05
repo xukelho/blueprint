@@ -1,3 +1,5 @@
+import { applyThemePreference, clearCachedThemePreference } from "./theme";
+
 export const PLATFORM_ADMIN_ROLE = "platform admin";
 export const EMPLOYEE_ROLE = "employee";
 export const CLIENT_ROLE = "client";
@@ -25,6 +27,8 @@ export function setAuthenticatedRoles(roles: string[]) {
 export function clearAuthenticatedRoles() {
   sessionStorage.removeItem(AUTH_ROLES_KEY);
   sessionStorage.removeItem(LEGACY_AUTH_ROLE_KEY);
+  clearCachedThemePreference();
+  applyThemePreference("light");
   window.dispatchEvent(new Event("blueprint:auth-changed"));
 }
 

@@ -164,6 +164,7 @@ public static class ProfileEndpoints
         }
 
         user.Username = username;
+        user.ThemePreference = validRequest.ThemePreference;
         user.UpdatedAt = DateTimeOffset.UtcNow;
         user.UpdatedBy = user.Id;
         if (employee is not null)
@@ -265,6 +266,10 @@ public static class ProfileEndpoints
         {
             errors["email"] = ["Enter a valid email address containing at most 320 characters."];
         }
+        if (!UserThemePreferences.IsValid(request.ThemePreference))
+        {
+            errors["themePreference"] = ["Theme preference must be light, dark, or dynamic."];
+        }
         return errors;
     }
 
@@ -324,7 +329,8 @@ public static class ProfileEndpoints
                 roles,
                 companies,
                 employee.CompanyEmployee?.CompanyRole,
-                employee.CompanyEmployee?.IsArchitect ?? false);
+                employee.CompanyEmployee?.IsArchitect ?? false,
+                user.ThemePreference);
         }
 
         var client = user.Client!;
@@ -341,7 +347,8 @@ public static class ProfileEndpoints
             null,
             null,
             roles,
-            companies);
+            companies,
+            ThemePreference: user.ThemePreference);
     }
 
     private static void Apply(

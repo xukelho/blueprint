@@ -14,6 +14,7 @@ import { CompanyProjectsPage } from "./pages/CompanyProjectsPage";
 import { CompanyProjectsCreatePage } from "./pages/CompanyProjectsCreatePage";
 import { CompanyProjectPage } from "./pages/CompanyProjectPage";
 import { ClientNotificationsPage } from "./pages/ClientNotificationsPage";
+import { ThemeProvider } from "./theme/ThemeContext";
 
 function AdministrationRoute() {
   return isPlatformAdmin()
@@ -73,26 +74,28 @@ function AuthenticatedRoute() {
 function App() {
   return (
     <ProfileProvider>
-      <Routes>
-        <Route path="/" element={<LoginPage />} />
-        <Route element={<AuthenticatedRoute />}>
-          <Route path="/dashboard" element={<DashboardRoute />} />
-          <Route path="/projects" element={<CompanyProjectsPage />} />
-          <Route path="/projects/new" element={<CompanyProjectsCreatePage />} />
-          <Route path="/projects/:id" element={<CompanyProjectPage />} />
-          <Route path="/clients" element={<CompanyClientPage />} />
-          <Route path="/clients/:id" element={<CompanyClientDetailPage />} />
-          <Route
-            path="/administration"
-            element={<AdministrationRoute />}
-          />
-          <Route path="/settings" element={<CompanySettingsRoute />} />
-          <Route path="/notifications" element={<NotificationsRoute />} />
-          <Route path="/help" element={<HelpPage />} />
-          <Route path="/profile" element={<ProfileRoute />} />
-        </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <ThemeProvider>
+        <Routes>
+          <Route path="/" element={<LoginPage />} />
+          <Route element={<AuthenticatedRoute />}>
+            <Route path="/dashboard" element={<DashboardRoute />} />
+            <Route path="/projects" element={<CompanyProjectsPage />} />
+            <Route path="/projects/new" element={<CompanyProjectsCreatePage />} />
+            <Route path="/projects/:id" element={<CompanyProjectPage />} />
+            <Route path="/clients" element={<CompanyClientPage />} />
+            <Route path="/clients/:id" element={<CompanyClientDetailPage />} />
+            <Route
+              path="/administration"
+              element={<AdministrationRoute />}
+            />
+            <Route path="/settings" element={<CompanySettingsRoute />} />
+            <Route path="/notifications" element={<NotificationsRoute />} />
+            <Route path="/help" element={<HelpPage />} />
+            <Route path="/profile" element={<ProfileRoute />} />
+          </Route>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </ThemeProvider>
     </ProfileProvider>
   );
 }

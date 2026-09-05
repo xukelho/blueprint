@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { createElement } from "react";
 import { ProjectTimelineView, TimelinePhase, TimelineRect, reorderTimelinePhase, timelineConnectorPath, timelineInsertionIndex } from "./ProjectTimelineEditor";
 
@@ -37,6 +37,27 @@ describe("ProjectTimelineEditor helpers", () => {
     expect(screen.getByRole("button", { name: "Estudo Prévio, fase atual" })).toHaveClass("is-current");
     expect(screen.getByRole("button", { name: "Projeto de Licenciamento" })).not.toHaveClass("is-completed", "is-current");
     expect(screen.queryByText("Projeto de Licenciamento")).not.toBeInTheDocument();
+  });
+
+  it("uses one selection ring that follows the viewed phase without changing the current phase", () => {
+    const onPhaseSelect = vi.fn();
+    const { container, rerender } = render(createElement(ProjectTimelineView, { phases: viewPhases, currentPhaseId: "b", viewedPhaseId: "b", onPhaseSelect }));
+    const timeline = within(container);
+
+    expect(container.querySelectorAll(".project-timeline-selection-ring")).toHaveLength(1);
+    expect(timeline.getByRole("button", { pressed: true })).toHaveClass("is-current");
+    expect(timeline.getByRole("button", { name: "Projeto de Licenciamento" })).toHaveAttribute("aria-pressed", "false");
+
+    const licensingPhase = timeline.getByRole("button", { name: "Projeto de Licenciamento" });
+    fireEvent.pointerDown(licensingPhase, { button: 0, pointerId: 1 });
+    fireEvent.pointerUp(licensingPhase, { button: 0, pointerId: 1 });
+    fireEvent.click(licensingPhase);
+    expect(onPhaseSelect).toHaveBeenCalledWith("c");
+    rerender(createElement(ProjectTimelineView, { phases: viewPhases, currentPhaseId: "b", viewedPhaseId: "c", onPhaseSelect }));
+
+    expect(container.querySelectorAll(".project-timeline-selection-ring")).toHaveLength(1);
+    expect(container.querySelector(".project-timeline-node.is-current")).toHaveAttribute("aria-pressed", "false");
+    expect(timeline.getByRole("button", { name: "Projeto de Licenciamento" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("reveals labels only in expanded mode", () => {

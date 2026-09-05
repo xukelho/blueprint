@@ -21,41 +21,38 @@ type LoginResponse = {
   roles?: string[];
 };
 
+type QuickLoginOption = {
+  label: string;
+  username: string;
+  password: string;
+};
+
+const QUICK_LOGIN_OPTIONS: QuickLoginOption[] = [
+  { label: "Login as Admin", username: "admin", password: "admin" },
+  { label: "Login as Architect", username: "arc1", password: "arc1" },
+  { label: "Login as Client", username: "client1", password: "client1" },
+];
+
 function LoginPage() {
   const navigate = useNavigate();
   const isDevelopment = import.meta.env.MODE === "development";
-  const [username, setUsername] = useState(isDevelopment ? "admin" : "");
-  const [password, setPassword] = useState(isDevelopment ? "admin" : "");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
-    const nextErrors: FieldErrors = {};
-    if (!username.trim()) {
-      nextErrors.username = "Enter your username.";
-    }
-    if (!password) {
-      nextErrors.password = "Enter your password.";
-    }
-
-    setErrors(nextErrors);
+  const login = async (loginUsername: string, loginPassword: string) => {
+    setErrors({});
     setMessage("");
-
-    if (Object.keys(nextErrors).length > 0) {
-      return;
-    }
-
     setIsSubmitting(true);
 
     try {
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: username.trim(), password }),
+        body: JSON.stringify({ username: loginUsername, password: loginPassword }),
       });
 
       if (response.ok) {
@@ -78,6 +75,27 @@ function LoginPage() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const nextErrors: FieldErrors = {};
+    if (!username.trim()) {
+      nextErrors.username = "Enter your username.";
+    }
+    if (!password) {
+      nextErrors.password = "Enter your password.";
+    }
+
+    setErrors(nextErrors);
+    setMessage("");
+
+    if (Object.keys(nextErrors).length > 0) {
+      return;
+    }
+
+    await login(username.trim(), password);
   };
 
   return (
@@ -216,6 +234,27 @@ function LoginPage() {
             </button>
             <p className="form-message" role={message ? "alert" : "status"}>{message}</p>
           </form>
+
+          {isDevelopment && (
+            <section className="quick-login" aria-labelledby="quick-login-title">
+              <div className="quick-login__heading">
+                <h3 id="quick-login-title">Quick login</h3>
+                <span>Development only</span>
+              </div>
+              <div className="quick-login__actions">
+                {QUICK_LOGIN_OPTIONS.map((option) => (
+                  <button
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={() => void login(option.username, option.password)}
+                    key={option.username}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
 
           <p className="support-copy">
             New to Blueprint? <button className="text-button" type="button">Contact your practice administrator</button>

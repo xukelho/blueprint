@@ -29,6 +29,7 @@ export type DrawingDocument = { schemaVersion: number; converterVersion: string;
 export type UploadGrant = { url: string; expiresAt: string; requiredHeaders: Record<string, string> };
 export type PendingDocumentUpload = { documentId: string; storedObjectId: string; upload: UploadGrant };
 export type CompleteDocumentUpload = { document: ProjectDocument };
+export type DownloadGrant = { url: string; expiresAt: string };
 
 export class ClientManagementApiError extends Error {
   constructor(message: string, public status: number, public fieldErrors: Record<string, string> = {}) {
@@ -85,6 +86,9 @@ export const archiveProject = (id: string) => request<void>(`/api/projects/${id}
 export const reactivateProject = (id: string) => request<void>(`/api/projects/${id}/reactivate`, { method: "POST" });
 export const getProjectDocuments = (id: string) => request<ProjectDocument[]>(`/api/projects/${id}/documents`);
 export const getProjectDocumentDrawing = (projectId: string, documentId: string) => request<DrawingDocument>(`/api/projects/${projectId}/documents/${documentId}/drawing`);
+export const createProjectDocumentDownload = (projectId: string, documentId: string) => request<DownloadGrant>(
+  `/api/projects/${projectId}/documents/${documentId}/download`, { method: "POST" },
+);
 export const createProjectDocumentUpload = (projectId: string, phaseId: string, file: File) => request<PendingDocumentUpload>(
   `/api/projects/${projectId}/phases/${phaseId}/documents/uploads`,
   json("POST", { fileName: file.name, contentType: file.type || "application/octet-stream", length: file.size }),

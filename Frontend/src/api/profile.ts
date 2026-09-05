@@ -1,3 +1,6 @@
+import { isThemePreference } from "../theme";
+import type { ThemePreference } from "../theme";
+
 export type ProfileType = "client" | "employee";
 
 export type ProfileCompanyOption = {
@@ -21,6 +24,7 @@ export type CurrentProfile = {
   availableCompanies: ProfileCompanyOption[];
   companyRole?: "owner" | "employee";
   isArchitect?: boolean;
+  themePreference: ThemePreference;
 };
 
 export type UpdateCurrentProfile = {
@@ -33,6 +37,7 @@ export type UpdateCurrentProfile = {
   address: string;
   companyId: number | null;
   isArchitect: boolean;
+  themePreference: ThemePreference;
 };
 
 export type ProfileFieldErrors = Record<string, string>;
@@ -79,15 +84,25 @@ export async function loadCurrentProfile() {
   ) {
     throw new ProfileApiError("A resposta do perfil é inválida.", 500);
   }
-  return profile;
+  return normalizeThemePreference(profile);
 }
 
-export function saveCurrentProfile(payload: UpdateCurrentProfile) {
-  return profileRequest<CurrentProfile>({
+export async function saveCurrentProfile(payload: UpdateCurrentProfile) {
+  const profile = await profileRequest<CurrentProfile>({
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
+  return normalizeThemePreference(profile);
+}
+
+function normalizeThemePreference(profile: CurrentProfile): CurrentProfile {
+  return {
+    ...profile,
+    themePreference: isThemePreference(profile.themePreference)
+      ? profile.themePreference
+      : "light",
+  };
 }
 
 export function changeCurrentPassword(currentPassword: string, newPassword: string) {

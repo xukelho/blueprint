@@ -64,7 +64,9 @@ public sealed class BlueprintDbContext(DbContextOptions<BlueprintDbContext> opti
     {
         var user = modelBuilder.Entity<User>();
 
-        user.ToTable("users");
+        user.ToTable("users", table => table.HasCheckConstraint(
+            "CK_users_theme_preference",
+            "theme_preference IN ('light', 'dark', 'dynamic')"));
         user.HasKey(candidate => candidate.Id);
         user.Property(candidate => candidate.Id)
             .HasColumnName("id")
@@ -78,6 +80,11 @@ public sealed class BlueprintDbContext(DbContextOptions<BlueprintDbContext> opti
         user.Property(candidate => candidate.Password)
             .HasColumnName("password")
             .HasMaxLength(512)
+            .IsRequired();
+        user.Property(candidate => candidate.ThemePreference)
+            .HasColumnName("theme_preference")
+            .HasMaxLength(16)
+            .HasDefaultValue(UserThemePreferences.Light)
             .IsRequired();
         user.Property(candidate => candidate.CreatedAt)
             .HasColumnName("created_at")

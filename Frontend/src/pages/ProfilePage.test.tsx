@@ -18,6 +18,7 @@ const employeeProfile = {
   companyName: "Forma Norte",
   companyRole: "employee",
   isArchitect: true,
+  themePreference: "light",
   roles: ["employee", "architect"],
   availableCompanies: [
     { id: 10, name: "Forma Norte" },
@@ -47,6 +48,8 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   sessionStorage.clear();
+  document.documentElement.dataset.theme = "light";
+  document.documentElement.style.colorScheme = "light";
 });
 
 function renderApp(path: string) {
@@ -58,6 +61,33 @@ function renderApp(path: string) {
 }
 
 describe("editable profile", () => {
+  it("previews and saves an account theme preference", async () => {
+    sessionStorage.setItem("blueprint.auth.roles", JSON.stringify(["employee"]));
+    let submitted: Record<string, unknown> | null = null;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+      if (init?.method === "PUT") {
+        submitted = JSON.parse(String(init.body));
+        return jsonResponse({ ...employeeProfile, ...submitted });
+      }
+      return jsonResponse(employeeProfile);
+    });
+    const user = userEvent.setup();
+    renderApp("/profile");
+
+    await screen.findByDisplayValue("Ana Sofia Martins");
+    await user.click(screen.getByRole("button", { name: "Aparência" }));
+    expect(screen.getByRole("radio", { name: "Claro" })).toBeChecked();
+    await user.click(screen.getByRole("radio", { name: "Escuro" }));
+
+    expect(document.documentElement).toHaveAttribute("data-theme", "dark");
+    expect(sessionStorage.getItem("blueprint.theme.preference")).toBe("light");
+    await user.click(screen.getByRole("button", { name: "Guardar alterações" }));
+
+    expect(await screen.findByRole("button", { name: /Guardado/ })).toBeInTheDocument();
+    expect(submitted).toMatchObject({ themePreference: "dark" });
+    expect(sessionStorage.getItem("blueprint.theme.preference")).toBe("dark");
+  });
+
   it("loads and saves employee data, associations, and navigation identity", async () => {
     sessionStorage.setItem(
       "blueprint.auth.roles",
@@ -127,19 +157,27 @@ describe("editable profile", () => {
     const user = userEvent.setup();
     renderApp("/profile");
 
-    const username = await screen.findByLabelText("Nome de utilizador");
+    await screen.findByLabelText("Nome de utilizador");
     expect(screen.queryByLabelText("Empresa")).not.toBeInTheDocument();
     expect(screen.getAllByText("Empresas associadas")).toHaveLength(2);
     expect(screen.getByText("Forma Norte")).toBeInTheDocument();
     expect(screen.getByText("Atelier Sul")).toBeInTheDocument();
-    await user.clear(username);
+    await user.click(screen.getByRole("button", { name: "Aparência" }));
+    await user.click(screen.getByRole("radio", { name: "Escuro" }));
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    await user.click(screen.getByRole("button", { name: "Dados pessoais" }));
+    await user.clear(screen.getByLabelText("Nome de utilizador"));
     await user.click(screen.getByRole("button", { name: "Guardar alterações" }));
 
     expect(await screen.findByText("Username is required.")).toBeInTheDocument();
-    expect(username).toHaveValue("");
+    await user.click(screen.getByRole("button", { name: "Dados pessoais" }));
+    expect(screen.getByLabelText("Nome de utilizador")).toHaveValue("");
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Não foi possível guardar o perfil.",
     );
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    await user.click(screen.getByRole("button", { name: "Dashboard" }));
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe("light"));
   });
 
   it("uses the real client identity button to reach the client page from dashboard", async () => {

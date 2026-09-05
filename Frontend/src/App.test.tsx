@@ -8,6 +8,7 @@ import { clearAuthenticatedRoles } from "./auth";
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   sessionStorage.clear();
 });
 
@@ -164,6 +165,75 @@ async function completeLoginForm() {
 }
 
 describe("login", () => {
+  it("hides quick login outside development mode", () => {
+    renderApp();
+
+    expect(screen.queryByRole("button", { name: "Login as Admin" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Login as Architect" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Login as Client" })).not.toBeInTheDocument();
+  });
+
+  it("shows quick login in development mode", () => {
+    vi.stubEnv("MODE", "development");
+    renderApp();
+
+    expect(screen.getByRole("button", { name: "Login as Admin" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Login as Architect" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Login as Client" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Username")).toHaveValue("");
+    expect(screen.getByLabelText("Password")).toHaveValue("");
+  });
+
+  it.each([
+    ["Login as Admin", "admin", "admin"],
+    ["Login as Architect", "arc1", "arc1"],
+    ["Login as Client", "cli1", "cli1"],
+  ])("posts the credentials for %s", async (label, username, password) => {
+    vi.stubEnv("MODE", "development");
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ status: "fail" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(screen.getByRole("button", { name: label }));
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The username or password is incorrect.",
+    );
+  });
+
+  it("navigates after a successful quick login", async () => {
+    vi.stubEnv("MODE", "development");
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) =>
+      new Response(JSON.stringify(
+        String(input) === "/api/auth/login"
+          ? { status: "success", roles: ["platform admin"] }
+          : [],
+      ), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(screen.getByRole("button", { name: "Login as Admin" }));
+
+    expect(await screen.findByRole("heading", { name: "Administração", level: 1 }))
+      .toBeInTheDocument();
+    expect(sessionStorage.getItem("blueprint.auth.roles"))
+      .toBe(JSON.stringify(["platform admin"]));
+  });
+
   it("redirects an unauthenticated visit to the dashboard to sign-in", async () => {
     renderApp("/dashboard");
 

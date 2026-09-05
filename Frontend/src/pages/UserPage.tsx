@@ -2,9 +2,12 @@ import { FormEvent, ReactNode, useEffect, useState } from "react";
 import {
   Check,
   ChevronRight,
+  Clock3,
   Globe2,
   KeyRound,
+  Moon,
   ShieldCheck,
+  Sun,
   UserRound,
 } from "lucide-react";
 import { ProfileType, UpdateCurrentProfile } from "../api/profile";
@@ -15,6 +18,8 @@ import {
   profileRoleLabel,
   useProfile,
 } from "../profile/ProfileContext";
+import type { ThemePreference } from "../theme";
+import { useTheme } from "../theme/ThemeContext";
 
 function PageHeader({
   eyebrow,
@@ -70,10 +75,37 @@ const emptyForm: ProfileForm = {
   address: "",
   companyId: null,
   isArchitect: false,
+  themePreference: "light",
   website: "",
   linkedIn: "",
   instagram: "",
 };
+
+const themeOptions: Array<{
+  value: ThemePreference;
+  title: string;
+  description: string;
+  icon: typeof Sun;
+}> = [
+  {
+    value: "light",
+    title: "Claro",
+    description: "A aparência atual do Blueprint, luminosa e limpa.",
+    icon: Sun,
+  },
+  {
+    value: "dark",
+    title: "Escuro",
+    description: "Uma paleta suave para ambientes com pouca luz.",
+    icon: Moon,
+  },
+  {
+    value: "dynamic",
+    title: "Dinâmico",
+    description: "Claro das 07:00 às 19:00 e escuro durante a noite.",
+    icon: Clock3,
+  },
+];
 
 export default function UserPage({
   expectedProfileType,
@@ -91,6 +123,7 @@ export default function UserPage({
   securityOnlyDeactivation?: boolean;
 }) {
   const { profile, isLoading, error, fieldErrors, updateProfile } = useProfile();
+  const { previewTheme, clearThemePreview } = useTheme();
   const [section, setSection] = useState("Dados pessoais");
   const [form, setForm] = useState<ProfileForm>(emptyForm);
   const [saved, setSaved] = useState(false);
@@ -98,6 +131,7 @@ export default function UserPage({
   const sections = [
     "Dados pessoais",
     "Contactos",
+    "Aparência",
     "Segurança",
     ...(!simplifiedNavigation ? ["Notificações", "Dados financeiros"] : []),
   ];
@@ -115,12 +149,20 @@ export default function UserPage({
       address: profile.address,
       companyId: profile.companyId,
       isArchitect: profile.isArchitect ?? false,
+      themePreference: profile.themePreference,
     }));
   }, [profile]);
+
+  useEffect(() => () => clearThemePreview(), [clearThemePreview]);
 
   const setField = <K extends keyof ProfileForm>(field: K, value: ProfileForm[K]) => {
     setSaved(false);
     setForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const setThemePreference = (themePreference: ThemePreference) => {
+    setField("themePreference", themePreference);
+    previewTheme(themePreference);
   };
 
   const save = async (event: FormEvent<HTMLFormElement>) => {
@@ -139,7 +181,9 @@ export default function UserPage({
         address: form.address,
         companyId: form.companyId,
         isArchitect: expectedProfileType === "employee" && form.isArchitect,
+        themePreference: form.themePreference,
       });
+      clearThemePreview();
       setSaved(true);
     } catch {
       // The shared profile state exposes the actionable error and field messages.
@@ -362,6 +406,45 @@ export default function UserPage({
                   />
                 </ProfileField>
               </div>
+            ) : section === "Aparência" ? (
+              <fieldset className="theme-picker">
+                <legend>Escolhe o tema do Blueprint</legend>
+                <p className="theme-picker__intro">
+                  A preferência fica associada à tua conta e é aplicada em todos os dispositivos.
+                </p>
+                <div className="theme-picker__options">
+                  {themeOptions.map((option) => {
+                    const Icon = option.icon;
+                    const selected = form.themePreference === option.value;
+                    return (
+                      <label
+                        className={`theme-option ${selected ? "theme-option--selected" : ""}`}
+                        key={option.value}
+                      >
+                        <input
+                          type="radio"
+                          name="themePreference"
+                          value={option.value}
+                          aria-label={option.title}
+                          checked={selected}
+                          onChange={() => setThemePreference(option.value)}
+                        />
+                        <span className="theme-option__icon" aria-hidden="true"><Icon size={22} /></span>
+                        <span className="theme-option__copy">
+                          <strong>{option.title}</strong>
+                          <small>{option.description}</small>
+                        </span>
+                        <span className="theme-option__check" aria-hidden="true">
+                          {selected && <Check size={15} />}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+                {fieldErrors.themePreference && (
+                  <small className="admin-field-error">{fieldErrors.themePreference}</small>
+                )}
+              </fieldset>
             ) : section === "Segurança" ? (
               <div className="mock-security-list">
                 <div>

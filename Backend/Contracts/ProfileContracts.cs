@@ -17,7 +17,8 @@ public sealed record CurrentProfileResponse(
     IReadOnlyList<string> Roles,
     IReadOnlyList<ProfileCompanyOption> AvailableCompanies,
     string? CompanyRole = null,
-    bool IsArchitect = false);
+    bool IsArchitect = false,
+    string ThemePreference = "light");
 
 public sealed record UpdateCurrentProfileRequest(
     string Username,
@@ -28,6 +29,7 @@ public sealed record UpdateCurrentProfileRequest(
     string PhoneNumber,
     string Address,
     long? CompanyId,
-    bool IsArchitect);
+    bool IsArchitect,
+    string ThemePreference = "light");
 
 public sealed record ChangePasswordRequest(string CurrentPassword, string NewPassword);
