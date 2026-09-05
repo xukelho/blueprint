@@ -691,6 +691,14 @@ namespace Blueprint.Api.Data.Migrations
                         .HasColumnType("character varying(512)")
                         .HasColumnName("password");
 
+                    b.Property<string>("ThemePreference")
+                        .ValueGeneratedOnAdd()
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("light")
+                        .HasColumnName("theme_preference");
+
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
@@ -710,7 +718,10 @@ namespace Blueprint.Api.Data.Migrations
                     b.HasIndex("Username")
                         .IsUnique();
 
-                    b.ToTable("users", (string)null);
+                    b.ToTable("users", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_users_theme_preference", "theme_preference IN ('light', 'dark', 'dynamic')");
+                        });
                 });
 
             modelBuilder.Entity("Blueprint.Api.Data.UserRole", b =>

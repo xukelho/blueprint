@@ -8,6 +8,8 @@ public sealed class User
 
     public required string Password { get; set; }
 
+    public string ThemePreference { get; set; } = UserThemePreferences.Light;
+
     public DateTimeOffset CreatedAt { get; set; }
 
     public long CreatedBy { get; set; }

@@ -46,6 +46,7 @@ public sealed class ProfileIntegrationTests(
         var profile = await fixture.Client.GetFromJsonAsync<JsonElement>("/api/profile");
         Assert.Equal("client", profile.GetProperty("profileType").GetString());
         Assert.Equal("profile.client", profile.GetProperty("username").GetString());
+        Assert.Equal("light", profile.GetProperty("themePreference").GetString());
         Assert.Equal(
             ["client"],
             profile.GetProperty("roles").EnumerateArray()
@@ -56,7 +57,8 @@ public sealed class ProfileIntegrationTests(
             ProfilePayload(
                 username: "profile.client.updated",
                 companyId: companyId,
-                displayName: "Marta Atualizada"));
+                displayName: "Marta Atualizada",
+                themePreference: "dark"));
         Assert.Equal(HttpStatusCode.OK, update.StatusCode);
         Assert.Contains(
             update.Headers.GetValues("Set-Cookie"),
@@ -64,6 +66,7 @@ public sealed class ProfileIntegrationTests(
         var updated = await update.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal("profile.client.updated", updated.GetProperty("username").GetString());
         Assert.Equal("Marta Atualizada", updated.GetProperty("displayName").GetString());
+        Assert.Equal("dark", updated.GetProperty("themePreference").GetString());
         Assert.Equal(JsonValueKind.Null, updated.GetProperty("companyId").ValueKind);
         Assert.Equal(JsonValueKind.Null, updated.GetProperty("companyName").ValueKind);
         Assert.Equal(companyId, updated.GetProperty("availableCompanies")[0].GetProperty("id").GetInt64());
@@ -114,17 +117,23 @@ public sealed class ProfileIntegrationTests(
                 "profile.employee",
                 secondCompanyId,
                 displayName: "Ana Atualizada",
-                isArchitect: false));
+                isArchitect: false,
+                themePreference: "dynamic"));
         Assert.Equal(HttpStatusCode.OK, update.StatusCode);
         var updated = await update.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal(secondCompanyId, updated.GetProperty("companyId").GetInt64());
+        Assert.Equal("dynamic", updated.GetProperty("themePreference").GetString());
         Assert.Equal(
             ["employee"],
             updated.GetProperty("roles").EnumerateArray()
                 .Select(candidate => candidate.GetString()));
         using var addArchitect = await fixture.Client.PutAsJsonAsync(
             "/api/profile",
-            ProfilePayload("profile.employee", secondCompanyId, isArchitect: true));
+            ProfilePayload(
+                "profile.employee",
+                secondCompanyId,
+                isArchitect: true,
+                themePreference: "dynamic"));
         Assert.Equal(HttpStatusCode.OK, addArchitect.StatusCode);
         var architect = await addArchitect.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal(
@@ -143,6 +152,16 @@ public sealed class ProfileIntegrationTests(
         Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
         var invalidBody = await invalid.Content.ReadFromJsonAsync<JsonElement>();
         Assert.True(invalidBody.GetProperty("errors").TryGetProperty("username", out _));
+
+        using var invalidTheme = await fixture.Client.PutAsJsonAsync(
+            "/api/profile",
+            ProfilePayload("profile.employee", secondCompanyId, themePreference: "neon"));
+        Assert.Equal(HttpStatusCode.BadRequest, invalidTheme.StatusCode);
+        var invalidThemeBody = await invalidTheme.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.True(invalidThemeBody.GetProperty("errors").TryGetProperty("themePreference", out _));
+
+        var persisted = await fixture.Client.GetFromJsonAsync<JsonElement>("/api/profile");
+        Assert.Equal("dynamic", persisted.GetProperty("themePreference").GetString());
     }
 
     private async Task LoginAsync(string username)
@@ -214,7 +233,8 @@ public sealed class ProfileIntegrationTests(
         string username,
         long? companyId,
         string displayName = "Perfil Atualizado",
-        bool isArchitect = false) =>
+        bool isArchitect = false,
+        string themePreference = "light") =>
         new
         {
             username,
@@ -225,6 +245,7 @@ public sealed class ProfileIntegrationTests(
             phoneNumber = "930000000",
             address = "Coimbra",
             companyId,
-            isArchitect
+            isArchitect,
+            themePreference
         };
 }

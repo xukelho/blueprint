@@ -415,18 +415,18 @@ button { cursor: pointer; }
   justify-content: center;
   gap: 8px;
   padding: 0 14px;
-  color: #4f5257;
-  background: #fff;
-  border: 1px solid #d1e4e9;
+  color: var(--theme-text-secondary, #4f5257);
+  background: var(--theme-surface, #fff);
+  border: 1px solid var(--theme-border, #d1e4e9);
   border-radius: 8px;
   font-size: 13px;
   font-weight: 600;
 }
 
 .secondary-action:hover {
-  color: #202124;
-  background: #f4f9fb;
-  border-color: #bdd7de;
+  color: var(--theme-text, #202124);
+  background: var(--theme-surface-raised, #f4f9fb);
+  border-color: var(--theme-border-strong, #bdd7de);
 }
 
 .mock-toolbar {
@@ -1128,8 +1128,8 @@ button { cursor: pointer; }
 .project-details-form { margin-top: 22px; }
 
 .mock-surface {
-  background: #fff;
-  border: 1px solid #dcecf1;
+  background: var(--theme-surface, #fff);
+  border: 1px solid var(--theme-border, #dcecf1);
   border-radius: 11px;
 }
 
@@ -1278,7 +1278,7 @@ button { cursor: pointer; }
   display: flex;
   flex-direction: column;
   gap: 7px;
-  color: #4f5257;
+  color: var(--theme-text-secondary, #4f5257);
   font-size: 12px;
   font-weight: 600;
 }
@@ -1294,9 +1294,9 @@ button { cursor: pointer; }
   width: 100%;
   min-height: 42px;
   padding: 0 12px;
-  color: #202124;
-  background: #fff;
-  border: 1px solid #d5e6eb;
+  color: var(--theme-text, #202124);
+  background: var(--theme-surface, #fff);
+  border: 1px solid var(--theme-border-strong, #d5e6eb);
   border-radius: 7px;
   outline: 0;
   font-size: 13px;
@@ -2176,6 +2176,64 @@ button.mock-client-project-card:disabled { cursor: wait; }
   min-height: 520px;
 }
 
+.theme-picker {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.theme-picker > legend {
+  padding: 0;
+  color: var(--theme-text, #202124);
+  font: 600 16px/24px "Manrope", sans-serif;
+}
+
+.theme-picker__intro {
+  margin: 5px 0 20px;
+  color: var(--theme-text-muted, #92959a);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.theme-picker__options { display: grid; gap: 11px; }
+
+.theme-option {
+  position: relative;
+  min-height: 82px;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 22px;
+  align-items: center;
+  gap: 13px;
+  padding: 15px 16px;
+  color: var(--theme-text-secondary, #4f5257);
+  background: var(--theme-surface, #fff);
+  border: 1px solid var(--theme-border-strong, #d5e6eb);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: border-color .18s ease, background .18s ease, box-shadow .18s ease;
+}
+
+.theme-option:hover { border-color: #9ecbd1; }
+.theme-option--selected { background: var(--theme-accent-soft, #edf7f8); border-color: var(--theme-accent, #16808a); box-shadow: 0 0 0 2px rgba(0, 109, 119, .1); }
+.theme-option > input { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; }
+.theme-option:has(input:focus-visible) { outline: 2px solid #16808a; outline-offset: 2px; }
+
+.theme-option__icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  color: var(--theme-accent, #006d77);
+  background: var(--theme-accent-soft, #e3f5fa);
+  border-radius: 9px;
+}
+
+.theme-option__copy { min-width: 0; display: grid; gap: 4px; }
+.theme-option__copy strong { color: var(--theme-text, #303236); font-size: 13px; }
+.theme-option__copy small { color: var(--theme-text-muted, #7b7e83); font-size: 11px; font-weight: 400; line-height: 16px; }
+.theme-option__check { width: 20px; height: 20px; display: grid; place-items: center; color: #fff; background: var(--theme-accent, #006d77); border: 1px solid var(--theme-border-strong, #b9d7db); border-radius: 50%; }
+.theme-option:not(.theme-option--selected) .theme-option__check { background: transparent; }
+
 .mock-settings-placeholder {
   min-height: 310px;
   display: flex;
@@ -2574,11 +2632,40 @@ button.mock-client-project-card:disabled { cursor: wait; }
 
 .app-shell {
   --sidebar-width: 256px;
+  --theme-page: #f4f9fb;
+  --theme-sidebar: #fff;
+  --theme-surface: #fff;
+  --theme-surface-raised: #f8fcfd;
+  --theme-surface-muted: #edf6f9;
+  --theme-accent-soft: #e3f5fa;
+  --theme-text: #202124;
+  --theme-text-secondary: #686b70;
+  --theme-text-muted: #92959a;
+  --theme-border: #dcecf1;
+  --theme-border-strong: #d5e6eb;
+  --theme-accent: #006d77;
+  --theme-accent-strong: #005864;
   position: relative;
   isolation: isolate;
   min-height: 100vh;
-  color: #202124;
-  background: #f4f9fb;
+  color: var(--theme-text);
+  background: var(--theme-page);
+}
+
+html[data-theme="dark"] .app-shell {
+  --theme-page: #0f181c;
+  --theme-sidebar: #131f23;
+  --theme-surface: #19272c;
+  --theme-surface-raised: #1e2d32;
+  --theme-surface-muted: #203239;
+  --theme-accent-soft: #17383d;
+  --theme-text: #edf4f5;
+  --theme-text-secondary: #bdcacc;
+  --theme-text-muted: #9fb0b5;
+  --theme-border: #2b4148;
+  --theme-border-strong: #38515a;
+  --theme-accent: #61c5cf;
+  --theme-accent-strong: #83d6dd;
 }
 
 .app-shell::before {
@@ -2607,9 +2694,9 @@ button.mock-client-project-card:disabled { cursor: wait; }
   display: flex;
   flex-direction: column;
   padding: 20px 14px 14px;
-  color: #303236;
-  background: #fff;
-  border-right: 1px solid #dcecf1;
+  color: var(--theme-text);
+  background: var(--theme-sidebar);
+  border-right: 1px solid var(--theme-border);
   transition: width .2s ease, transform .2s ease;
 }
 
@@ -2843,9 +2930,9 @@ button.mock-client-project-card:disabled { cursor: wait; }
   align-items: center;
   gap: 11px;
   padding: 0 14px;
-  color: #92959a;
-  background: #fff;
-  border: 1px solid #d5e6eb;
+  color: var(--theme-text-muted);
+  background: var(--theme-surface);
+  border: 1px solid var(--theme-border-strong);
   border-radius: 9px;
   transition: border-color .18s ease, box-shadow .18s ease;
 }
@@ -3339,4 +3426,299 @@ input:focus-visible { outline: 3px solid rgba(0, 109, 119, .22); outline-offset:
 .mock-profile-check span { display: flex; flex-direction: column; gap: 2px; }
 .mock-profile-check strong { color: #303236; font-size: 11px; }
 .mock-profile-check small { color: #92959a; font-size: 10px; }
+
+/* Authenticated portal theme tokens and dark palette. The login experience stays light. */
+html[data-theme="dark"] .app-shell::before {
+  background-image:
+    linear-gradient(90deg, rgba(15, 24, 28, .91), rgba(15, 24, 28, .96)),
+    url("./assets/architectural-background.svg");
+  opacity: .5;
+}
+
+html[data-theme="dark"] .app-shell :is(
+  .mock-project-card,
+  .project-phase-card,
+  .project-phase-card__actions button,
+  .project-hero,
+  .project-hero__location,
+  .project-document-viewer__controls button,
+  .project-document-viewer__state button,
+  .project-documents__upload,
+  .project-document__download,
+  .project-icon-action,
+  .project-options-menu,
+  .project-conversations__messages article,
+  .project-conversations__composer textarea,
+  .project-conversation-index__list button,
+  .members-settings td select,
+  .mock-project-summary,
+  .mock-client-card,
+  .mock-project-member-card,
+  .mock-client-project-card,
+  .mock-guide-card,
+  .mock-modal,
+  .dashboard-project-card,
+  .empty-state,
+  .empty-state button,
+  .project-more,
+  .project-menu,
+  .mobile-menu-button
+) {
+  color: var(--theme-text-secondary);
+  background: var(--theme-surface);
+  border-color: var(--theme-border);
+}
+
+html[data-theme="dark"] .app-shell :is(
+  .atelier-context,
+  .project-phase-catalog,
+  .mock-plan,
+  .mock-map-picker,
+  .mock-upload-zone,
+  .mock-timeline-tabs,
+  .mock-section-title > span,
+  .project-preview,
+  .search-shortcut,
+  .project-card__meta span:last-child,
+  .mock-modal-close,
+  .project-conversations__messages,
+  .project-folder-tree__note
+) {
+  color: var(--theme-text-secondary);
+  background: var(--theme-surface-muted);
+  border-color: var(--theme-border);
+}
+
+html[data-theme="dark"] .app-shell :is(
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea
+) {
+  color: var(--theme-text);
+  background-color: var(--theme-surface);
+  border-color: var(--theme-border-strong);
+}
+
+html[data-theme="dark"] .app-shell :is(input, textarea)::placeholder {
+  color: var(--theme-text-muted);
+}
+
+html[data-theme="dark"] .app-shell :is(
+  .sidebar-brand__name,
+  .dashboard-header h1,
+  .section-heading h2,
+  .mock-page-header h1,
+  .mock-card-heading h2,
+  .mock-section-title h2,
+  .mock-support-card h2,
+  .mock-contact-card h2,
+  .mock-notification-groups h2,
+  .mock-profile-hero h2,
+  .project-workspace-heading h2,
+  .project-conversations h2,
+  .project-documents__toggle strong,
+  .project-timeline-heading h2,
+  .project-card__title-row strong,
+  .empty-state h3,
+  .mock-settings-placeholder h3,
+  .mock-modal h2,
+  .mock-timeline-toggle strong,
+  .mock-summary-list dd
+) {
+  color: var(--theme-text);
+}
+
+html[data-theme="dark"] .app-shell :is(
+  .dashboard-kicker,
+  .dashboard-header p,
+  .section-heading p,
+  .mock-page-header > div > p:last-child,
+  .mock-card-heading p,
+  .mock-section-title p,
+  .mock-profile-hero p,
+  .project-workspace-heading p,
+  .project-conversations__header p,
+  .project-documents__toggle small,
+  .project-document__name small,
+  .project-conversation-index > header small,
+  .project-folder-tree__heading small,
+  .project-workspace-panel__empty,
+  .mock-field small,
+  .mock-upload-zone span,
+  .mock-notification-head,
+  .mock-guide-card p,
+  .mock-security-list small,
+  .user-menu__copy small,
+  .atelier-context small,
+  .project-card__address,
+  .notification-count--empty
+) {
+  color: var(--theme-text-muted) !important;
+}
+
+html[data-theme="dark"] .app-shell :is(
+  .mock-project-details dt,
+  .project-timeline-editor__toolbar p,
+  .project-timeline-node__label,
+  .mock-map-picker small,
+  .mock-project-summary > div > span:first-child,
+  .mock-track-phase strong,
+  .mock-attention-list small,
+  .mock-activity-list p,
+  .mock-person span:not(.mock-avatar),
+  .mock-summary-list dt,
+  .mock-data-list small,
+  .mock-client-card small,
+  .mock-client-projects,
+  .mock-client-identity dt,
+  .mock-client-project-help,
+  .mock-client-project-copy small,
+  .mock-client-project-state,
+  .mock-compact-project small,
+  .mock-mini-activity,
+  .mock-preference-row,
+  .mock-digest-card small,
+  .mock-contact-card p,
+  .mock-danger-zone p,
+  .dashboard-search > label,
+  .section-heading > button,
+  .project-card__client,
+  .project-card__meta,
+  .notification-count,
+  .empty-state
+) {
+  color: var(--theme-text-secondary);
+}
+
+html[data-theme="dark"] .app-shell :is(
+  .atelier-context strong,
+  .user-menu__copy strong,
+  .mock-project-details dd,
+  .project-document__name strong,
+  .project-conversations__chat > header strong,
+  .project-conversation-index > header strong,
+  .project-folder-tree__heading strong,
+  .mock-upload-zone strong,
+  .mock-project-summary strong,
+  .mock-attention-list strong,
+  .mock-person strong,
+  .mock-data-list strong,
+  .mock-client-card strong,
+  .mock-project-member-card strong,
+  .mock-client-identity dd,
+  .mock-client-project-copy strong,
+  .mock-compact-project strong,
+  .mock-digest-card strong,
+  .mock-guide-card strong,
+  .mock-security-list strong,
+  .mock-profile-check strong
+) {
+  color: var(--theme-text);
+}
+
+html[data-theme="dark"] .app-shell :is(
+  .nav-item,
+  .user-menu,
+  .sidebar-toggle,
+  .mock-settings-nav button,
+  .mock-breadcrumbs button,
+  .project-menu button
+) {
+  color: var(--theme-text-secondary);
+}
+
+html[data-theme="dark"] .app-shell :is(
+  .nav-item:hover,
+  .user-menu:hover,
+  .sidebar-toggle:hover,
+  .mock-settings-nav button:hover,
+  .project-menu button:hover,
+  .dashboard-search__field > button:hover
+) {
+  color: var(--theme-text);
+  background: var(--theme-surface-muted);
+}
+
+html[data-theme="dark"] .app-shell :is(
+  .nav-item--active,
+  .user-menu--active,
+  .mock-settings-nav button.is-active,
+  .project-icon-action:hover,
+  .project-icon-action[aria-expanded="true"]
+) {
+  color: var(--theme-accent-strong);
+  background: var(--theme-accent-soft);
+}
+
+html[data-theme="dark"] .app-shell :is(
+  .primary-action,
+  .nav-badge,
+  .sidebar-brand__mark,
+  .theme-option__check
+) {
+  color: #0f181c;
+  background: var(--theme-accent);
+  border-color: var(--theme-accent);
+}
+
+html[data-theme="dark"] .app-shell :is(
+  .mock-heading-action,
+  .project-phase-card__icon,
+  .project-documents__icon,
+  .mock-step,
+  .mock-guide-card > span,
+  .dashboard-search__field:focus-within
+) {
+  color: var(--theme-accent-strong);
+}
+
+html[data-theme="dark"] .app-shell :is(
+  .mock-heading-action:hover,
+  .project-documents__icon,
+  .mock-step,
+  .mock-guide-card > span
+) {
+  background: var(--theme-accent-soft);
+}
+
+html[data-theme="dark"] .app-shell :is(
+  .mock-surface,
+  .mock-project-card,
+  .dashboard-project-card,
+  .empty-state,
+  .project-workspace > section,
+  .project-workspace > aside
+) {
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .13);
+}
+
+html[data-theme="dark"] .app-shell :is(
+  .mock-project-card,
+  .dashboard-project-card,
+  .mock-client-card,
+  .mock-project-member-card,
+  .mock-client-project-card,
+  .mock-guide-card,
+  .mock-preference-row,
+  .mock-security-list > div,
+  .members-settings th,
+  .members-settings td,
+  .project-card__meta,
+  .mock-danger-zone
+) {
+  border-color: var(--theme-border);
+}
+
+html[data-theme="dark"] .app-shell .mock-project-card__image,
+html[data-theme="dark"] .app-shell .project-document-viewer__canvas {
+  filter: brightness(.82) contrast(1.04);
+}
+
+html[data-theme="dark"] .app-shell .mock-status--success,
+html[data-theme="dark"] .app-shell .status-pill--active { color: #86d69a; background: #183725; }
+html[data-theme="dark"] .app-shell .mock-status--warning,
+html[data-theme="dark"] .app-shell .status-pill--waiting { color: #efc77b; background: #3b2e16; }
+html[data-theme="dark"] .app-shell .mock-status--info,
+html[data-theme="dark"] .app-shell .status-pill--review { color: #91c4ef; background: #1b3143; }
+html[data-theme="dark"] .app-shell .mock-status--danger { color: #f1a29d; background: #422321; }
 .profile-form-error { margin: 18px 0 0; color: #ad4f3f; font-size: 11px; }
