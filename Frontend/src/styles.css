@@ -963,6 +963,38 @@ button { cursor: pointer; }
 .project-document-viewer__state span { max-width: 350px; font-size: 11px; line-height: 17px; }
 .project-document-viewer__state button { min-height: 34px; margin-top: 4px; padding: 0 12px; font-size: 11px; }
 .project-document-viewer__state.is-error > svg, .project-document-viewer__state.is-error strong { color: #a33e3e; }
+.project-file-viewer__object { width: 100%; height: 100%; display: block; border: 0; background: #fff; }
+.project-file-viewer__image-stage { width: 100%; height: 100%; overflow: auto; display: grid; place-items: center; }
+.project-file-viewer__image-stage img, .project-file-viewer__image-stage canvas { max-width: 100%; max-height: 100%; transform-origin: center; transition: transform .15s ease; }
+.project-file-viewer__svg { width: 100%; height: 100%; overflow: auto; display: grid; place-items: center; padding: 20px; background: #fff; }
+.project-file-viewer__svg > svg { max-width: 100%; max-height: 100%; }
+.project-file-viewer__scroll, .project-file-viewer__spreadsheet, .project-file-viewer__archive { width: 100%; height: 100%; overflow: auto; }
+.project-file-viewer__paper { padding: 22px; background: #eef2f2; }
+.project-file-viewer__document, .project-file-viewer__paper pre { width: min(780px, 100%); min-height: 100%; margin: 0 auto; padding: 34px 42px; color: #24383c; background: #fff; border: 1px solid #dce4e5; box-shadow: 0 2px 9px rgba(37, 62, 67, .08); }
+.project-file-viewer__document { font-size: 13px; line-height: 1.65; overflow-wrap: anywhere; }
+.project-file-viewer__document img { max-width: 100%; }
+.project-file-viewer__document table { width: 100%; border-collapse: collapse; }
+.project-file-viewer__document td, .project-file-viewer__document th { padding: 5px 7px; border: 1px solid #cad8da; }
+.project-file-viewer__paper pre { margin-top: 10px; font: 12px/1.65 Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.project-file-viewer__search { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 12px; width: min(780px, 100%); margin: 0 auto 8px; }
+.project-file-viewer__search label { display: flex; align-items: center; gap: 6px; min-width: 210px; padding: 0 8px; color: #527176; background: #fff; border: 1px solid #cbdcdf; border-radius: 7px; }
+.project-file-viewer__search input { min-width: 0; height: 32px; flex: 1; border: 0; outline: 0; background: transparent; font-size: 12px; }
+.project-file-viewer__search button { display: inline-flex; padding: 2px; color: inherit; background: transparent; border: 0; }
+.project-file-viewer__search small { color: #647b7f; font-size: 11px; white-space: nowrap; }
+.project-file-viewer__tabs { position: sticky; top: 0; z-index: 2; display: flex; gap: 2px; min-height: 38px; padding: 5px 8px 0; overflow-x: auto; background: #edf3f4; border-bottom: 1px solid #c9d9db; }
+.project-file-viewer__tabs button { padding: 0 14px; color: #587176; background: transparent; border: 1px solid transparent; border-radius: 6px 6px 0 0; white-space: nowrap; font-size: 11px; }
+.project-file-viewer__tabs button[aria-selected="true"] { color: #005864; background: #fff; border-color: #c9d9db; border-bottom-color: #fff; font-weight: 700; }
+.project-file-viewer__table-wrap { min-width: 100%; overflow: auto; background: #fff; }
+.project-file-viewer__table-wrap table { border-spacing: 0; min-width: 100%; color: #2b4044; font-size: 11px; }
+.project-file-viewer__table-wrap th, .project-file-viewer__table-wrap td { min-width: 90px; height: 28px; padding: 4px 7px; border-right: 1px solid #dce5e6; border-bottom: 1px solid #dce5e6; white-space: nowrap; text-align: left; }
+.project-file-viewer__table-wrap th { position: sticky; left: 0; min-width: 42px; width: 42px; color: #6a8084; background: #eef3f4; text-align: center; }
+.project-file-viewer__archive { padding: 16px; background: #f6f9f9; }
+.project-file-viewer__archive-summary { width: min(780px, 100%); margin: 0 auto 8px; color: #637a7e; font-size: 11px; }
+.project-file-viewer__archive-list { width: min(780px, 100%); margin: auto; background: #fff; border: 1px solid #d5e1e2; border-radius: 8px; overflow: hidden; }
+.project-file-viewer__archive-list > div { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; min-height: 36px; padding: 5px 10px; border-bottom: 1px solid #e4ebec; color: #527176; font-size: 12px; }
+.project-file-viewer__archive-list > div:last-child { border-bottom: 0; }
+.project-file-viewer__archive-list span { overflow: hidden; color: #2f4549; text-overflow: ellipsis; white-space: nowrap; }
+.project-file-viewer__archive-list small { font-size: 10px; white-space: nowrap; }
 
 .project-documents { grid-area: documents; min-width: 0; overflow: hidden; }
 .project-documents.is-dragging { outline: 3px solid #6bb8bf; outline-offset: -3px; background: #f2fbfc; }

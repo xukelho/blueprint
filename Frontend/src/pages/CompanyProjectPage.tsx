@@ -6,7 +6,8 @@ import { GoogleMapPicker } from "../components/GoogleMapPicker";
 import { ProjectTimelineEditor, ProjectTimelineView, TimelinePhase, newTimelinePhase } from "../components/ProjectTimelineEditor";
 import { ProjectDocuments, ProjectDocumentsByPhase, ProjectWorkspacePanel } from "../components/ProjectWorkspace";
 import { ProjectDocumentViewer } from "../components/ProjectDocumentViewer";
-import { archiveProject, createProjectDocumentDownload, deleteProjectDocument, getClients, getCompanyMembers, getProject, getProjectDocumentDrawing, getProjectDocuments, Project, ProjectDocument, ProjectMember, reactivateProject, updateMembers, updateProject, updateProjectPhases, uploadProjectDocument, DrawingDocument } from "../api/projects";
+import { filePreviewKind } from "../components/ProjectFileViewer";
+import { archiveProject, createProjectDocumentDownload, deleteProjectDocument, getClients, getCompanyMembers, getProject, getProjectDocumentContent, getProjectDocumentDrawing, getProjectDocuments, Project, ProjectDocument, ProjectMember, reactivateProject, updateMembers, updateProject, updateProjectPhases, uploadProjectDocument, DrawingDocument } from "../api/projects";
 import { useProfile } from "../profile/ProfileContext";
 import { phaseLabel, PROJECT_PHASES, QUICK_FILL_PHASE_CODES } from "../projectPhases";
 
@@ -58,6 +59,7 @@ export function CompanyProjectPage() {
   const [viewerDocumentId, setViewerDocumentId] = useState<string | null>(null);
   const [viewerPhaseId, setViewerPhaseId] = useState<string | null>(null);
   const [documentPreview, setDocumentPreview] = useState<DrawingDocument | null>(null);
+  const [documentContent, setDocumentContent] = useState<Blob | null>(null);
   const [documentPreviewLoading, setDocumentPreviewLoading] = useState(false);
   const [documentPreviewError, setDocumentPreviewError] = useState("");
   const [documentPreviewRetry, setDocumentPreviewRetry] = useState(0);
@@ -123,14 +125,20 @@ export function CompanyProjectPage() {
     setViewerPhaseId(viewedPhase.id);
   }, [viewedPhase?.id, viewerPhaseId, viewerDocumentId, viewedDocuments]);
   useEffect(() => {
-    if (!id || !viewerDocument?.preview) { setDocumentPreview(null); setDocumentPreviewError(""); setDocumentPreviewLoading(false); return; }
+    if (!id || !viewerDocument || viewerDocument.status !== "Available") { setDocumentPreview(null); setDocumentContent(null); setDocumentPreviewError(""); setDocumentPreviewLoading(false); return; }
     let active = true;
+    const controller = new AbortController();
     setDocumentPreviewLoading(true); setDocumentPreviewError("");
-    getProjectDocumentDrawing(id, viewerDocument.id).then((loaded) => { if (active) setDocumentPreview(loaded); })
-      .catch((caught) => { if (active) { setDocumentPreview(null); setDocumentPreviewError(caught instanceof Error ? caught.message : "Não foi possível carregar o documento."); } })
+    setDocumentPreview(null); setDocumentContent(null);
+    const request = viewerDocument.preview?.kind === "drawing"
+      ? getProjectDocumentDrawing(id, viewerDocument.id).then((loaded) => { if (active) setDocumentPreview(loaded); })
+      : filePreviewKind(viewerDocument.fileName) === "unsupported"
+        ? Promise.resolve()
+        : getProjectDocumentContent(id, viewerDocument.id, controller.signal).then((loaded) => { if (active) setDocumentContent(loaded); });
+    request.catch((caught) => { if (active && !(caught instanceof DOMException && caught.name === "AbortError")) { setDocumentPreview(null); setDocumentContent(null); setDocumentPreviewError(caught instanceof Error ? caught.message : "Não foi possível carregar o documento."); } })
       .finally(() => { if (active) setDocumentPreviewLoading(false); });
-    return () => { active = false; };
-  }, [id, viewerDocument?.id, viewerDocument?.preview?.kind, documentPreviewRetry]);
+    return () => { active = false; controller.abort(); };
+  }, [id, viewerDocument?.id, viewerDocument?.fileName, viewerDocument?.status, viewerDocument?.preview?.kind, documentPreviewRetry]);
   const uploadDocument = async (phaseId: string, file: File) => {
     if (!id) throw new Error("Projeto indisponível.");
     const uploaded = await uploadProjectDocument(id, phaseId, file);
@@ -244,7 +252,7 @@ export function CompanyProjectPage() {
             </div>
             {isTimelineEditing ? <><ProjectTimelineEditor phases={timelinePhases} currentPhaseId={currentPhaseId} onPhasesChange={setTimelinePhases} onCurrentPhaseIdChange={setCurrentPhaseId} onQuickFill={() => { setTimelinePhases(QUICK_FILL_PHASE_CODES.map(newTimelinePhase)); setCurrentPhaseId(null); }} /><div className="mock-project-form-actions"><button type="button" className="secondary-action" onClick={cancelTimeline}>Cancelar</button><button type="button" className="primary-action" disabled={isSavingTimeline} onClick={saveTimeline}>{isSavingTimeline ? "A guardar…" : "Guardar timeline"}</button></div></> : projectPhases.length ? <ProjectTimelineView phases={projectPhases} currentPhaseId={officialCurrentPhaseId} viewedPhaseId={viewedPhaseId} expanded={isTimelineExpanded} onPhaseSelect={setViewedPhaseId} /> : <p className="mock-empty-state">Timeline opcional ainda não configurada.</p>}
           </section>
-        <ProjectDocumentViewer phaseCode={viewedPhase?.code ?? null} document={viewerDocument} drawing={documentPreview} loading={documentPreviewLoading} error={documentPreviewError} onRetry={() => setDocumentPreviewRetry((current) => current + 1)} isMaximized={isDocumentViewerMaximized} onMaximizedChange={setIsDocumentViewerMaximized} />
+        <ProjectDocumentViewer phaseCode={viewedPhase?.code ?? null} document={viewerDocument} drawing={documentPreview} content={documentContent} loading={documentPreviewLoading} error={documentPreviewError} onRetry={() => setDocumentPreviewRetry((current) => current + 1)} isMaximized={isDocumentViewerMaximized} onMaximizedChange={setIsDocumentViewerMaximized} />
         <ProjectDocuments phases={projectPhases} viewedPhaseId={viewedPhaseId} documents={documents} loading={documentsLoading} error={documentsError} readOnly={project.isArchived} previewDocumentId={viewerDocumentId} onUploadFile={uploadDocument} onDeleteDocument={removeDocument} onDownloadDocument={downloadDocument} onPreviewDocumentSelect={(document) => { setViewerDocumentId(document.id); setViewerPhaseId(String(document.phaseId)); }} />
         <ProjectWorkspacePanel projectId={id!} projectTitle={project.title} archived={project.isArchived} phases={projectPhases} viewedPhaseId={viewedPhaseId} currentUser={profile?.displayName ?? "Utilizador"} documents={documents} onCollapsedChange={setIsWorkspaceCollapsed} />
       </div>

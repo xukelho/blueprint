@@ -166,7 +166,7 @@ describe("CompanyProjectPage", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/projects/1/phases", expect.objectContaining({ body: expect.stringContaining('"currentPhaseIndex":1') })));
   });
 
-  it("selects the newest DXF for each phase and falls back to an unsupported document", async () => {
+  it("selects the newest DXF for each phase and opens a PDF in the document viewer", async () => {
     setAuthenticatedRoles(["employee"]);
     const phasedProject = { ...emptyProject, phases: [
       { id: 11, code: "preliminary-study", label: "Estudo PrÃ©vio", position: 0, isCurrent: true },
@@ -179,12 +179,15 @@ describe("CompanyProjectPage", () => {
     const licensingOldDrawing = document("licensing-old", 12, "Licenca_R01.dxf", "2026-08-12T11:00:00Z", { kind: "drawing", sourceFormat: "dxf" });
     const licensingNewDrawing = document("licensing-new", 12, "Licenca_R02.dxf", "2026-08-12T12:00:00Z", { kind: "drawing", sourceFormat: "dxf" });
     const executionPdf = document("execution-pdf", 13, "Caderno.pdf", "2026-08-12T14:00:00Z", null);
+    Object.defineProperty(URL, "createObjectURL", { configurable: true, value: vi.fn(() => "blob:preview-pdf") });
+    Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: vi.fn() });
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
       if (url === "/api/profile") return response(profile("employee"));
       if (url === "/api/projects/1" && !init?.method) return response(phasedProject);
       if (url === "/api/projects/1/documents") return response([initialDrawing, licensingPdf, licensingOldDrawing, licensingNewDrawing, executionPdf]);
       if (url === "/api/projects/1/documents/initial-drawing/drawing" || url === "/api/projects/1/documents/licensing-new/drawing") return response({ schemaVersion: 1, converterVersion: "test", documentId: url.includes("initial") ? "initial-drawing" : "licensing-new", sourceFormat: "dxf", units: null, bounds: { minX: 0, minY: 0, maxX: 100, maxY: 100 }, layers: [], paths: [], text: [], warnings: [] });
+      if (url === "/api/projects/1/documents/execution-pdf/content") return new Response("%PDF-test", { headers: { "Content-Type": "application/pdf" } });
       throw new Error(`Unexpected request: ${url}`);
     });
     const user = userEvent.setup();
@@ -198,7 +201,7 @@ describe("CompanyProjectPage", () => {
     expect(screen.queryByRole("option", { name: /Inicial\.dxf/ })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Projeto de Execu/ }));
-    expect(await screen.findByText(/visualizado/)).toBeInTheDocument();
+    expect(await screen.findByLabelText("PDF Caderno.pdf")).toHaveAttribute("data", "blob:preview-pdf");
     expect(screen.getAllByText("Caderno.pdf")).toHaveLength(2);
   });
 
