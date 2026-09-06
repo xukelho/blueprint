@@ -458,6 +458,48 @@ namespace Blueprint.Api.Data.Migrations
                     b.ToTable("project_members", (string)null);
                 });
 
+            modelBuilder.Entity("Blueprint.Api.Data.ProjectMessage", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("AuthorDisplayName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("author_display_name");
+
+                    b.Property<long>("AuthorUserId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("author_user_id");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
+                        .HasColumnName("body");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long>("ProjectId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("project_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AuthorUserId");
+
+                    b.HasIndex("ProjectId", "Id");
+
+                    b.ToTable("project_messages", (string)null);
+                });
+
             modelBuilder.Entity("Blueprint.Api.Data.ProjectPhase", b =>
                 {
                     b.Property<long>("Id")
@@ -901,6 +943,25 @@ namespace Blueprint.Api.Data.Migrations
                     b.Navigation("Project");
                 });
 
+            modelBuilder.Entity("Blueprint.Api.Data.ProjectMessage", b =>
+                {
+                    b.HasOne("Blueprint.Api.Data.User", "AuthorUser")
+                        .WithMany("ProjectMessages")
+                        .HasForeignKey("AuthorUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Blueprint.Api.Data.Project", "Project")
+                        .WithMany("Messages")
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AuthorUser");
+
+                    b.Navigation("Project");
+                });
+
             modelBuilder.Entity("Blueprint.Api.Data.StoredObject", b =>
                 {
                     b.HasOne("Blueprint.Api.Data.Project", "Project")
@@ -960,6 +1021,8 @@ namespace Blueprint.Api.Data.Migrations
                 {
                     b.Navigation("Documents");
 
+                    b.Navigation("Messages");
+
                     b.Navigation("Members");
 
                     b.Navigation("Phases");
@@ -989,6 +1052,8 @@ namespace Blueprint.Api.Data.Migrations
                     b.Navigation("Client");
 
                     b.Navigation("Employee");
+
+                    b.Navigation("ProjectMessages");
 
                     b.Navigation("UserRoles");
                 });

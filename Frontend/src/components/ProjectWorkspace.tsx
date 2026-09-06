@@ -1,22 +1,13 @@
 import { ChangeEvent, DragEvent, FormEvent, KeyboardEvent, MouseEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Box, ChevronDown, Download, File, FileArchive, FileImage, FilePlus2, FileSpreadsheet, FileText, FileType2, Folder, FolderOpen, LoaderCircle, LockKeyhole, MessageSquare, MessagesSquare, PanelRightClose, PanelRightOpen, PanelsTopLeft, Plus, Presentation, Send, Trash2, X } from "lucide-react";
-import type { ProjectDocument } from "../api/projects";
+import { getProjectMessages, sendProjectMessage } from "../api/projects";
+import type { ProjectChatMessage, ProjectDocument } from "../api/projects";
 import { phaseLabel } from "../projectPhases";
 import type { TimelinePhase } from "./ProjectTimelineEditor";
 
 type MockMessage = { id: string; author: string; time: string; body: string; own?: boolean };
 type MockConversation = { id: string; title: string; scope: "global" | string; messages: MockMessage[] };
 export type ProjectDocumentsByPhase = Record<string, ProjectDocument[]>;
-
-const globalConversation: MockConversation = {
-  id: "global",
-  title: "Conversa geral do projeto",
-  scope: "global",
-  messages: [
-    { id: "global-1", author: "Ana Martins", time: "09:42", body: "Partilhei a atualização do projeto para revisão." },
-    { id: "global-2", author: "Marta Silva", time: "10:06", body: "Obrigada. Vamos rever e deixamos comentários ainda hoje." },
-  ],
-};
 
 const phaseConversations = (phase: TimelinePhase): MockConversation[] => {
   const label = phaseLabel(phase.code) ?? phase.code;
@@ -257,16 +248,126 @@ function ConversationChat({ thread, messages, currentUser, phaseName, onMessages
   </section>;
 }
 
+const mergeProjectMessages = (current: ProjectChatMessage[], incoming: ProjectChatMessage[]) => {
+  const merged = new Map(current.map((message) => [message.id, message]));
+  incoming.forEach((message) => merged.set(message.id, message));
+  return Array.from(merged.values()).sort((left, right) => left.id - right.id);
+};
+const projectMessageTime = (value: string) => new Intl.DateTimeFormat("pt-PT", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
+
+export function ProjectGlobalChat({ projectId, archived }: { projectId: string; archived: boolean }) {
+  const [messages, setMessages] = useState<ProjectChatMessage[]>([]);
+  const [draft, setDraft] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [error, setError] = useState("");
+  const [retry, setRetry] = useState(0);
+  const messagesRef = useRef<ProjectChatMessage[]>([]);
+  const listRef = useRef<HTMLDivElement>(null);
+  const scrollAfterLoad = useRef(false);
+
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError("");
+    getProjectMessages(projectId)
+      .then((page) => {
+        if (!active) return;
+        setMessages(Array.isArray(page.items) ? page.items : []);
+        setHasMore(page.hasMore === true);
+        scrollAfterLoad.current = true;
+      })
+      .catch((caught) => { if (active) setError(caught instanceof Error ? caught.message : "Não foi possível carregar as mensagens."); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [projectId, retry]);
+  useEffect(() => {
+    if (loading || !scrollAfterLoad.current) return;
+    if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
+    scrollAfterLoad.current = false;
+  }, [loading, messages]);
+  useEffect(() => {
+    const poll = async () => {
+      if (document.hidden) return;
+      try {
+        const lastId = messagesRef.current.at(-1)?.id;
+        const page = await getProjectMessages(projectId, lastId === undefined ? {} : { afterId: lastId });
+        if (Array.isArray(page.items) && page.items.length) setMessages((current) => mergeProjectMessages(current, page.items));
+      } catch {
+        // A transient polling failure must not replace usable chat history.
+      }
+    };
+    const interval = window.setInterval(() => void poll(), 5000);
+    const onVisibilityChange = () => { if (!document.hidden) void poll(); };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => { window.clearInterval(interval); document.removeEventListener("visibilitychange", onVisibilityChange); };
+  }, [projectId]);
+
+  const loadOlder = async () => {
+    const firstId = messagesRef.current[0]?.id;
+    if (firstId === undefined || loadingOlder) return;
+    const list = listRef.current;
+    const previousHeight = list?.scrollHeight ?? 0;
+    setLoadingOlder(true);
+    setError("");
+    try {
+      const page = await getProjectMessages(projectId, { beforeId: firstId });
+      setMessages((current) => mergeProjectMessages(current, page.items));
+      setHasMore(page.hasMore);
+      window.requestAnimationFrame(() => { if (list) list.scrollTop += list.scrollHeight - previousHeight; });
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Não foi possível carregar mensagens anteriores.");
+    } finally {
+      setLoadingOlder(false);
+    }
+  };
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    const body = draft.trim();
+    if (!body || sending || archived) return;
+    setSending(true);
+    setError("");
+    try {
+      const created = await sendProjectMessage(projectId, body);
+      setMessages((current) => mergeProjectMessages(current, [created]));
+      setDraft("");
+      scrollAfterLoad.current = true;
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Não foi possível enviar a mensagem.");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return <section className="project-conversations__chat" aria-label="Conversa geral do projeto">
+    <header><div><strong>Conversa geral do projeto</strong><small>Todo o projeto</small></div><MessageSquare size={15} aria-label="Conversa global" /></header>
+    <div className="project-conversations__messages" ref={listRef} aria-live="polite">
+      {hasMore && <button className="project-conversations__older" type="button" disabled={loadingOlder} onClick={() => void loadOlder()}>{loadingOlder ? "A carregar…" : "Carregar mensagens anteriores"}</button>}
+      {loading ? <p className="project-conversations__state" role="status"><LoaderCircle size={18} aria-hidden="true" />A carregar mensagens…</p> : !messages.length && !error ? <p className="project-conversations__state">Ainda não existem mensagens. Inicie a conversa.</p> : messages.map((message) => <article className={message.isOwn ? "is-own" : ""} key={message.id}><div><strong>{message.authorDisplayName}</strong><time dateTime={message.createdAt}>{projectMessageTime(message.createdAt)}</time></div><p>{message.body}</p></article>)}
+      {error && <div className="project-conversations__error" role="alert"><span>{error}</span>{!messages.length && <button type="button" onClick={() => setRetry((current) => current + 1)}>Tentar novamente</button>}</div>}
+    </div>
+    <form className="project-conversations__composer" onSubmit={submit}>
+      <label className="sr-only" htmlFor="project-conversation-message-global">Nova mensagem</label>
+      <textarea id="project-conversation-message-global" rows={2} maxLength={4000} placeholder={archived ? "O projeto está arquivado." : "Escrever uma mensagem…"} value={draft} disabled={archived || sending} onChange={(event) => setDraft(event.target.value)} />
+      <button type="submit" aria-label={sending ? "A enviar mensagem" : "Enviar mensagem"} disabled={!draft.trim() || sending || archived}>{sending ? <LoaderCircle size={17} aria-hidden="true" /> : <Send size={17} aria-hidden="true" />}</button>
+      {archived && <small className="project-conversations__readonly">A conversa está disponível apenas para leitura.</small>}
+    </form>
+  </section>;
+}
+
 type WorkspaceTab = "global" | "conversations" | "files";
 
-export function ProjectWorkspacePanel({ projectTitle, phases, viewedPhaseId, currentUser, documents, onCollapsedChange }: { projectTitle: string; phases: TimelinePhase[]; viewedPhaseId: string | null; currentUser: string; documents: ProjectDocumentsByPhase; onCollapsedChange?: (collapsed: boolean) => void }) {
+export function ProjectWorkspacePanel({ projectId, projectTitle, archived, phases, viewedPhaseId, currentUser, documents, onCollapsedChange }: { projectId: string; projectTitle: string; archived: boolean; phases: TimelinePhase[]; viewedPhaseId: string | null; currentUser: string; documents: ProjectDocumentsByPhase; onCollapsedChange?: (collapsed: boolean) => void }) {
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("global");
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [selectedPhaseThreadId, setSelectedPhaseThreadId] = useState<string | null>(null);
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>(() => Object.fromEntries(phases.map((phase) => [phase.id, phase.id === viewedPhaseId])));
   const selectedPhase = phases.find((phase) => phase.id === viewedPhaseId) ?? null;
   const scopedConversations = useMemo(() => selectedPhase ? phaseConversations(selectedPhase) : [], [selectedPhase]);
-  const initialMessages = useMemo(() => Object.fromEntries([globalConversation, ...phases.flatMap(phaseConversations)].map((thread) => [thread.id, thread.messages])), [phases]);
+  const initialMessages = useMemo(() => Object.fromEntries(phases.flatMap(phaseConversations).map((thread) => [thread.id, thread.messages])), [phases]);
   const [messages, setMessages] = useState<Record<string, MockMessage[]>>(initialMessages);
   const selectedPhaseThread = scopedConversations.find((thread) => thread.id === selectedPhaseThreadId) ?? null;
 
@@ -306,7 +407,7 @@ export function ProjectWorkspacePanel({ projectTitle, phases, viewedPhaseId, cur
     </div>
 
     {activeTab === "global" && <div className="project-workspace-tabpanel" id="workspace-panel-global" role="tabpanel" aria-labelledby="workspace-tab-global">
-      <ConversationChat thread={globalConversation} messages={messages[globalConversation.id] ?? globalConversation.messages} currentUser={currentUser} phaseName={null} onMessagesChange={(next) => updateThreadMessages(globalConversation.id, next)} />
+      <ProjectGlobalChat projectId={projectId} archived={archived} />
     </div>}
 
     {activeTab === "conversations" && <div className="project-workspace-tabpanel" id="workspace-panel-conversations" role="tabpanel" aria-labelledby="workspace-tab-conversations">

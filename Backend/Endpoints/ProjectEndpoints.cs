@@ -153,10 +153,10 @@ public static class ProjectEndpoints
     }
 
     internal static IQueryable<Project> VisibleProjects(Access access, BlueprintDbContext db) => db.Projects.Where(x => x.CompanyId == access.CompanyId && (access.IsOwner || x.Members.Any(m => m.EmployeeId == access.EmployeeId)));
-    private static IQueryable<Project> VisibleClientProjects(long clientId, BlueprintDbContext db) =>
+    internal static IQueryable<Project> VisibleClientProjects(long clientId, BlueprintDbContext db) =>
         db.Projects.Where(project => project.Company!.IsActive &&
             project.ProjectClients.Any(projectClient => projectClient.ClientId == clientId && projectClient.Client!.CompanyClients.Any(membership => membership.CompanyId == project.CompanyId)));
-    private static async Task<long?> CurrentClientId(ClaimsPrincipal principal, BlueprintDbContext db, CancellationToken ct)
+    internal static async Task<long?> CurrentClientId(ClaimsPrincipal principal, BlueprintDbContext db, CancellationToken ct)
     {
         if (!principal.IsInRole("client") || !long.TryParse(principal.FindFirstValue(ClaimTypes.NameIdentifier), out var userId)) return null;
         return await db.Clients.AsNoTracking().Where(client => client.UserId == userId && client.User!.IsActive).Select(client => (long?)client.Id).SingleOrDefaultAsync(ct);

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createProjectDocumentDownload, uploadProjectDocument } from "./projects";
+import { createProjectDocumentDownload, getProjectMessages, sendProjectMessage, uploadProjectDocument } from "./projects";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -35,5 +35,21 @@ describe("project document API", () => {
       headers: { "Content-Type": "application/octet-stream", "X-Required": "yes" },
       body: file,
     }));
+  });
+});
+
+describe("project chat API", () => {
+  it("uses cursor query parameters and posts plain message text", async () => {
+    const page = { items: [], hasMore: false };
+    const created = { id: 4, authorDisplayName: "Ana", body: "Olá", createdAt: "2026-09-06T12:00:00Z", isOwn: true };
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/projects/7/messages?afterId=3&limit=50") return new Response(JSON.stringify(page), { headers: { "Content-Type": "application/json" } });
+      if (String(input) === "/api/projects/7/messages" && init?.method === "POST") return new Response(JSON.stringify(created), { status: 201, headers: { "Content-Type": "application/json" } });
+      throw new Error(`Unexpected request: ${input}`);
+    });
+
+    await expect(getProjectMessages("7", { afterId: 3, limit: 50 })).resolves.toEqual(page);
+    await expect(sendProjectMessage("7", "Olá")).resolves.toEqual(created);
+    expect(fetchMock).toHaveBeenLastCalledWith("/api/projects/7/messages", expect.objectContaining({ method: "POST", body: JSON.stringify({ body: "Olá" }) }));
   });
 });
