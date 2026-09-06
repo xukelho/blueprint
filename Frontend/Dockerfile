@@ -16,4 +16,7 @@ COPY . .
 
 EXPOSE 5385
 
-CMD ["npm", "run", "dev"]
+# The development node_modules directory is a persistent Compose volume. Keep it
+# synchronized with the bind-mounted lockfile whenever the container starts so a
+# dependency change does not leave Vite running against a stale volume.
+CMD ["sh", "-c", "npm install --no-audit --no-fund && npm run dev"]

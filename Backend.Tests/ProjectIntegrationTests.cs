@@ -76,6 +76,10 @@ public sealed class ProjectIntegrationTests(PostgreSqlApiFixture fixture)
         var clientDocuments = await fixture.Client.GetFromJsonAsync<JsonElement[]>($"/api/projects/{projectId}/documents");
         Assert.Single(clientDocuments!);
         Assert.Equal("drawing-v2.txt", clientDocuments![0].GetProperty("fileName").GetString());
+        using var clientContent = await fixture.Client.GetAsync($"/api/projects/{projectId}/documents/{documentId}/content");
+        Assert.Equal(HttpStatusCode.OK, clientContent.StatusCode);
+        Assert.Equal("text/plain", clientContent.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(replacementBytes, await clientContent.Content.ReadAsByteArrayAsync());
         using var clientDownload = await fixture.Client.PostAsync($"/api/projects/{projectId}/documents/{documentId}/download", null);
         Assert.Equal(HttpStatusCode.OK, clientDownload.StatusCode);
         var downloadGrant = await clientDownload.Content.ReadFromJsonAsync<JsonElement>();

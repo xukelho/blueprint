@@ -97,6 +97,11 @@ export const getProjectMessages = (id: string, options: { beforeId?: number; aft
 };
 export const sendProjectMessage = (id: string, body: string) => request<ProjectChatMessage>(`/api/projects/${id}/messages`, json("POST", { body }));
 export const getProjectDocumentDrawing = (projectId: string, documentId: string) => request<DrawingDocument>(`/api/projects/${projectId}/documents/${documentId}/drawing`);
+export async function getProjectDocumentContent(projectId: string, documentId: string, signal?: AbortSignal) {
+  const response = await fetch(`/api/projects/${projectId}/documents/${documentId}/content`, { signal });
+  if (!response.ok) throw new ClientManagementApiError("Não foi possível carregar o conteúdo do documento.", response.status);
+  return response.blob();
+}
 export const createProjectDocumentDownload = (projectId: string, documentId: string) => request<DownloadGrant>(
   `/api/projects/${projectId}/documents/${documentId}/download`, { method: "POST" },
 );

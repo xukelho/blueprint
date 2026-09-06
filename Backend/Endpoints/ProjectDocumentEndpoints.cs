@@ -38,6 +38,10 @@ public static class ProjectDocumentEndpoints
             .Produces(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status502BadGateway)
             .ProducesProblem(StatusCodes.Status503ServiceUnavailable);
+        projects.MapGet("/documents/{documentId:guid}/content", GetContent)
+            .Produces(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status502BadGateway)
+            .ProducesProblem(StatusCodes.Status503ServiceUnavailable);
         projects.MapGet("/documents/{documentId:guid}/drawing", GetDrawing)
             .Produces<DrawingDocumentResponse>()
             .Produces(StatusCodes.Status404NotFound)
@@ -147,6 +151,33 @@ public static class ProjectDocumentEndpoints
             var grant = await files.CreateDownloadGrantAsync(documentId, ct);
             return TypedResults.Ok(new DownloadGrantResponse(grant.Url, grant.ExpiresAt));
         });
+    }
+
+    private static async Task<IResult> GetContent(long projectId, Guid documentId, ClaimsPrincipal principal,
+        HttpContext httpContext, BlueprintDbContext db, IObjectStore objectStore, CancellationToken ct)
+    {
+        var access = await FindAccessAsync(projectId, principal, db, ct);
+        if (access is null) return TypedResults.NotFound();
+        var document = await db.ProjectDocuments.AsNoTracking().Include(candidate => candidate.StoredObject)
+            .SingleOrDefaultAsync(candidate => candidate.ProjectId == projectId && candidate.Id == documentId && !candidate.IsDeleted, ct);
+        if (document?.StoredObject is null ||
+            (!access.IsProfessional && document.StoredObject.Status != StoredObjectStatus.Available) ||
+            document.StoredObject.Status != StoredObjectStatus.Available)
+            return TypedResults.NotFound();
+
+        try
+        {
+            var content = await objectStore.OpenReadAsync(document.StoredObject.ObjectKey, ct);
+            if (content is null) return TypedResults.NotFound();
+            httpContext.Response.Headers.CacheControl = "private, no-store";
+            httpContext.Response.Headers.XContentTypeOptions = "nosniff";
+            return Results.Stream(content, document.StoredObject.ContentType, enableRangeProcessing: true);
+        }
+        catch (ObjectStoreException exception)
+        {
+            return Results.Problem(title: exception.IsTransient ? "Object storage is temporarily unavailable." : "Object storage request failed.",
+                statusCode: exception.IsTransient ? StatusCodes.Status503ServiceUnavailable : StatusCodes.Status502BadGateway);
+        }
     }
 
     private static async Task<IResult> GetDrawing(long projectId, Guid documentId, ClaimsPrincipal principal,
