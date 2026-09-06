@@ -22,6 +22,8 @@ public sealed class BlueprintDbContext(DbContextOptions<BlueprintDbContext> opti
     public DbSet<StoredObject> StoredObjects => Set<StoredObject>();
     public DbSet<ProjectDocument> ProjectDocuments => Set<ProjectDocument>();
     public DbSet<ProjectMessage> ProjectMessages => Set<ProjectMessage>();
+    public DbSet<ProjectPartConversation> ProjectPartConversations => Set<ProjectPartConversation>();
+    public DbSet<ProjectPartConversationMessage> ProjectPartConversationMessages => Set<ProjectPartConversationMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -36,6 +38,7 @@ public sealed class BlueprintDbContext(DbContextOptions<BlueprintDbContext> opti
         ConfigureClientInvitations(modelBuilder);
         ConfigureProjects(modelBuilder);
         ConfigureProjectMessages(modelBuilder);
+        ConfigureProjectPartConversations(modelBuilder);
         ConfigureProjectDocuments(modelBuilder);
     }
 
@@ -380,6 +383,41 @@ public sealed class BlueprintDbContext(DbContextOptions<BlueprintDbContext> opti
             .HasForeignKey(candidate => candidate.ProjectId).OnDelete(DeleteBehavior.Cascade);
         message.HasOne(candidate => candidate.AuthorUser).WithMany(candidate => candidate.ProjectMessages)
             .HasForeignKey(candidate => candidate.AuthorUserId).OnDelete(DeleteBehavior.Restrict);
+    }
+
+    private static void ConfigureProjectPartConversations(ModelBuilder modelBuilder)
+    {
+        var conversation = modelBuilder.Entity<ProjectPartConversation>();
+        conversation.ToTable("project_part_conversations");
+        conversation.HasKey(candidate => candidate.Id);
+        conversation.Property(candidate => candidate.Id).HasColumnName("id").ValueGeneratedOnAdd();
+        conversation.Property(candidate => candidate.ProjectId).HasColumnName("project_id").IsRequired();
+        conversation.Property(candidate => candidate.DocumentId).HasColumnName("document_id").IsRequired();
+        conversation.Property(candidate => candidate.TargetKey).HasColumnName("target_key").HasMaxLength(256).IsRequired();
+        conversation.Property(candidate => candidate.TargetKind).HasColumnName("target_kind").HasMaxLength(32).IsRequired();
+        conversation.Property(candidate => candidate.TargetLabel).HasColumnName("target_label").HasMaxLength(256).IsRequired();
+        conversation.Property(candidate => candidate.Title).HasColumnName("title").HasMaxLength(256).IsRequired();
+        conversation.Property(candidate => candidate.AnchorX).HasColumnName("anchor_x").IsRequired();
+        conversation.Property(candidate => candidate.AnchorY).HasColumnName("anchor_y").IsRequired();
+        conversation.Property(candidate => candidate.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone").IsRequired();
+        conversation.Property(candidate => candidate.CreatedBy).HasColumnName("created_by").IsRequired();
+        conversation.HasIndex(candidate => new { candidate.ProjectId, candidate.DocumentId });
+        conversation.HasIndex(candidate => new { candidate.DocumentId, candidate.TargetKey }).IsUnique();
+        conversation.HasOne(candidate => candidate.Project).WithMany(candidate => candidate.PartConversations).HasForeignKey(candidate => candidate.ProjectId).OnDelete(DeleteBehavior.Cascade);
+        conversation.HasOne(candidate => candidate.Document).WithMany(candidate => candidate.PartConversations).HasForeignKey(candidate => candidate.DocumentId).OnDelete(DeleteBehavior.Cascade);
+
+        var message = modelBuilder.Entity<ProjectPartConversationMessage>();
+        message.ToTable("project_part_conversation_messages");
+        message.HasKey(candidate => candidate.Id);
+        message.Property(candidate => candidate.Id).HasColumnName("id").ValueGeneratedOnAdd();
+        message.Property(candidate => candidate.ConversationId).HasColumnName("conversation_id").IsRequired();
+        message.Property(candidate => candidate.AuthorUserId).HasColumnName("author_user_id").IsRequired();
+        message.Property(candidate => candidate.AuthorDisplayName).HasColumnName("author_display_name").HasMaxLength(256).IsRequired();
+        message.Property(candidate => candidate.Body).HasColumnName("body").HasMaxLength(4000).IsRequired();
+        message.Property(candidate => candidate.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone").IsRequired();
+        message.HasIndex(candidate => new { candidate.ConversationId, candidate.Id });
+        message.HasOne(candidate => candidate.Conversation).WithMany(candidate => candidate.Messages).HasForeignKey(candidate => candidate.ConversationId).OnDelete(DeleteBehavior.Cascade);
+        message.HasOne(candidate => candidate.AuthorUser).WithMany().HasForeignKey(candidate => candidate.AuthorUserId).OnDelete(DeleteBehavior.Restrict);
     }
 
     private static void ConfigureProfileProperties<TProfile>(

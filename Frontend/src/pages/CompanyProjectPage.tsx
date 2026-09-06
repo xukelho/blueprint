@@ -7,7 +7,7 @@ import { ProjectTimelineEditor, ProjectTimelineView, TimelinePhase, newTimelineP
 import { ProjectDocuments, ProjectDocumentsByPhase, ProjectWorkspacePanel } from "../components/ProjectWorkspace";
 import { ProjectDocumentViewer } from "../components/ProjectDocumentViewer";
 import { filePreviewKind } from "../components/ProjectFileViewer";
-import { archiveProject, createProjectDocumentDownload, deleteProjectDocument, getClients, getCompanyMembers, getProject, getProjectDocumentContent, getProjectDocumentDrawing, getProjectDocuments, Project, ProjectDocument, ProjectMember, reactivateProject, updateMembers, updateProject, updateProjectPhases, uploadProjectDocument, DrawingDocument } from "../api/projects";
+import { archiveProject, createProjectDocumentDownload, createProjectPartConversation, deleteProjectDocument, getClients, getCompanyMembers, getProject, getProjectDocumentContent, getProjectDocumentDrawing, getProjectDocuments, getProjectPartConversations, Project, ProjectDocument, ProjectMember, reactivateProject, updateMembers, updateProject, updateProjectPhases, uploadProjectDocument, DrawingDocument, DrawingSelection, ProjectPartConversation } from "../api/projects";
 import { useProfile } from "../profile/ProfileContext";
 import { phaseLabel, PROJECT_PHASES, QUICK_FILL_PHASE_CODES } from "../projectPhases";
 
@@ -63,6 +63,10 @@ export function CompanyProjectPage() {
   const [documentPreviewLoading, setDocumentPreviewLoading] = useState(false);
   const [documentPreviewError, setDocumentPreviewError] = useState("");
   const [documentPreviewRetry, setDocumentPreviewRetry] = useState(0);
+  const [selectedDrawingPart, setSelectedDrawingPart] = useState<DrawingSelection | null>(null);
+  const [partConversations, setPartConversations] = useState<ProjectPartConversation[]>([]);
+  const [partConversationsRetry, setPartConversationsRetry] = useState(0);
+  const [conversationOpenRequest, setConversationOpenRequest] = useState({ id: null as number | null, token: 0 });
   const [isDocumentViewerMaximized, setIsDocumentViewerMaximized] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isTimelineEditing, setIsTimelineEditing] = useState(false);
@@ -139,6 +143,13 @@ export function CompanyProjectPage() {
       .finally(() => { if (active) setDocumentPreviewLoading(false); });
     return () => { active = false; controller.abort(); };
   }, [id, viewerDocument?.id, viewerDocument?.fileName, viewerDocument?.status, viewerDocument?.preview?.kind, documentPreviewRetry]);
+  useEffect(() => {
+    if (!id || !viewerDocument || viewerDocument.preview?.kind !== "drawing") { setPartConversations([]); return; }
+    let active = true;
+    getProjectPartConversations(id, viewerDocument.id).then((items) => { if (active) setPartConversations(items); }).catch(() => { if (active) setPartConversations([]); });
+    return () => { active = false; };
+  }, [id, viewerDocument?.id, viewerDocument?.preview?.kind, partConversationsRetry]);
+  useEffect(() => { setSelectedDrawingPart(null); }, [viewerDocument?.id]);
   const uploadDocument = async (phaseId: string, file: File) => {
     if (!id) throw new Error("Projeto indisponível.");
     const uploaded = await uploadProjectDocument(id, phaseId, file);
@@ -252,9 +263,9 @@ export function CompanyProjectPage() {
             </div>
             {isTimelineEditing ? <><ProjectTimelineEditor phases={timelinePhases} currentPhaseId={currentPhaseId} onPhasesChange={setTimelinePhases} onCurrentPhaseIdChange={setCurrentPhaseId} onQuickFill={() => { setTimelinePhases(QUICK_FILL_PHASE_CODES.map(newTimelinePhase)); setCurrentPhaseId(null); }} /><div className="mock-project-form-actions"><button type="button" className="secondary-action" onClick={cancelTimeline}>Cancelar</button><button type="button" className="primary-action" disabled={isSavingTimeline} onClick={saveTimeline}>{isSavingTimeline ? "A guardar…" : "Guardar timeline"}</button></div></> : projectPhases.length ? <ProjectTimelineView phases={projectPhases} currentPhaseId={officialCurrentPhaseId} viewedPhaseId={viewedPhaseId} expanded={isTimelineExpanded} onPhaseSelect={setViewedPhaseId} /> : <p className="mock-empty-state">Timeline opcional ainda não configurada.</p>}
           </section>
-        <ProjectDocumentViewer phaseCode={viewedPhase?.code ?? null} document={viewerDocument} drawing={documentPreview} content={documentContent} loading={documentPreviewLoading} error={documentPreviewError} onRetry={() => setDocumentPreviewRetry((current) => current + 1)} isMaximized={isDocumentViewerMaximized} onMaximizedChange={setIsDocumentViewerMaximized} />
+        <ProjectDocumentViewer phaseCode={viewedPhase?.code ?? null} document={viewerDocument} drawing={documentPreview} content={documentContent} loading={documentPreviewLoading} error={documentPreviewError} onRetry={() => setDocumentPreviewRetry((current) => current + 1)} isMaximized={isDocumentViewerMaximized} onMaximizedChange={setIsDocumentViewerMaximized} selectedPart={selectedDrawingPart} conversations={partConversations} onPartSelect={setSelectedDrawingPart} onConversationOpen={(conversationId) => setConversationOpenRequest((current) => ({ id: conversationId, token: current.token + 1 }))} />
         <ProjectDocuments phases={projectPhases} viewedPhaseId={viewedPhaseId} documents={documents} loading={documentsLoading} error={documentsError} readOnly={project.isArchived} previewDocumentId={viewerDocumentId} onUploadFile={uploadDocument} onDeleteDocument={removeDocument} onDownloadDocument={downloadDocument} onPreviewDocumentSelect={(document) => { setViewerDocumentId(document.id); setViewerPhaseId(String(document.phaseId)); }} />
-        <ProjectWorkspacePanel projectId={id!} projectTitle={project.title} archived={project.isArchived} phases={projectPhases} viewedPhaseId={viewedPhaseId} currentUser={profile?.displayName ?? "Utilizador"} documents={documents} onCollapsedChange={setIsWorkspaceCollapsed} />
+        <ProjectWorkspacePanel projectId={id!} projectTitle={project.title} archived={project.isArchived} phases={projectPhases} viewedPhaseId={viewedPhaseId} documents={documents} selectedDrawingPart={selectedDrawingPart} partConversations={partConversations} requestedConversationId={conversationOpenRequest.id} requestedConversationToken={conversationOpenRequest.token} onCreatePartConversation={async (title) => { if (!viewerDocument || !selectedDrawingPart) throw new Error("Selecione uma parte do desenho."); const created = await createProjectPartConversation(id!, viewerDocument.id, selectedDrawingPart, title); setPartConversations((current) => [...current, created]); return created; }} onPartConversationsRefresh={() => setPartConversationsRetry((current) => current + 1)} onCollapsedChange={setIsWorkspaceCollapsed} />
       </div>
       {owner && isEditing && <div className="mock-project-form-actions project-page-actions"><button className="secondary-action" type="button" onClick={() => setArchiveStatusDialogOpen(true)}>{project.isArchived ? "Reativar" : "Arquivar"}</button><button className="secondary-action" type="button" onClick={cancelEditing}>Cancelar</button><button className="primary-action" type="submit" form="project-details-form" disabled={isSaving}>{isSaving ? "A guardar…" : "Guardar"}</button></div>}
       </div>

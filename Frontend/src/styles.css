@@ -952,11 +952,19 @@ button { cursor: pointer; }
 .project-document-viewer__canvas { position: relative; height: 430px; margin: 12px 18px 18px; overflow: hidden; overscroll-behavior: contain; background: #f8fbfb; border: 1px solid #dbe7e9; border-radius: 8px; }
 .project-document-viewer__canvas canvas { width: 100%; height: 430px; display: block; touch-action: none; cursor: grab; }
 .project-document-viewer__canvas.is-dragging canvas { cursor: grabbing; }
+.project-document-viewer__canvas.is-tool-select canvas { cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Cpath d='M4 2.5v19l5.2-4.4 3.8 8.1 4-1.9-3.8-7.8 7-.7L4 2.5Z' fill='%23000' stroke='%23fff' stroke-width='2.4' stroke-linejoin='round'/%3E%3C/svg%3E") 4 3, default; }
+.project-document-viewer__markers { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.project-document-viewer__markers button { position: absolute; z-index: 2; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; color: #fff; background: #006d77; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 2px 8px rgba(0, 56, 64, .3); transform: translate(-50%, -50%); pointer-events: auto; cursor: pointer; }
+.project-document-viewer__markers button:hover, .project-document-viewer__markers button:focus-visible { background: #004f58; transform: translate(-50%, -50%) scale(1.08); }
+.project-document-viewer__markers button span { position: absolute; top: -6px; right: -7px; min-width: 15px; height: 15px; padding: 0 3px; display: grid; place-items: center; color: #005864; background: #fff; border: 1px solid #8bc4ca; border-radius: 8px; font-size: 8px; font-weight: 700; }
 .project-workspace.is-document-viewer-maximized .project-document-viewer__canvas, .project-workspace.is-document-viewer-maximized .project-document-viewer__canvas canvas { height: 645px; }
 .project-document-viewer__controls { position: absolute; right: 12px; bottom: 12px; display: grid; gap: 6px; }
 .project-document-viewer__controls button, .project-document-viewer__state button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; color: #005864; background: #fff; border: 1px solid #b9d7db; border-radius: 7px; box-shadow: 0 2px 8px rgba(34, 68, 73, .12); }
 .project-document-viewer__controls button { width: 36px; height: 36px; }
 .project-document-viewer__controls button:hover, .project-document-viewer__state button:hover { background: #edf7f8; }
+.project-document-viewer__controls .project-document-viewer__tool[aria-pressed="true"] { color: #fff; background: #006d77; border-color: #006d77; }
+.project-document-viewer__controls .project-document-viewer__tool[aria-pressed="true"]:hover { background: #00545d; }
+.project-document-viewer__control-separator { height: 1px; margin: 1px 5px; background: #cddfe1; }
 .project-document-viewer__state { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; gap: 8px; padding: 30px; color: #6e8185; text-align: center; background: #f8fbfb; }
 .project-document-viewer__state > svg { color: #5c9299; }
 .project-document-viewer__state strong { color: #344a4e; font-size: 14px; }
@@ -1142,6 +1150,10 @@ button { cursor: pointer; }
 .project-conversation-index__list strong, .project-conversation-index__list small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .project-conversation-index__list strong { font-size: 11px; }
 .project-conversation-index__list small { color: #92959a; font-size: 9px; }
+.project-part-conversation-create { display: grid; gap: 9px; margin-bottom: 14px; padding: 12px; background: #fff; border: 1px solid #dfeaec; border-radius: 8px; }
+.project-part-conversation-create label { display: grid; gap: 5px; color: #526064; font-size: 10px; font-weight: 700; }
+.project-part-conversation-create input { min-width: 0; padding: 8px 9px; color: #303538; background: #fff; border: 1px solid #cddfe1; border-radius: 6px; font: inherit; font-weight: 400; }
+.project-part-conversation-create .primary-action { min-height: 34px; font-size: 10px; }
 .project-workspace-panel__empty { margin: 28px 8px; color: #92959a; font-size: 10px; line-height: 16px; text-align: center; }
 .project-folder-tree__heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 18px 13px; }
 .project-folder-tree__heading > div { display: grid; gap: 4px; }

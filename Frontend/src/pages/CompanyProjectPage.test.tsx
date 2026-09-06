@@ -304,12 +304,10 @@ describe("CompanyProjectPage", () => {
     expect(screen.getByText("Mensagem existente").closest("article")).not.toHaveClass("is-own");
 
     await user.click(screen.getByRole("tab", { name: "Conversas" }));
-    await user.click(screen.getByRole("button", { name: /Dúvidas sobre a planta/ }));
-    await user.type(screen.getByLabelText("Nova mensagem"), "Vamos confirmar esta medida.");
-    await user.click(screen.getByRole("button", { name: "Enviar mensagem" }));
-    expect(screen.getByText("Vamos confirmar esta medida.")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Voltar à lista de conversas" }));
+    expect(screen.queryByText("Decisões e validações")).not.toBeInTheDocument();
+    expect(screen.queryByText("Dúvidas sobre a planta")).not.toBeInTheDocument();
     expect(screen.getByText("Conversas da fase")).toBeInTheDocument();
+    expect(screen.getByText("Clique num objeto, texto ou área fechada no visualizador para iniciar uma conversa.")).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Ficheiros" }));
     expect(screen.getByRole("tree", { name: "Pastas de Casa do Vale" })).toBeInTheDocument();
