@@ -30,6 +30,8 @@ export type UploadGrant = { url: string; expiresAt: string; requiredHeaders: Rec
 export type PendingDocumentUpload = { documentId: string; storedObjectId: string; upload: UploadGrant };
 export type CompleteDocumentUpload = { document: ProjectDocument };
 export type DownloadGrant = { url: string; expiresAt: string };
+export type ProjectChatMessage = { id: number; authorDisplayName: string; body: string; createdAt: string; isOwn: boolean };
+export type ProjectChatMessagePage = { items: ProjectChatMessage[]; hasMore: boolean };
 
 export class ClientManagementApiError extends Error {
   constructor(message: string, public status: number, public fieldErrors: Record<string, string> = {}) {
@@ -85,6 +87,15 @@ export const updateMembers = (id: string, employeeIds: number[]) => request<Proj
 export const archiveProject = (id: string) => request<void>(`/api/projects/${id}/archive`, { method: "POST" });
 export const reactivateProject = (id: string) => request<void>(`/api/projects/${id}/reactivate`, { method: "POST" });
 export const getProjectDocuments = (id: string) => request<ProjectDocument[]>(`/api/projects/${id}/documents`);
+export const getProjectMessages = (id: string, options: { beforeId?: number; afterId?: number; limit?: number } = {}) => {
+  const query = new URLSearchParams();
+  if (options.beforeId !== undefined) query.set("beforeId", String(options.beforeId));
+  if (options.afterId !== undefined) query.set("afterId", String(options.afterId));
+  if (options.limit !== undefined) query.set("limit", String(options.limit));
+  const suffix = query.size ? `?${query}` : "";
+  return request<ProjectChatMessagePage>(`/api/projects/${id}/messages${suffix}`);
+};
+export const sendProjectMessage = (id: string, body: string) => request<ProjectChatMessage>(`/api/projects/${id}/messages`, json("POST", { body }));
 export const getProjectDocumentDrawing = (projectId: string, documentId: string) => request<DrawingDocument>(`/api/projects/${projectId}/documents/${documentId}/drawing`);
 export const createProjectDocumentDownload = (projectId: string, documentId: string) => request<DownloadGrant>(
   `/api/projects/${projectId}/documents/${documentId}/download`, { method: "POST" },

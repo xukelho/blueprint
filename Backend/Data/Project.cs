@@ -18,7 +18,20 @@ public sealed class Project
     public ICollection<ProjectMember> Members { get; set; } = [];
     public ICollection<ProjectPhase> Phases { get; set; } = [];
     public ICollection<ProjectDocument> Documents { get; set; } = [];
+    public ICollection<ProjectMessage> Messages { get; set; } = [];
     public ICollection<StoredObject> StoredObjects { get; set; } = [];
+}
+
+public sealed class ProjectMessage
+{
+    public long Id { get; set; }
+    public long ProjectId { get; set; }
+    public long AuthorUserId { get; set; }
+    public required string AuthorDisplayName { get; set; }
+    public required string Body { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public Project? Project { get; set; }
+    public User? AuthorUser { get; set; }
 }
 
 public sealed class ProjectClient

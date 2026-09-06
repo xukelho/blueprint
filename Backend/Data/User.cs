@@ -29,4 +29,6 @@ public sealed class User
     public Client? Client { get; set; }
 
     public Employee? Employee { get; set; }
+
+    public ICollection<ProjectMessage> ProjectMessages { get; set; } = [];
 }

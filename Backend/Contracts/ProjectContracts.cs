@@ -9,6 +9,9 @@ public sealed record CreateProjectRequest(string Title, string Code, string Addr
 public sealed record UpdateProjectRequest(string Title, string Code, string Address, string? GoogleMapsUrl, long? ClientId);
 public sealed record UpdateProjectMembersRequest(IReadOnlyList<long> EmployeeIds);
 public sealed record UpdateProjectPhasesRequest(IReadOnlyList<string>? PhaseCodes, int? CurrentPhaseIndex);
+public sealed record ProjectMessageResponse(long Id, string AuthorDisplayName, string Body, DateTimeOffset CreatedAt, bool IsOwn);
+public sealed record ProjectMessagePageResponse(IReadOnlyList<ProjectMessageResponse> Items, bool HasMore);
+public sealed record CreateProjectMessageRequest(string Body);
 public sealed record ClientListItemResponse(long Id, string DisplayName, string Email, int ProjectCount);
 public sealed record ClientProjectResponse(long Id, string Title, string Code, string? CurrentPhaseCode, bool IsArchived);
 public sealed record ClientDetailResponse(long Id, string DisplayName, string FullName, string Nif, string Email, string PhoneNumber, string Address, string InternalNotes, IReadOnlyList<ClientProjectResponse> Projects, bool CanManageProjects);

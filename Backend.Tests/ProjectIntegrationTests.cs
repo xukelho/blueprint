@@ -311,6 +311,75 @@ public sealed class ProjectIntegrationTests(PostgreSqlApiFixture fixture)
         Assert.Equal(0, cleared.GetProperty("phases").GetArrayLength());
     }
 
+    [Fact]
+    public async Task ProjectChatPersistsForAllParticipantsAndArchivedProjectsAreReadOnly()
+    {
+        var owner = await CreateOwnerAsync();
+        var suffix = Guid.NewGuid().ToString("N");
+        await LoginAsync("admin", "admin");
+        var client = await CreateClientAsync($"chat.client.{suffix}", [owner.CompanyId]);
+        var unrelatedClient = await CreateClientAsync($"chat.other.{suffix}", [owner.CompanyId]);
+        var architect = await CreateEmployeeAsync(owner.CompanyId, $"chat.architect.{suffix}", "Beatriz");
+
+        await LoginAsync(owner.Username);
+        using var projectResponse = await fixture.Client.PostAsJsonAsync("/api/projects/", new
+        {
+            title = "Project chat",
+            code = $"CHAT-{suffix[..6]}",
+            address = "Lisboa",
+            googleMapsUrl = (string?)null,
+            clientId = (long?)client.Id,
+            employeeIds = new[] { architect.Id },
+            phaseCodes = Array.Empty<string>(),
+            currentPhaseIndex = (int?)null
+        });
+        Assert.Equal(HttpStatusCode.Created, projectResponse.StatusCode);
+        var projectId = (await projectResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetInt64();
+
+        using var firstResponse = await fixture.Client.PostAsJsonAsync($"/api/projects/{projectId}/messages", new { body = "  Primeira mensagem  " });
+        Assert.Equal(HttpStatusCode.Created, firstResponse.StatusCode);
+        var first = await firstResponse.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("Primeira mensagem", first.GetProperty("body").GetString());
+        Assert.Equal("Ana", first.GetProperty("authorDisplayName").GetString());
+        Assert.True(first.GetProperty("isOwn").GetBoolean());
+
+        await LoginAsync(architect.Username);
+        var architectPage = await fixture.Client.GetFromJsonAsync<JsonElement>($"/api/projects/{projectId}/messages");
+        Assert.Single(architectPage.GetProperty("items").EnumerateArray());
+        Assert.False(architectPage.GetProperty("items")[0].GetProperty("isOwn").GetBoolean());
+        using var secondResponse = await fixture.Client.PostAsJsonAsync($"/api/projects/{projectId}/messages", new { body = "Segunda mensagem" });
+        Assert.Equal(HttpStatusCode.Created, secondResponse.StatusCode);
+        var second = await secondResponse.Content.ReadFromJsonAsync<JsonElement>();
+
+        await LoginAsync(client.Username);
+        using var thirdResponse = await fixture.Client.PostAsJsonAsync($"/api/projects/{projectId}/messages", new { body = "Mensagem do cliente" });
+        Assert.Equal(HttpStatusCode.Created, thirdResponse.StatusCode);
+        var third = await thirdResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var latestPage = await fixture.Client.GetFromJsonAsync<JsonElement>($"/api/projects/{projectId}/messages?limit=1");
+        Assert.True(latestPage.GetProperty("hasMore").GetBoolean());
+        Assert.Equal(third.GetProperty("id").GetInt64(), latestPage.GetProperty("items")[0].GetProperty("id").GetInt64());
+        var olderPage = await fixture.Client.GetFromJsonAsync<JsonElement>($"/api/projects/{projectId}/messages?beforeId={third.GetProperty("id").GetInt64()}&limit=1");
+        Assert.Equal(second.GetProperty("id").GetInt64(), olderPage.GetProperty("items")[0].GetProperty("id").GetInt64());
+        var incrementalPage = await fixture.Client.GetFromJsonAsync<JsonElement>($"/api/projects/{projectId}/messages?afterId={first.GetProperty("id").GetInt64()}");
+        Assert.Equal(2, incrementalPage.GetProperty("items").GetArrayLength());
+
+        await LoginAsync(unrelatedClient.Username);
+        using var denied = await fixture.Client.GetAsync($"/api/projects/{projectId}/messages");
+        Assert.Equal(HttpStatusCode.NotFound, denied.StatusCode);
+
+        await LoginAsync(owner.Username);
+        using var blank = await fixture.Client.PostAsJsonAsync($"/api/projects/{projectId}/messages", new { body = "   " });
+        Assert.Equal(HttpStatusCode.BadRequest, blank.StatusCode);
+        using var archived = await fixture.Client.PostAsync($"/api/projects/{projectId}/archive", null);
+        Assert.Equal(HttpStatusCode.NoContent, archived.StatusCode);
+
+        await LoginAsync(client.Username);
+        using var readable = await fixture.Client.GetAsync($"/api/projects/{projectId}/messages");
+        Assert.Equal(HttpStatusCode.OK, readable.StatusCode);
+        using var blocked = await fixture.Client.PostAsJsonAsync($"/api/projects/{projectId}/messages", new { body = "Não enviar" });
+        Assert.Equal(HttpStatusCode.Conflict, blocked.StatusCode);
+    }
+
     private async Task<(string Username, long CompanyId, long UserId)> CreateOwnerAsync()
     {
         await LoginAsync("admin", "admin");
@@ -371,6 +440,25 @@ public sealed class ProjectIntegrationTests(PostgreSqlApiFixture fixture)
             nif = Guid.NewGuid().ToString("N")[..9],
             email = $"{username}@example.test",
             phoneNumber = "930000000",
+            address = "Lisboa"
+        });
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        return ((await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetInt64(), username);
+    }
+
+    private async Task<(long Id, string Username)> CreateEmployeeAsync(long companyId, string username, string displayName)
+    {
+        using var response = await fixture.Client.PostAsJsonAsync("/api/admin/employees", new
+        {
+            username,
+            password = "secret",
+            roleIds = new[] { 3, 4 },
+            companyId,
+            displayName,
+            fullName = displayName,
+            nif = Guid.NewGuid().ToString("N")[..9],
+            email = $"{username}@example.test",
+            phoneNumber = "920000001",
             address = "Lisboa"
         });
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);

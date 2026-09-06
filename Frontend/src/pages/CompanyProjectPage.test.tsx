@@ -210,6 +210,7 @@ describe("CompanyProjectPage", () => {
     ] };
     const planDocument = { id: "document-1", phaseId: 11, fileName: "Planta_Piso_0_R03.dxf", contentType: "application/dxf", length: 8400000, status: "Available", createdBy: 1, createdByDisplayName: "Ana Martins", createdAt: "2026-08-12T09:38:00Z", uploadedAt: "2026-08-12T09:38:00Z", preview: { kind: "drawing", sourceFormat: "dxf" } };
     const uploadedDocument = { ...planDocument, id: "document-2", phaseId: 12, fileName: "Licenca_Municipal.pdf", contentType: "application/pdf", preview: null, length: 7 };
+    const chatMessages = [{ id: 1, authorDisplayName: "Marta Silva", body: "Mensagem existente", createdAt: "2026-09-06T09:00:00Z", isOwn: false }];
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
       if (url === "/api/profile") return response(profile("employee"));
@@ -219,6 +220,12 @@ describe("CompanyProjectPage", () => {
       if (url === "/api/projects/1/phases/12/documents/uploads" && init?.method === "POST") return response({ documentId: "document-2", storedObjectId: "object-2", upload: { url: "https://storage.test/document-2", expiresAt: "2026-08-12T10:00:00Z", requiredHeaders: { "Content-Type": "application/pdf", "X-Upload": "required" } } }, 201);
       if (url === "https://storage.test/document-2" && init?.method === "PUT") return new Response(null, { status: 200 });
       if (url === "/api/projects/1/documents/document-2/complete" && init?.method === "POST") return response({ document: uploadedDocument });
+      if (url === "/api/projects/1/messages" && !init?.method) return response({ items: chatMessages, hasMore: false });
+      if (url === "/api/projects/1/messages" && init?.method === "POST") {
+        const created = { id: 2, authorDisplayName: "Ana", body: JSON.parse(String(init.body)).body, createdAt: "2026-09-06T10:00:00Z", isOwn: true };
+        chatMessages.push(created);
+        return response(created, 201);
+      }
       throw new Error(`Unexpected request: ${url}`);
     });
     const user = userEvent.setup();
@@ -253,7 +260,9 @@ describe("CompanyProjectPage", () => {
 
     await user.type(screen.getByLabelText("Nova mensagem"), "Atualização global do projeto.");
     await user.click(screen.getByRole("button", { name: "Enviar mensagem" }));
-    expect(screen.getByText("Atualização global do projeto.")).toBeInTheDocument();
+    const sentBubble = screen.getByText("Atualização global do projeto.").closest("article");
+    expect(sentBubble).toHaveClass("is-own");
+    expect(screen.getByText("Mensagem existente").closest("article")).not.toHaveClass("is-own");
 
     await user.click(screen.getByRole("tab", { name: "Conversas" }));
     await user.click(screen.getByRole("button", { name: /Dúvidas sobre a planta/ }));
@@ -271,5 +280,23 @@ describe("CompanyProjectPage", () => {
 
     await user.click(screen.getByRole("tab", { name: "Geral" }));
     expect(screen.getByText("Atualização global do projeto.")).toBeInTheDocument();
+  });
+
+  it("keeps an archived project conversation readable but disables its composer", async () => {
+    setAuthenticatedRoles(["employee"]);
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url === "/api/profile") return response(profile("employee"));
+      if (url === "/api/projects/1") return response({ ...emptyProject, isArchived: true });
+      if (url === "/api/projects/1/documents") return response([]);
+      if (url === "/api/projects/1/messages") return response({ items: [{ id: 1, authorDisplayName: "Marta", body: "Histórico", createdAt: "2026-09-06T09:00:00Z", isOwn: false }], hasMore: false });
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("Histórico")).toBeInTheDocument();
+    expect(screen.getByLabelText("Nova mensagem")).toBeDisabled();
+    expect(screen.getByText("A conversa está disponível apenas para leitura.")).toBeInTheDocument();
   });
 });

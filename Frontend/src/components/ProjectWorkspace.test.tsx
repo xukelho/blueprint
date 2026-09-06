@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { ProjectDocuments, ProjectDocumentsByPhase } from "./ProjectWorkspace";
+import { ProjectDocuments, ProjectDocumentsByPhase, ProjectGlobalChat } from "./ProjectWorkspace";
 
 const phases = [{ id: "11", code: "preliminary-study" }];
 const document = (id: string, fileName: string) => ({ id, phaseId: 11, fileName, contentType: "application/octet-stream", length: 1000, status: "Available", createdBy: 1, createdByDisplayName: "Ana", createdAt: "2026-08-12T10:00:00Z", uploadedAt: "2026-08-12T10:00:01Z" });
 const documents: ProjectDocumentsByPhase = { "11": [document("one", "one.pdf"), document("two", "two.docx"), document("three", "three.ifc")] };
 
-afterEach(() => cleanup());
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe("ProjectDocuments", () => {
   it("supports exclusive, additive and range selection, then confirms keyboard deletion", async () => {
@@ -126,5 +126,44 @@ describe("ProjectDocuments", () => {
     const { container } = render(<ProjectDocuments phases={phases} viewedPhaseId="11" documents={categorized} onUploadFile={vi.fn()} onDeleteDocument={vi.fn()} />);
     for (const kind of ["pdf", "document", "spreadsheet", "presentation", "image", "archive", "model", "text", "generic"])
       expect(container.querySelector(`.project-document__file--${kind}`)).toBeInTheDocument();
+  });
+});
+
+describe("ProjectGlobalChat", () => {
+  it("loads older messages and deduplicates periodic updates", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url === "/api/projects/1/messages") return new Response(JSON.stringify({ items: [{ id: 2, authorDisplayName: "Ana", body: "Atual", createdAt: "2026-09-06T10:00:00Z", isOwn: true }], hasMore: true }), { headers: { "Content-Type": "application/json" } });
+      if (url === "/api/projects/1/messages?beforeId=2") return new Response(JSON.stringify({ items: [{ id: 1, authorDisplayName: "Marta", body: "Anterior", createdAt: "2026-09-06T09:00:00Z", isOwn: false }], hasMore: false }), { headers: { "Content-Type": "application/json" } });
+      if (url === "/api/projects/1/messages?afterId=2") return new Response(JSON.stringify({ items: [{ id: 2, authorDisplayName: "Ana", body: "Atual", createdAt: "2026-09-06T10:00:00Z", isOwn: true }, { id: 3, authorDisplayName: "Beatriz", body: "Nova", createdAt: "2026-09-06T10:05:00Z", isOwn: false }], hasMore: false }), { headers: { "Content-Type": "application/json" } });
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    render(<ProjectGlobalChat projectId="1" archived={false} />);
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(screen.getByText("Atual")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Carregar mensagens anteriores" }));
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(screen.getByText("Anterior")).toBeInTheDocument();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+    expect(screen.getByText("Nova")).toBeInTheDocument();
+    expect(screen.getAllByText("Atual")).toHaveLength(1);
+  });
+
+  it("preserves the draft when sending fails", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => init?.method === "POST"
+      ? new Response(JSON.stringify({ error: "Falha ao enviar." }), { status: 500, headers: { "Content-Type": "application/json" } })
+      : new Response(JSON.stringify({ items: [], hasMore: false }), { headers: { "Content-Type": "application/json" } }));
+    const user = userEvent.setup();
+    render(<ProjectGlobalChat projectId="1" archived={false} />);
+    const composer = await screen.findByLabelText("Nova mensagem");
+    await user.type(composer, "Não perder este texto");
+    await user.click(screen.getByRole("button", { name: "Enviar mensagem" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Falha ao enviar.");
+    expect(composer).toHaveValue("Não perder este texto");
   });
 });
