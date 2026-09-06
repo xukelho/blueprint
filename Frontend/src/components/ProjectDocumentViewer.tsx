@@ -129,8 +129,8 @@ export function ProjectDocumentViewer({ phaseCode, document, drawing, loading, e
         <div className="project-document-viewer__controls" aria-label="Controlos de zoom"><button type="button" aria-label="Aumentar zoom" onClick={() => changeScale(1.2)}><ZoomIn size={18} /></button><button type="button" aria-label="Diminuir zoom" onClick={() => changeScale(1 / 1.2)}><ZoomOut size={18} /></button></div></>}
       {loading && <div className="project-document-viewer__state" role="status"><LoaderCircle size={42} aria-hidden="true" /><strong>A preparar documento…</strong><span>O ficheiro está a ser convertido para visualização.</span></div>}
       {!loading && error && <div className="project-document-viewer__state is-error" role="alert"><Box size={48} aria-hidden="true" /><strong>Não foi possível apresentar este documento.</strong><span>{error}</span><button type="button" onClick={onRetry}><RotateCcw size={16} />Tentar novamente</button></div>}
-      {!loading && !error && unsupported && <div className="project-document-viewer__state"><Box size={52} aria-hidden="true" /><strong>Este ficheiro não pode ser visualizado.</strong><span>Selecione um ficheiro DXF compatível para o apresentar aqui.</span></div>}
-      {!loading && !error && !drawing && !unsupported && <div className="project-document-viewer__state"><Box size={64} aria-hidden="true" /><strong>Sem documento para visualizar</strong><span>Adicione um ficheiro DXF aos documentos desta fase.</span></div>}
+      {!loading && !error && unsupported && <div className="project-document-viewer__state"><Box size={52} aria-hidden="true" /><strong>Este ficheiro não pode ser visualizado.</strong><span>Selecione um ficheiro DXF, DWG ou DWFX compatível para o apresentar aqui.</span></div>}
+      {!loading && !error && !drawing && !unsupported && <div className="project-document-viewer__state"><Box size={64} aria-hidden="true" /><strong>Sem documento para visualizar</strong><span>Adicione um ficheiro DXF, DWG ou DWFX aos documentos desta fase.</span></div>}
     </div>
   </section>;
 }

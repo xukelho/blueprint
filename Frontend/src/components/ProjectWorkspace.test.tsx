@@ -121,11 +121,12 @@ describe("ProjectDocuments", () => {
     const categorized: ProjectDocumentsByPhase = { "11": [
       document("pdf", "plan.pdf"), document("word", "brief.odt"), document("sheet", "costs.xlsx"),
       document("slides", "review.pptx"), document("image", "render.png"), document("archive", "bundle.zip"),
-      document("model", "building.ifc"), document("text", "notes.md"), document("other", "data.xyz"),
+      document("model", "building.ifc"), document("dwfx-model", "drawing.dwfx"), document("text", "notes.md"), document("other", "data.xyz"),
     ] };
     const { container } = render(<ProjectDocuments phases={phases} viewedPhaseId="11" documents={categorized} onUploadFile={vi.fn()} onDeleteDocument={vi.fn()} />);
     for (const kind of ["pdf", "document", "spreadsheet", "presentation", "image", "archive", "model", "text", "generic"])
       expect(container.querySelector(`.project-document__file--${kind}`)).toBeInTheDocument();
+    expect(container.querySelectorAll(".project-document__file--model")).toHaveLength(2);
   });
 });
 

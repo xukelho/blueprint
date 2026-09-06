@@ -39,7 +39,7 @@ const documentKind = (name: string) => {
   if (["ppt", "pptx", "odp"].includes(extension)) return "presentation";
   if (["jpg", "jpeg", "png", "gif", "webp", "svg", "tif", "tiff", "bmp"].includes(extension)) return "image";
   if (["zip", "rar", "7z", "tar", "gz"].includes(extension)) return "archive";
-  if (["dwg", "dxf", "ifc"].includes(extension)) return "model";
+  if (["dwg", "dwfx", "dxf", "ifc"].includes(extension)) return "model";
   if (["txt", "md"].includes(extension)) return "text";
   return "generic";
 };

@@ -15,7 +15,7 @@ public sealed class DxfDrawingSourceParser : IDrawingSourceParser
         {
             using var reader = new DxfReader(source);
             var document = reader.Read();
-            var builder = new DrawingBuilder(options);
+            var builder = new CadDrawingBuilder(options, SourceFormat);
             foreach (var entity in document.Entities)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -30,7 +30,7 @@ public sealed class DxfDrawingSourceParser : IDrawingSourceParser
         }
     }
 
-    private sealed class DrawingBuilder(DrawingPreviewOptions options)
+    internal sealed class CadDrawingBuilder(DrawingPreviewOptions options, string sourceFormat)
     {
         private readonly List<DrawingPathResponse> _paths = [];
         private readonly List<DrawingTextResponse> _text = [];
@@ -76,7 +76,7 @@ public sealed class DxfDrawingSourceParser : IDrawingSourceParser
         public DrawingContent Build()
         {
             if (!_paths.Any() && !_text.Any())
-                throw new DrawingPreviewException("drawing-empty", "The DXF contains no renderable two-dimensional geometry.", StatusCodes.Status422UnprocessableEntity);
+                throw new DrawingPreviewException("drawing-empty", $"The {sourceFormat.ToUpperInvariant()} contains no renderable two-dimensional geometry.", StatusCodes.Status422UnprocessableEntity);
             return new DrawingContent(null, new DrawingBoundsResponse(_minX, _minY, _maxX, _maxY), _layers.Values.ToArray(), _paths, _text,
                 _warnings.Select(pair => new DrawingWarningResponse(pair.Key, pair.Value)).ToArray());
         }
@@ -104,7 +104,7 @@ public sealed class DxfDrawingSourceParser : IDrawingSourceParser
             {
                 _segmentCount += segments.Count;
                 if (_segmentCount > options.MaxSegments)
-                    throw new DrawingPreviewException("drawing-too-complex", "The DXF contains too much geometry for an interactive preview.", StatusCodes.Status422UnprocessableEntity);
+                    throw new DrawingPreviewException("drawing-too-complex", $"The {sourceFormat.ToUpperInvariant()} contains too much geometry for an interactive preview.", StatusCodes.Status422UnprocessableEntity);
                 _paths.Add(new DrawingPathResponse(layerId, style, closed, segments));
                 foreach (var segment in segments)
                 {
