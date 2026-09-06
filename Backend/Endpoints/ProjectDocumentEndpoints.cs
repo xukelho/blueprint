@@ -314,10 +314,11 @@ public static class ProjectDocumentEndpoints
         document.StoredObject.UploadedAt,
         PreviewFor(document.StoredObject.FileName));
 
-    private static DocumentPreviewResponse? PreviewFor(string fileName) =>
-        string.Equals(Path.GetExtension(fileName), ".dxf", StringComparison.OrdinalIgnoreCase)
-            ? new DocumentPreviewResponse("drawing", "dxf")
-            : null;
+    private static DocumentPreviewResponse? PreviewFor(string fileName)
+    {
+        var format = Path.GetExtension(fileName).TrimStart('.').ToLowerInvariant();
+        return format is "dxf" or "dwg" or "dwfx" ? new DocumentPreviewResponse("drawing", format) : null;
+    }
 
     private static async Task<Dictionary<long, string>> UploaderNamesAsync(IEnumerable<long> userIds, BlueprintDbContext db, CancellationToken ct)
     {

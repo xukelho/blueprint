@@ -202,6 +202,42 @@ describe("CompanyProjectPage", () => {
     expect(screen.getAllByText("Caderno.pdf")).toHaveLength(2);
   });
 
+  it("loads DXF, DWFX, and DWG documents into the visualizer when clicked", async () => {
+    setAuthenticatedRoles(["employee"]);
+    const phasedProject = { ...emptyProject, phases: [
+      { id: 11, code: "preliminary-study", label: "Estudo Prévio", position: 0, isCurrent: true },
+    ] };
+    const drawingDocument = (id: string, fileName: string, sourceFormat: string, uploadedAt: string) => ({
+      id, phaseId: 11, fileName, contentType: "application/octet-stream", length: 100, status: "Available",
+      createdBy: 1, createdByDisplayName: "Ana Martins", createdAt: uploadedAt, uploadedAt,
+      preview: { kind: "drawing", sourceFormat },
+    });
+    const documents = [
+      drawingDocument("dxf-document", "Planta.dxf", "dxf", "2026-08-12T09:00:00Z"),
+      drawingDocument("dwfx-document", "Alcado.dwfx", "dwfx", "2026-08-12T10:00:00Z"),
+      drawingDocument("dwg-document", "Modelo.dwg", "dwg", "2026-08-12T11:00:00Z"),
+    ];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url === "/api/profile") return response(profile("employee"));
+      if (url === "/api/projects/1" && !init?.method) return response(phasedProject);
+      if (url === "/api/projects/1/documents") return response(documents);
+      const match = url.match(/\/documents\/(dxf|dwfx|dwg)-document\/drawing$/);
+      if (match) return response({ schemaVersion: 1, converterVersion: "test", documentId: `${match[1]}-document`, sourceFormat: match[1], units: null, bounds: { minX: 0, minY: 0, maxX: 100, maxY: 100 }, layers: [], paths: [], text: [], warnings: [] });
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    expect(await screen.findByRole("img", { name: "Pré-visualização de Modelo.dwg" })).toBeInTheDocument();
+    await user.click(screen.getByRole("option", { name: /Planta\.dxf/ }));
+    expect(await screen.findByRole("img", { name: "Pré-visualização de Planta.dxf" })).toBeInTheDocument();
+    await user.click(screen.getByRole("option", { name: /Alcado\.dwfx/ }));
+    expect(await screen.findByRole("img", { name: "Pré-visualização de Alcado.dwfx" })).toBeInTheDocument();
+    await user.click(screen.getByRole("option", { name: /Modelo\.dwg/ }));
+    expect(await screen.findByRole("img", { name: "Pré-visualização de Modelo.dwg" })).toBeInTheDocument();
+  });
+
   it("switches phase documents and keeps the global conversation available", async () => {
     setAuthenticatedRoles(["employee"]);
     const phasedProject = { ...emptyProject, phases: [

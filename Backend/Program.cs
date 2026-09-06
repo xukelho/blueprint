@@ -23,6 +23,8 @@ builder.Services.AddObjectStorage(builder.Configuration);
 builder.Services.AddScoped<IFileService, FileService>();
 builder.Services.Configure<DrawingPreviewOptions>(builder.Configuration.GetSection(DrawingPreviewOptions.SectionName));
 builder.Services.AddSingleton<IDrawingSourceParser, DxfDrawingSourceParser>();
+builder.Services.AddSingleton<IDrawingSourceParser, DwgDrawingSourceParser>();
+builder.Services.AddSingleton<IDrawingSourceParser, DwfxDrawingSourceParser>();
 builder.Services.AddScoped<DrawingPreviewService>();
 builder.Services.AddScoped<ProjectPhaseService>();
 builder.Services.AddScoped<PhaseRemovalService>();

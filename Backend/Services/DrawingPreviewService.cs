@@ -32,7 +32,7 @@ public sealed class DrawingPreviewException(string code, string message, int sta
 public sealed class DrawingPreviewService(IEnumerable<IDrawingSourceParser> parsers, IObjectStore objectStore, IConfiguration configuration)
 {
     public const int SchemaVersion = 1;
-    public const string ConverterVersion = "drawing-v1-acadsharp-3.7.1";
+    public const string ConverterVersion = "drawing-v1-cad-dwfx-1";
     private static readonly ConcurrentDictionary<Guid, SemaphoreSlim> Locks = [];
     private readonly DrawingPreviewOptions _options = configuration.GetSection(DrawingPreviewOptions.SectionName).Get<DrawingPreviewOptions>() ?? new DrawingPreviewOptions();
     private readonly IReadOnlyDictionary<string, IDrawingSourceParser> _parsers = parsers.ToDictionary(parser => parser.SourceFormat, StringComparer.OrdinalIgnoreCase);
