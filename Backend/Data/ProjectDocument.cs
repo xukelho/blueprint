@@ -50,4 +50,5 @@ public sealed class ProjectDocument
     public Project? Project { get; set; }
     public ProjectPhase? Phase { get; set; }
     public StoredObject? StoredObject { get; set; }
+    public ICollection<ProjectPartConversation> PartConversations { get; set; } = [];
 }

@@ -32,6 +32,9 @@ export type CompleteDocumentUpload = { document: ProjectDocument };
 export type DownloadGrant = { url: string; expiresAt: string };
 export type ProjectChatMessage = { id: number; authorDisplayName: string; body: string; createdAt: string; isOwn: boolean };
 export type ProjectChatMessagePage = { items: ProjectChatMessage[]; hasMore: boolean };
+export type DrawingSelection = { key: string; kind: "path" | "area" | "text"; label: string; anchor: DrawingPoint };
+export type ProjectPartConversation = { id: number; documentId: string; targetKey: string; targetKind: string; targetLabel: string; title: string; anchorX: number; anchorY: number; createdAt: string; messageCount: number };
+export type ProjectPartConversationMessage = { id: number; authorDisplayName: string; body: string; createdAt: string; isOwn: boolean };
 
 export class ClientManagementApiError extends Error {
   constructor(message: string, public status: number, public fieldErrors: Record<string, string> = {}) {
@@ -96,6 +99,10 @@ export const getProjectMessages = (id: string, options: { beforeId?: number; aft
   return request<ProjectChatMessagePage>(`/api/projects/${id}/messages${suffix}`);
 };
 export const sendProjectMessage = (id: string, body: string) => request<ProjectChatMessage>(`/api/projects/${id}/messages`, json("POST", { body }));
+export const getProjectPartConversations = (projectId: string, documentId?: string) => request<ProjectPartConversation[]>(`/api/projects/${projectId}/part-conversations${documentId ? `?documentId=${encodeURIComponent(documentId)}` : ""}`);
+export const createProjectPartConversation = (projectId: string, documentId: string, selection: DrawingSelection, title: string) => request<ProjectPartConversation>(`/api/projects/${projectId}/part-conversations`, json("POST", { documentId, targetKey: selection.key, targetKind: selection.kind, targetLabel: selection.label, title, anchorX: selection.anchor.x, anchorY: selection.anchor.y }));
+export const getProjectPartConversationMessages = (projectId: string, conversationId: number) => request<ProjectPartConversationMessage[]>(`/api/projects/${projectId}/part-conversations/${conversationId}/messages`);
+export const sendProjectPartConversationMessage = (projectId: string, conversationId: number, body: string) => request<ProjectPartConversationMessage>(`/api/projects/${projectId}/part-conversations/${conversationId}/messages`, json("POST", { body }));
 export const getProjectDocumentDrawing = (projectId: string, documentId: string) => request<DrawingDocument>(`/api/projects/${projectId}/documents/${documentId}/drawing`);
 export async function getProjectDocumentContent(projectId: string, documentId: string, signal?: AbortSignal) {
   const response = await fetch(`/api/projects/${projectId}/documents/${documentId}/content`, { signal });

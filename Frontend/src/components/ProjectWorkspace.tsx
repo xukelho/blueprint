@@ -1,32 +1,11 @@
-import { ChangeEvent, DragEvent, FormEvent, KeyboardEvent, MouseEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, DragEvent, FormEvent, KeyboardEvent, MouseEvent, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Box, ChevronDown, Download, File, FileArchive, FileImage, FilePlus2, FileSpreadsheet, FileText, FileType2, Folder, FolderOpen, LoaderCircle, LockKeyhole, MessageSquare, MessagesSquare, PanelRightClose, PanelRightOpen, PanelsTopLeft, Plus, Presentation, Send, Trash2, X } from "lucide-react";
-import { getProjectMessages, sendProjectMessage } from "../api/projects";
-import type { ProjectChatMessage, ProjectDocument } from "../api/projects";
+import { getProjectMessages, getProjectPartConversationMessages, sendProjectMessage, sendProjectPartConversationMessage } from "../api/projects";
+import type { DrawingSelection, ProjectChatMessage, ProjectDocument, ProjectPartConversation, ProjectPartConversationMessage } from "../api/projects";
 import { phaseLabel } from "../projectPhases";
 import type { TimelinePhase } from "./ProjectTimelineEditor";
 
-type MockMessage = { id: string; author: string; time: string; body: string; own?: boolean };
-type MockConversation = { id: string; title: string; scope: "global" | string; messages: MockMessage[] };
 export type ProjectDocumentsByPhase = Record<string, ProjectDocument[]>;
-
-const phaseConversations = (phase: TimelinePhase): MockConversation[] => {
-  const label = phaseLabel(phase.code) ?? phase.code;
-  return [
-    {
-      id: `${phase.id}:decisions`, title: "Decisões e validações", scope: phase.id,
-      messages: [
-        { id: `${phase.id}-d1`, author: "Ana Martins", time: "Ontem", body: `Reuni neste tópico as decisões relativas a ${label.toLocaleLowerCase("pt-PT")}.` },
-        { id: `${phase.id}-d2`, author: "Marta Silva", time: "08:35", body: "A solução apresentada está alinhada. Podemos avançar." },
-      ],
-    },
-    {
-      id: `${phase.id}:details`, title: "Dúvidas sobre a planta", scope: phase.id,
-      messages: [
-        { id: `${phase.id}-p1`, author: "Marta Silva", time: "11:18", body: "Podemos confirmar a dimensão livre junto à entrada da sala?" },
-      ],
-    },
-  ];
-};
 
 const fileType = (name: string) => name.includes(".") ? name.split(".").pop()!.toLocaleLowerCase("pt-PT") : "file";
 const fileSize = (bytes: number) => bytes >= 1_000_000 ? `${(bytes / 1_000_000).toLocaleString("pt-PT", { maximumFractionDigits: 1 })} MB` : `${Math.max(1, Math.round(bytes / 1_000))} KB`;
@@ -221,33 +200,6 @@ export function ProjectDocuments({ phases, viewedPhaseId, documents, loading = f
   </section>;
 }
 
-function ConversationChat({ thread, messages, currentUser, phaseName, onMessagesChange, onBack }: { thread: MockConversation; messages: MockMessage[]; currentUser: string; phaseName: string | null; onMessagesChange: (messages: MockMessage[]) => void; onBack?: () => void }) {
-  const [draft, setDraft] = useState("");
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
-    const body = draft.trim();
-    if (!body) return;
-    onMessagesChange([...messages, { id: `${thread.id}-${Date.now()}`, author: currentUser, time: "Agora", body, own: true }]);
-    setDraft("");
-  };
-
-  return <section className="project-conversations__chat" aria-label={thread.title}>
-    <header>
-      {onBack && <button className="project-conversations__back" type="button" onClick={onBack} aria-label="Voltar à lista de conversas"><ArrowLeft size={17} aria-hidden="true" /></button>}
-      <div><strong>{thread.title}</strong><small>{thread.scope === "global" ? "Todo o projeto" : phaseName}</small></div>
-      {thread.scope === "global" && <MessageSquare size={15} aria-label="Conversa global" />}
-    </header>
-    <div className="project-conversations__messages" aria-live="polite">
-      {messages.map((message) => <article className={message.own ? "is-own" : ""} key={message.id}><div><strong>{message.author}</strong><time>{message.time}</time></div><p>{message.body}</p></article>)}
-    </div>
-    <form className="project-conversations__composer" onSubmit={submit}>
-      <label className="sr-only" htmlFor={`project-conversation-message-${thread.id}`}>Nova mensagem</label>
-      <textarea id={`project-conversation-message-${thread.id}`} rows={2} placeholder="Escrever uma mensagem…" value={draft} onChange={(event) => setDraft(event.target.value)} />
-      <button type="submit" aria-label="Enviar mensagem" disabled={!draft.trim()}><Send size={17} aria-hidden="true" /></button>
-    </form>
-  </section>;
-}
-
 const mergeProjectMessages = (current: ProjectChatMessage[], incoming: ProjectChatMessage[]) => {
   const merged = new Map(current.map((message) => [message.id, message]));
   incoming.forEach((message) => merged.set(message.id, message));
@@ -360,26 +312,59 @@ export function ProjectGlobalChat({ projectId, archived }: { projectId: string; 
 
 type WorkspaceTab = "global" | "conversations" | "files";
 
-export function ProjectWorkspacePanel({ projectId, projectTitle, archived, phases, viewedPhaseId, currentUser, documents, onCollapsedChange }: { projectId: string; projectTitle: string; archived: boolean; phases: TimelinePhase[]; viewedPhaseId: string | null; currentUser: string; documents: ProjectDocumentsByPhase; onCollapsedChange?: (collapsed: boolean) => void }) {
+function PartConversationChat({ projectId, conversation, archived, onBack, onMessageCreated }: { projectId: string; conversation: ProjectPartConversation; archived: boolean; onBack: () => void; onMessageCreated: () => void }) {
+  const [messages, setMessages] = useState<ProjectPartConversationMessage[]>([]);
+  const [draft, setDraft] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let active = true; setLoading(true); setError("");
+    getProjectPartConversationMessages(projectId, conversation.id).then((items) => { if (active) setMessages(items); }).catch((caught) => { if (active) setError(caught instanceof Error ? caught.message : "Não foi possível carregar a conversa."); }).finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [projectId, conversation.id]);
+  const submit = async (event: FormEvent) => {
+    event.preventDefault(); const body = draft.trim(); if (!body || archived || sending) return;
+    setSending(true); setError("");
+    try { const created = await sendProjectPartConversationMessage(projectId, conversation.id, body); setMessages((current) => [...current, created]); setDraft(""); onMessageCreated(); }
+    catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível enviar a mensagem."); }
+    finally { setSending(false); }
+  };
+  return <section className="project-conversations__chat" aria-label={conversation.title}>
+    <header><button className="project-conversations__back" type="button" onClick={onBack} aria-label="Voltar à lista de conversas"><ArrowLeft size={17} /></button><div><strong>{conversation.title}</strong><small>{conversation.targetLabel}</small></div><MessageSquare size={15} aria-label="Conversa ligada ao desenho" /></header>
+    <div className="project-conversations__messages" aria-live="polite">{loading ? <p className="project-conversations__state">A carregar mensagens…</p> : messages.length ? messages.map((message) => <article className={message.isOwn ? "is-own" : ""} key={message.id}><div><strong>{message.authorDisplayName}</strong><time>{projectMessageTime(message.createdAt)}</time></div><p>{message.body}</p></article>) : <p className="project-conversations__state">Ainda não existem mensagens. Inicie a conversa.</p>}{error && <div className="project-conversations__error" role="alert">{error}</div>}</div>
+    <form className="project-conversations__composer" onSubmit={submit}><label className="sr-only" htmlFor={`part-conversation-${conversation.id}`}>Nova mensagem</label><textarea id={`part-conversation-${conversation.id}`} rows={2} maxLength={4000} placeholder={archived ? "O projeto está arquivado." : "Escrever uma mensagem…"} value={draft} disabled={archived || sending} onChange={(event) => setDraft(event.target.value)} /><button type="submit" aria-label="Enviar mensagem" disabled={!draft.trim() || archived || sending}>{sending ? <LoaderCircle size={17} /> : <Send size={17} />}</button></form>
+  </section>;
+}
+
+export function ProjectWorkspacePanel({ projectId, projectTitle, archived, phases, viewedPhaseId, documents, selectedDrawingPart, partConversations, requestedConversationId, requestedConversationToken, onCreatePartConversation, onPartConversationsRefresh, onCollapsedChange }: { projectId: string; projectTitle: string; archived: boolean; phases: TimelinePhase[]; viewedPhaseId: string | null; documents: ProjectDocumentsByPhase; selectedDrawingPart: DrawingSelection | null; partConversations: ProjectPartConversation[]; requestedConversationId: number | null; requestedConversationToken: number; onCreatePartConversation: (title: string) => Promise<ProjectPartConversation>; onPartConversationsRefresh: () => void; onCollapsedChange?: (collapsed: boolean) => void }) {
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("global");
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [selectedPhaseThreadId, setSelectedPhaseThreadId] = useState<string | null>(null);
+  const [selectedPartConversationId, setSelectedPartConversationId] = useState<number | null>(null);
+  const [newConversationTitle, setNewConversationTitle] = useState("");
+  const [creatingConversation, setCreatingConversation] = useState(false);
+  const [conversationError, setConversationError] = useState("");
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>(() => Object.fromEntries(phases.map((phase) => [phase.id, phase.id === viewedPhaseId])));
-  const selectedPhase = phases.find((phase) => phase.id === viewedPhaseId) ?? null;
-  const scopedConversations = useMemo(() => selectedPhase ? phaseConversations(selectedPhase) : [], [selectedPhase]);
-  const initialMessages = useMemo(() => Object.fromEntries(phases.flatMap(phaseConversations).map((thread) => [thread.id, thread.messages])), [phases]);
-  const [messages, setMessages] = useState<Record<string, MockMessage[]>>(initialMessages);
-  const selectedPhaseThread = scopedConversations.find((thread) => thread.id === selectedPhaseThreadId) ?? null;
+  const selectedPartConversation = partConversations.find((thread) => thread.id === selectedPartConversationId) ?? null;
+  const visiblePartConversations = selectedDrawingPart ? partConversations.filter((thread) => thread.targetKey === selectedDrawingPart.key) : partConversations;
 
-  useEffect(() => { setMessages((current) => ({ ...initialMessages, ...current })); }, [initialMessages]);
   useEffect(() => {
-    setSelectedPhaseThreadId(null);
     if (viewedPhaseId) setExpandedFolders((current) => ({ ...current, [viewedPhaseId]: true }));
   }, [viewedPhaseId]);
+  useEffect(() => {
+    if (!selectedDrawingPart) return;
+    setActiveTab("conversations"); setSelectedPartConversationId(null); setNewConversationTitle(selectedDrawingPart.label);
+    if (isCollapsed) setCollapsed(false);
+  }, [selectedDrawingPart?.key]);
+  useEffect(() => {
+    if (requestedConversationId == null) return;
+    setActiveTab("conversations"); setSelectedPartConversationId(requestedConversationId);
+    if (isCollapsed) setCollapsed(false);
+  }, [requestedConversationId, requestedConversationToken]);
 
   const selectTab = (tab: WorkspaceTab) => {
     setActiveTab(tab);
-    if (tab !== "conversations") setSelectedPhaseThreadId(null);
+    if (tab !== "conversations") setSelectedPartConversationId(null);
     if (isCollapsed) setCollapsed(false);
   };
   const setCollapsed = (collapsed: boolean) => {
@@ -396,7 +381,13 @@ export function ProjectWorkspacePanel({ projectId, projectTitle, archived, phase
     tabs[nextIndex].focus();
     tabs[nextIndex].click();
   };
-  const updateThreadMessages = (threadId: string, nextMessages: MockMessage[]) => setMessages((current) => ({ ...current, [threadId]: nextMessages }));
+  const createDrawingConversation = async (event: FormEvent) => {
+    event.preventDefault(); if (!selectedDrawingPart || creatingConversation || archived) return;
+    setCreatingConversation(true); setConversationError("");
+    try { const created = await onCreatePartConversation(newConversationTitle.trim() || selectedDrawingPart.label); setSelectedPartConversationId(created.id); }
+    catch (caught) { setConversationError(caught instanceof Error ? caught.message : "Não foi possível criar a conversa."); }
+    finally { setCreatingConversation(false); }
+  };
 
   return <aside className={`mock-surface project-conversations ${isCollapsed ? "is-collapsed" : ""}`} aria-labelledby="project-workspace-panel-title">
     <header className="project-conversations__header"><div className="project-conversations__header-content"><PanelsTopLeft className="project-conversations__header-icon" size={20} aria-hidden="true" /><div><h2 id="project-workspace-panel-title">Área do projeto</h2></div></div><button className="project-conversations__collapse" type="button" aria-label={isCollapsed ? "Expandir área do projeto" : "Recolher área do projeto"} aria-expanded={!isCollapsed} onClick={() => setCollapsed(!isCollapsed)}>{isCollapsed ? <PanelRightOpen size={19} aria-hidden="true" /> : <PanelRightClose size={19} aria-hidden="true" />}</button></header>
@@ -411,9 +402,11 @@ export function ProjectWorkspacePanel({ projectId, projectTitle, archived, phase
     </div>}
 
     {activeTab === "conversations" && <div className="project-workspace-tabpanel" id="workspace-panel-conversations" role="tabpanel" aria-labelledby="workspace-tab-conversations">
-      {selectedPhaseThread ? <ConversationChat thread={selectedPhaseThread} messages={messages[selectedPhaseThread.id] ?? selectedPhaseThread.messages} currentUser={currentUser} phaseName={phaseLabel(selectedPhase?.code)} onMessagesChange={(next) => updateThreadMessages(selectedPhaseThread.id, next)} onBack={() => setSelectedPhaseThreadId(null)} /> : <div className="project-conversation-index">
-        <header><strong>Conversas da fase</strong><small>{selectedPhase ? phaseLabel(selectedPhase.code) : "Sem fase selecionada"}</small></header>
-        {scopedConversations.length ? <div className="project-conversation-index__list">{scopedConversations.map((thread) => <button type="button" key={thread.id} onClick={() => setSelectedPhaseThreadId(thread.id)}><span className="project-conversation-dot" aria-hidden="true" /><span><strong>{thread.title}</strong><small>{messages[thread.id]?.length ?? thread.messages.length} mensagens</small></span><span aria-hidden="true">›</span></button>)}</div> : <p className="project-workspace-panel__empty">Selecione uma fase na timeline para consultar as respetivas conversas.</p>}
+      {selectedPartConversation ? <PartConversationChat projectId={projectId} conversation={selectedPartConversation} archived={archived} onBack={() => setSelectedPartConversationId(null)} onMessageCreated={onPartConversationsRefresh} /> : <div className="project-conversation-index">
+        <header><strong>{selectedDrawingPart ? `Conversas de ${selectedDrawingPart.label}` : "Conversas da fase"}</strong><small>{selectedDrawingPart ? "Seleção ativa no visualizador" : "Selecione um objeto ou uma área no desenho"}</small></header>
+        {selectedDrawingPart && !archived && visiblePartConversations.length === 0 && <form className="project-part-conversation-create" onSubmit={createDrawingConversation}><label>Título<input value={newConversationTitle} maxLength={256} onChange={(event) => setNewConversationTitle(event.target.value)} /></label><button className="primary-action" type="submit" disabled={creatingConversation}>{creatingConversation ? "A criar…" : "Nova conversa nesta seleção"}</button></form>}
+        {conversationError && <p className="project-conversations__error" role="alert">{conversationError}</p>}
+        {visiblePartConversations.length ? <div className="project-conversation-index__list">{visiblePartConversations.map((thread) => <button type="button" key={thread.id} onClick={() => setSelectedPartConversationId(thread.id)}><span className="project-conversation-dot" aria-hidden="true" /><span><strong>{thread.title}</strong><small>{thread.targetLabel} · {thread.messageCount} mensagens</small></span><span aria-hidden="true">›</span></button>)}</div> : <p className="project-workspace-panel__empty">{selectedDrawingPart ? "Ainda não existem conversas para esta seleção." : "Clique num objeto, texto ou área fechada no visualizador para iniciar uma conversa."}</p>}
       </div>}
     </div>}
 

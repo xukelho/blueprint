@@ -55,6 +55,21 @@ public sealed class ProjectIntegrationTests(PostgreSqlApiFixture fixture)
         Assert.Equal("Available", ownerDocuments[0].GetProperty("status").GetString());
         Assert.False(string.IsNullOrWhiteSpace(ownerDocuments[0].GetProperty("createdByDisplayName").GetString()));
 
+        using var conversationResponse = await fixture.Client.PostAsJsonAsync($"/api/projects/{projectId}/part-conversations", new
+        {
+            documentId, targetKey = "area:0,1,2,3", targetKind = "area", targetLabel = "Área detetada 1",
+            title = "Rever cozinha", anchorX = 12.5, anchorY = 8.25
+        });
+        Assert.Equal(HttpStatusCode.Created, conversationResponse.StatusCode);
+        var conversation = await conversationResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var conversationId = conversation.GetProperty("id").GetInt64();
+        using var conversationMessageResponse = await fixture.Client.PostAsJsonAsync($"/api/projects/{projectId}/part-conversations/{conversationId}/messages", new { body = "Confirmar esta área." });
+        Assert.Equal(HttpStatusCode.Created, conversationMessageResponse.StatusCode);
+        Assert.True((await conversationMessageResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("isOwn").GetBoolean());
+        var drawingConversations = await fixture.Client.GetFromJsonAsync<JsonElement[]>($"/api/projects/{projectId}/part-conversations?documentId={documentId}");
+        Assert.Single(drawingConversations!);
+        Assert.Equal(1, drawingConversations![0].GetProperty("messageCount").GetInt32());
+
         using var moved = await fixture.Client.PutAsJsonAsync($"/api/projects/{projectId}/documents/{documentId}/phase", new { targetPhaseId = secondPhaseId });
         Assert.Equal(HttpStatusCode.OK, moved.StatusCode);
         Assert.Equal(secondPhaseId, (await moved.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("phaseId").GetInt64());
@@ -73,6 +88,9 @@ public sealed class ProjectIntegrationTests(PostgreSqlApiFixture fixture)
         Assert.Equal(HttpStatusCode.OK, replacedAgain.StatusCode);
 
         await LoginAsync(client.Username);
+        var clientDrawingMessages = await fixture.Client.GetFromJsonAsync<JsonElement[]>($"/api/projects/{projectId}/part-conversations/{conversationId}/messages");
+        Assert.Single(clientDrawingMessages!);
+        Assert.False(clientDrawingMessages![0].GetProperty("isOwn").GetBoolean());
         var clientDocuments = await fixture.Client.GetFromJsonAsync<JsonElement[]>($"/api/projects/{projectId}/documents");
         Assert.Single(clientDocuments!);
         Assert.Equal("drawing-v2.txt", clientDocuments![0].GetProperty("fileName").GetString());
