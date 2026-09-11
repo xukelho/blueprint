@@ -1,6 +1,6 @@
 import { Bell, ChevronRight, FolderKanban, MapPin } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { Project } from "../api/projects";
+import { Project, projectClients } from "../api/projects";
 import { phaseLabel } from "../projectPhases";
 
 type ProjectCardProps = {
@@ -20,7 +20,7 @@ export function ProjectCard({
   const openProject = () => navigate(`/projects/${project.id}`);
   const contactName = contactDisplay === "architects"
     ? project.members?.map((member) => member.displayName).join(", ") || "Sem arquiteto"
-    : project.client?.displayName ?? "Sem cliente";
+    : projectClients(project).map((client) => client.displayName).join(", ") || "Sem cliente";
 
   return (
     <article className="mock-project-card mock-project-card--dashboard">

@@ -8,7 +8,7 @@ import { createProject, getClients, getCompanyMembers, ProjectMember } from "../
 import { useProfile } from "../profile/ProfileContext";
 import { QUICK_FILL_PHASE_CODES } from "../projectPhases";
 
-const blank = { title: "", code: "", address: "", googleMapsUrl: "", clientId: "" };
+const blank = { title: "", code: "", address: "", googleMapsUrl: "" };
 const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toLocaleUpperCase("pt-PT");
 
 export function CompanyProjectsCreatePage() {
@@ -18,6 +18,7 @@ export function CompanyProjectsCreatePage() {
   const [data, setData] = useState(blank);
   const [clients, setClients] = useState<Array<{ id: number; displayName: string }>>([]);
   const [members, setMembers] = useState<ProjectMember[]>([]);
+  const [selectedClients, setSelectedClients] = useState<number[]>([]);
   const [selected, setSelected] = useState<number[]>([]);
   const [timelinePhases, setTimelinePhases] = useState<TimelinePhase[]>([]);
   const [currentPhaseId, setCurrentPhaseId] = useState<string | null>(null);
@@ -36,10 +37,11 @@ export function CompanyProjectsCreatePage() {
     return members.filter((member) => member.displayName.toLocaleLowerCase("pt-PT").includes(normalizedQuery));
   }, [members, query]);
   const toggleMember = (employeeId: number, checked: boolean) => setSelected((current) => checked ? [...current, employeeId] : current.filter((id) => id !== employeeId));
+  const toggleClient = (clientId: number, checked: boolean) => setSelectedClients((current) => checked ? [...current, clientId] : current.filter((id) => id !== clientId));
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     try {
-      const result = await createProject({ ...data, clientId: data.clientId ? Number(data.clientId) : null, employeeIds: selected, phaseCodes: timelinePhases.map((phase) => phase.code), currentPhaseIndex: currentPhaseId ? timelinePhases.findIndex((phase) => phase.id === currentPhaseId) : null });
+      const result = await createProject({ ...data, clientIds: selectedClients, employeeIds: selected, phaseCodes: timelinePhases.map((phase) => phase.code), currentPhaseIndex: currentPhaseId ? timelinePhases.findIndex((phase) => phase.id === currentPhaseId) : null });
       navigate(`/projects/${result.id}`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Erro ao guardar.");
@@ -54,11 +56,15 @@ export function CompanyProjectsCreatePage() {
       <section className="mock-surface"><div className="mock-form-grid">
         <label className="mock-field mock-field--wide">Título<input required value={data.title} onChange={(event) => setData({ ...data, title: event.target.value })} /></label>
         <label className="mock-field">Código<input required value={data.code} onChange={(event) => setData({ ...data, code: event.target.value })} /></label>
-        <label className="mock-field">Cliente<select value={data.clientId} onChange={(event) => setData({ ...data, clientId: event.target.value })}><option value="">Sem cliente</option>{clients.map((client) => <option key={client.id} value={client.id}>{client.displayName}</option>)}</select></label>
         <label className="mock-field mock-field--wide">Morada<input value={data.address} onChange={(event) => setData({ ...data, address: event.target.value })} /></label>
         <label className="mock-field mock-field--wide">Localização (Google Maps)<input type="url" value={data.googleMapsUrl} placeholder="Cole um link do Google Maps" onChange={(event) => setData({ ...data, googleMapsUrl: event.target.value })} /><small>Opcional. Pode colar um link ou selecionar no mapa.</small></label>
         <div className="mock-field--wide"><GoogleMapPicker onLocationChange={(googleMapsUrl) => setData((current) => ({ ...current, googleMapsUrl }))} /></div>
       </div></section>
+      <section className="mock-surface">
+        <div className="mock-section-title"><div><h2>Clientes associados</h2><p>Seleciona os clientes que terão acesso a este projeto.</p></div></div>
+        <div className="mock-project-member-grid">{clients.map((client) => <label className="mock-project-member-card" key={client.id}><input type="checkbox" checked={selectedClients.includes(client.id)} onChange={(event) => toggleClient(client.id, event.target.checked)} /><span className="mock-client-avatar mock-client-avatar--blue" aria-hidden="true">{initials(client.displayName)}</span><span><strong>{client.displayName}</strong></span></label>)}</div>
+        {!clients.length && <p className="mock-empty-state">Não existem clientes a apresentar.</p>}
+      </section>
       <section className="mock-surface project-timeline-section"><div className="mock-section-title"><div><h2>Timeline do projeto</h2><p>Opcional. Define a sequência de fases e, se aplicável, a fase atual.</p></div></div><ProjectTimelineEditor phases={timelinePhases} currentPhaseId={currentPhaseId} onPhasesChange={setTimelinePhases} onCurrentPhaseIdChange={setCurrentPhaseId} onQuickFill={() => { setTimelinePhases(QUICK_FILL_PHASE_CODES.map(newTimelinePhase)); setCurrentPhaseId(null); }} /></section>
       <section className="mock-surface">
         <div className="mock-section-title"><div><h2>Arquitetos atribuídos</h2><p>Seleciona os arquitetos que podem colaborar neste projeto.</p></div></div>

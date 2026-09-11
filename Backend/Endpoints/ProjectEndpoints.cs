@@ -37,7 +37,7 @@ public static class ProjectEndpoints
             if (clientId is null) return TypedResults.NotFound();
             query = VisibleClientProjects(clientId.Value, db).AsNoTracking();
         }
-        var items = await query.OrderBy(x => x.Company!.Name).ThenBy(x => x.IsArchived).ThenBy(x => x.Title).Select(x => new ProjectSummaryResponse(x.Id, x.CompanyId, x.Company!.Name, x.Title, x.Code, x.Address, x.GoogleMapsUrl, x.Phases.Where(phase => phase.IsCurrent).Select(phase => phase.PhaseCode).FirstOrDefault(), x.IsArchived, x.ProjectClients.Select(projectClient => new ProjectClientResponse(projectClient.ClientId, projectClient.Client!.DisplayName)).SingleOrDefault(), x.Members.OrderBy(m => m.Employee!.DisplayName).Select(m => new ProjectMemberResponse(m.EmployeeId, m.Employee!.DisplayName, m.Employee.Email ?? string.Empty)).ToArray())).ToArrayAsync(ct);
+        var items = await query.OrderBy(x => x.Company!.Name).ThenBy(x => x.IsArchived).ThenBy(x => x.Title).Select(x => new ProjectSummaryResponse(x.Id, x.CompanyId, x.Company!.Name, x.Title, x.Code, x.Address, x.GoogleMapsUrl, x.Phases.Where(phase => phase.IsCurrent).Select(phase => phase.PhaseCode).FirstOrDefault(), x.IsArchived, x.ProjectClients.OrderBy(projectClient => projectClient.Client!.DisplayName).ThenBy(projectClient => projectClient.ClientId).Select(projectClient => new ProjectClientResponse(projectClient.ClientId, projectClient.Client!.DisplayName)).ToArray(), x.Members.OrderBy(m => m.Employee!.DisplayName).Select(m => new ProjectMemberResponse(m.EmployeeId, m.Employee!.DisplayName, m.Employee.Email ?? string.Empty)).ToArray())).ToArrayAsync(ct);
         return TypedResults.Ok(items);
     }
 
@@ -68,11 +68,11 @@ public static class ProjectEndpoints
         ValidatePhases(phaseCodes, request?.CurrentPhaseIndex, errors);
         if (request is null) errors["request"] = ["A JSON request body is required."];
         if (errors.Count > 0) return TypedResults.ValidationProblem(errors);
-        if (!await ValidClient(request!.ClientId, access.CompanyId, db, ct) || !await ValidEmployees(request.EmployeeIds, access.CompanyId, db, ct)) return TypedResults.ValidationProblem(new Dictionary<string, string[]> { ["association"] = ["The selected client or members do not belong to this company."] });
+        if (!await ValidClients(request!.ClientIds, access.CompanyId, db, ct) || !await ValidEmployees(request.EmployeeIds, access.CompanyId, db, ct)) return TypedResults.ValidationProblem(new Dictionary<string, string[]> { ["association"] = ["The selected clients or members do not belong to this company."] });
         if (await db.Projects.AnyAsync(x => x.CompanyId == access.CompanyId && x.Code == request.Code.Trim(), ct)) return TypedResults.Conflict(new AdministrationErrorResponse("A project with this code already exists."));
         var now = DateTimeOffset.UtcNow;
         var project = new Project { CompanyId = access.CompanyId, Title = request.Title.Trim(), Code = request.Code.Trim(), Address = request.Address.Trim(), GoogleMapsUrl = NormalizeGoogleMapsUrl(request.GoogleMapsUrl), CreatedAt = now, UpdatedAt = now, CreatedBy = access.UserId, UpdatedBy = access.UserId };
-        ReplaceClient(project, request.ClientId);
+        ReplaceClients(project, request.ClientIds);
         project.Members = request.EmployeeIds.Distinct().Select(id => new ProjectMember { EmployeeId = id }).ToList();
         project.Phases = BuildPhases(phaseCodes, request.CurrentPhaseIndex);
         db.Projects.Add(project); await db.SaveChangesAsync(ct);
@@ -89,9 +89,9 @@ public static class ProjectEndpoints
         if (!await LockProject(id, access.CompanyId, db, ct)) return TypedResults.NotFound();
         var project = await db.Projects.Include(x => x.Company).Include(x => x.Members).ThenInclude(x => x.Employee).Include(x => x.ProjectClients).ThenInclude(x => x.Client).Include(x => x.Phases).SingleOrDefaultAsync(x => x.Id == id && x.CompanyId == access.CompanyId, ct);
         if (project is null) return TypedResults.NotFound();
-        if (!await ValidClient(request!.ClientId, access.CompanyId, db, ct)) return TypedResults.ValidationProblem(new Dictionary<string, string[]> { ["clientId"] = ["The selected client does not belong to this company."] });
+        if (!await ValidClients(request!.ClientIds, access.CompanyId, db, ct)) return TypedResults.ValidationProblem(new Dictionary<string, string[]> { ["clientIds"] = ["Select valid company clients."] });
         if (await db.Projects.AnyAsync(x => x.Id != id && x.CompanyId == access.CompanyId && x.Code == request.Code.Trim(), ct)) return TypedResults.Conflict(new AdministrationErrorResponse("A project with this code already exists."));
-        project.Title = request.Title.Trim(); project.Code = request.Code.Trim(); project.Address = request.Address.Trim(); project.GoogleMapsUrl = NormalizeGoogleMapsUrl(request.GoogleMapsUrl); ReplaceClient(project, request.ClientId); project.UpdatedAt = DateTimeOffset.UtcNow; project.UpdatedBy = access.UserId;
+        project.Title = request.Title.Trim(); project.Code = request.Code.Trim(); project.Address = request.Address.Trim(); project.GoogleMapsUrl = NormalizeGoogleMapsUrl(request.GoogleMapsUrl); ReplaceClients(project, request.ClientIds); project.UpdatedAt = DateTimeOffset.UtcNow; project.UpdatedBy = access.UserId;
         await db.SaveChangesAsync(ct); await db.Entry(project).Collection(x => x.ProjectClients).Query().Include(x => x.Client).LoadAsync(ct); await transaction.CommitAsync(ct); return TypedResults.Ok(ToResponse(project, access));
     }
 
@@ -161,19 +161,18 @@ public static class ProjectEndpoints
         if (!principal.IsInRole("client") || !long.TryParse(principal.FindFirstValue(ClaimTypes.NameIdentifier), out var userId)) return null;
         return await db.Clients.AsNoTracking().Where(client => client.UserId == userId && client.User!.IsActive).Select(client => (long?)client.Id).SingleOrDefaultAsync(ct);
     }
-    private static ProjectResponse ToResponse(Project x, Access? access) => new(x.Id, x.CompanyId, x.Company!.Name, x.Title, x.Code, x.Address, x.GoogleMapsUrl, x.IsArchived, x.ProjectClients.Select(projectClient => new ProjectClientResponse(projectClient.ClientId, projectClient.Client!.DisplayName)).SingleOrDefault(), x.Members.OrderBy(m => m.Employee!.DisplayName).Select(m => new ProjectMemberResponse(m.EmployeeId, m.Employee!.DisplayName, m.Employee.Email ?? string.Empty)).ToArray(), x.Phases.OrderBy(phase => phase.Position).Select(phase => new ProjectPhaseResponse(phase.Id, phase.PhaseCode, ProjectPhaseCatalog.Labels[phase.PhaseCode], phase.Position, phase.IsCurrent)).ToArray(), access is not null && CanEditTimeline(x, access));
-    internal static void ReplaceClient(Project project, long? clientId)
+    private static ProjectResponse ToResponse(Project x, Access? access) => new(x.Id, x.CompanyId, x.Company!.Name, x.Title, x.Code, x.Address, x.GoogleMapsUrl, x.IsArchived, x.ProjectClients.OrderBy(projectClient => projectClient.Client!.DisplayName).ThenBy(projectClient => projectClient.ClientId).Select(projectClient => new ProjectClientResponse(projectClient.ClientId, projectClient.Client!.DisplayName)).ToArray(), x.Members.OrderBy(m => m.Employee!.DisplayName).Select(m => new ProjectMemberResponse(m.EmployeeId, m.Employee!.DisplayName, m.Employee.Email ?? string.Empty)).ToArray(), x.Phases.OrderBy(phase => phase.Position).Select(phase => new ProjectPhaseResponse(phase.Id, phase.PhaseCode, ProjectPhaseCatalog.Labels[phase.PhaseCode], phase.Position, phase.IsCurrent)).ToArray(), access is not null && CanEditTimeline(x, access));
+    internal static void ReplaceClients(Project project, IReadOnlyCollection<long> clientIds)
     {
-        var retained = clientId is long value
-            ? project.ProjectClients.FirstOrDefault(projectClient => projectClient.ClientId == value)
-            : null;
-        foreach (var projectClient in project.ProjectClients.Where(projectClient => projectClient != retained).ToArray())
+        var selectedClientIds = clientIds.ToHashSet();
+        foreach (var projectClient in project.ProjectClients.Where(projectClient => !selectedClientIds.Contains(projectClient.ClientId)).ToArray())
         {
             project.ProjectClients.Remove(projectClient);
         }
-        if (clientId is long selectedClientId && retained is null)
+        var existingClientIds = project.ProjectClients.Select(projectClient => projectClient.ClientId).ToHashSet();
+        foreach (var clientId in selectedClientIds.Where(clientId => !existingClientIds.Contains(clientId)))
         {
-            project.ProjectClients.Add(new ProjectClient { ProjectId = project.Id, ClientId = selectedClientId });
+            project.ProjectClients.Add(new ProjectClient { ProjectId = project.Id, ClientId = clientId });
         }
     }
     internal static bool RemoveClient(Project project, long clientId)
@@ -212,7 +211,11 @@ public static class ProjectEndpoints
         var host = uri.Host.ToLowerInvariant();
         return host is "maps.app.goo.gl" or "goo.gl" || host == "google.com" || host.EndsWith(".google.com", StringComparison.Ordinal);
     }
-    private static async Task<bool> ValidClient(long? id, long companyId, BlueprintDbContext db, CancellationToken ct) => id is null || await db.CompanyClients.AnyAsync(x => x.ClientId == id && x.CompanyId == companyId, ct);
+    private static async Task<bool> ValidClients(IReadOnlyList<long>? ids, long companyId, BlueprintDbContext db, CancellationToken ct)
+    {
+        if (ids is null || ids.Count != ids.Distinct().Count()) return false;
+        return await db.CompanyClients.CountAsync(x => x.CompanyId == companyId && ids.Contains(x.ClientId), ct) == ids.Count;
+    }
     private static async Task<bool> ValidEmployees(IReadOnlyList<long>? ids, long companyId, BlueprintDbContext db, CancellationToken ct) { if (ids is null || ids.Count != ids.Distinct().Count()) return false; return await db.CompanyEmployees.CountAsync(x => x.CompanyId == companyId && x.IsArchitect && x.Employee!.User!.IsActive && ids.Contains(x.EmployeeId), ct) == ids.Count; }
 }
 

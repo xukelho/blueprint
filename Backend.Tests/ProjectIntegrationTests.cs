@@ -24,7 +24,7 @@ public sealed class ProjectIntegrationTests(PostgreSqlApiFixture fixture)
             code = $"FILES-{suffix[..6]}",
             address = "Lisboa",
             googleMapsUrl = (string?)null,
-            clientId = (long?)client.Id,
+            clientIds = new[] { client.Id },
             employeeIds = Array.Empty<long>(),
             phaseCodes = new[] { "feasibility-studies", "execution-project" },
             currentPhaseIndex = 0
@@ -125,7 +125,7 @@ public sealed class ProjectIntegrationTests(PostgreSqlApiFixture fixture)
     }
 
     [Fact]
-    public async Task OwnerCanReplaceClearAndConcurrentlyAssociateOneClientWhileSchemaAllowsMany()
+    public async Task OwnerCanAssignRemoveAndConcurrentlyAssociateMultipleClients()
     {
         var owner = await CreateOwnerAsync();
         var suffix = Guid.NewGuid().ToString("N");
@@ -133,24 +133,37 @@ public sealed class ProjectIntegrationTests(PostgreSqlApiFixture fixture)
         var firstClient = await CreateClientAsync($"assignment.first.{suffix}", [owner.CompanyId]);
         var secondClient = await CreateClientAsync($"assignment.second.{suffix}", [owner.CompanyId]);
         var code = $"ASSIGN-{suffix[..6]}";
-        var projectId = await CreateProjectAsync(owner.Username, firstClient.Id, code);
-
-        var created = await fixture.Client.GetFromJsonAsync<JsonElement>($"/api/projects/{projectId}");
-        Assert.Equal(firstClient.Id, created.GetProperty("client").GetProperty("id").GetInt64());
-        Assert.Equal(new[] { firstClient.Id }, await ProjectClientIdsAsync(projectId));
-
-        using var replacedResponse = await fixture.Client.PutAsJsonAsync($"/api/projects/{projectId}", new
+        await LoginAsync(owner.Username);
+        using var createResponse = await fixture.Client.PostAsJsonAsync("/api/projects/", new
         {
             title = code,
             code,
             address = "Lisboa",
             googleMapsUrl = (string?)null,
-            clientId = (long?)secondClient.Id
+            clientIds = new[] { firstClient.Id, secondClient.Id },
+            employeeIds = Array.Empty<long>(),
+            phaseCodes = Array.Empty<string>(),
+            currentPhaseIndex = (int?)null
         });
-        Assert.Equal(HttpStatusCode.OK, replacedResponse.StatusCode);
-        var replaced = await replacedResponse.Content.ReadFromJsonAsync<JsonElement>();
-        Assert.Equal(secondClient.Id, replaced.GetProperty("client").GetProperty("id").GetInt64());
-        Assert.Equal(new[] { secondClient.Id }, await ProjectClientIdsAsync(projectId));
+        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+        var projectId = (await createResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetInt64();
+
+        var created = await fixture.Client.GetFromJsonAsync<JsonElement>($"/api/projects/{projectId}");
+        Assert.Equal(new[] { firstClient.Id, secondClient.Id }, created.GetProperty("clients").EnumerateArray().Select(client => client.GetProperty("id").GetInt64()).Order().ToArray());
+        Assert.Equal(new[] { firstClient.Id, secondClient.Id }, await ProjectClientIdsAsync(projectId));
+
+        using var updatedResponse = await fixture.Client.PutAsJsonAsync($"/api/projects/{projectId}", new
+        {
+            title = code,
+            code,
+            address = "Lisboa",
+            googleMapsUrl = (string?)null,
+            clientIds = new[] { firstClient.Id, secondClient.Id }
+        });
+        Assert.Equal(HttpStatusCode.OK, updatedResponse.StatusCode);
+        var updated = await updatedResponse.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(new[] { firstClient.Id, secondClient.Id }, updated.GetProperty("clients").EnumerateArray().Select(client => client.GetProperty("id").GetInt64()).Order().ToArray());
+        Assert.Equal(new[] { firstClient.Id, secondClient.Id }, await ProjectClientIdsAsync(projectId));
 
         using var clearedResponse = await fixture.Client.PutAsJsonAsync($"/api/projects/{projectId}", new
         {
@@ -158,38 +171,25 @@ public sealed class ProjectIntegrationTests(PostgreSqlApiFixture fixture)
             code,
             address = "Lisboa",
             googleMapsUrl = (string?)null,
-            clientId = (long?)null
+            clientIds = Array.Empty<long>()
         });
         Assert.Equal(HttpStatusCode.OK, clearedResponse.StatusCode);
         var cleared = await clearedResponse.Content.ReadFromJsonAsync<JsonElement>();
-        Assert.Equal(JsonValueKind.Null, cleared.GetProperty("client").ValueKind);
+        Assert.Empty(cleared.GetProperty("clients").EnumerateArray());
 
         var associations = await Task.WhenAll(
             fixture.Client.PutAsync($"/api/clients/{firstClient.Id}/projects/{projectId}", null),
             fixture.Client.PutAsync($"/api/clients/{secondClient.Id}/projects/{projectId}", null));
-        Assert.Single(associations, response => response.StatusCode == HttpStatusCode.NoContent);
-        Assert.Single(associations, response => response.StatusCode == HttpStatusCode.NotFound);
+        Assert.All(associations, response => Assert.Equal(HttpStatusCode.NoContent, response.StatusCode));
         var associatedClientIds = await ProjectClientIdsAsync(projectId);
-        Assert.Single(associatedClientIds);
+        Assert.Equal(new[] { firstClient.Id, secondClient.Id }, associatedClientIds);
 
-        using var removed = await fixture.Client.DeleteAsync($"/api/clients/{associatedClientIds[0]}/projects/{projectId}");
+        using var removed = await fixture.Client.DeleteAsync($"/api/clients/{firstClient.Id}/projects/{projectId}");
         Assert.Equal(HttpStatusCode.NoContent, removed.StatusCode);
-        Assert.Empty(await ProjectClientIdsAsync(projectId));
+        Assert.Equal(new[] { secondClient.Id }, await ProjectClientIdsAsync(projectId));
 
-        await using var connection = new NpgsqlConnection(fixture.ConnectionString);
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
-        command.CommandText = "INSERT INTO project_clients (project_id, client_id) VALUES (@projectId, @firstClientId), (@projectId, @secondClientId)";
-        command.Parameters.AddWithValue("projectId", projectId);
-        command.Parameters.AddWithValue("firstClientId", firstClient.Id);
-        command.Parameters.AddWithValue("secondClientId", secondClient.Id);
-        await command.ExecuteNonQueryAsync();
-        Assert.Equal(new[] { firstClient.Id, secondClient.Id }, await ProjectClientIdsAsync(projectId));
-
-        await using var cleanup = connection.CreateCommand();
-        cleanup.CommandText = "DELETE FROM project_clients WHERE project_id = @projectId";
-        cleanup.Parameters.AddWithValue("projectId", projectId);
-        await cleanup.ExecuteNonQueryAsync();
+        var detail = await fixture.Client.GetFromJsonAsync<JsonElement>($"/api/projects/{projectId}");
+        Assert.Equal(new[] { secondClient.Id }, detail.GetProperty("clients").EnumerateArray().Select(client => client.GetProperty("id").GetInt64()).ToArray());
     }
 
     [Fact]
@@ -216,7 +216,7 @@ public sealed class ProjectIntegrationTests(PostgreSqlApiFixture fixture)
         Assert.False(detail.GetProperty("canEditTimeline").GetBoolean());
         using var crossClient = await fixture.Client.GetAsync($"/api/projects/{otherProject}");
         Assert.Equal(HttpStatusCode.NotFound, crossClient.StatusCode);
-        using var update = await fixture.Client.PutAsJsonAsync($"/api/projects/{firstProject}", new { title = "Denied", code = "DENIED", address = "", googleMapsUrl = (string?)null, clientId = client.Id });
+        using var update = await fixture.Client.PutAsJsonAsync($"/api/projects/{firstProject}", new { title = "Denied", code = "DENIED", address = "", googleMapsUrl = (string?)null, clientIds = new[] { client.Id } });
         Assert.Equal(HttpStatusCode.NotFound, update.StatusCode);
         using var timeline = await fixture.Client.PutAsJsonAsync($"/api/projects/{firstProject}/phases", new { phaseCodes = Array.Empty<string>(), currentPhaseIndex = (int?)null });
         Assert.Equal(HttpStatusCode.NotFound, timeline.StatusCode);
@@ -244,7 +244,7 @@ public sealed class ProjectIntegrationTests(PostgreSqlApiFixture fixture)
                 address = "",
                 phase = "",
                 googleMapsUrl = " https://www.google.com/maps/search/?api=1&query=38.72,-9.14 ",
-                clientId = (long?)null,
+                clientIds = Array.Empty<long>(),
                 employeeIds = Array.Empty<long>()
             });
         Assert.Equal(HttpStatusCode.Created, createdResponse.StatusCode);
@@ -261,7 +261,7 @@ public sealed class ProjectIntegrationTests(PostgreSqlApiFixture fixture)
                 address = "",
                 phase = "",
                 googleMapsUrl = "   ",
-                clientId = (long?)null
+                clientIds = Array.Empty<long>()
             });
         Assert.Equal(HttpStatusCode.OK, updatedResponse.StatusCode);
         var updated = await updatedResponse.Content.ReadFromJsonAsync<JsonElement>();
@@ -276,7 +276,7 @@ public sealed class ProjectIntegrationTests(PostgreSqlApiFixture fixture)
                 address = "",
                 phase = "",
                 googleMapsUrl = "https://example.test/not-google-maps",
-                clientId = (long?)null
+                clientIds = Array.Empty<long>()
             });
         Assert.Equal(HttpStatusCode.BadRequest, invalidResponse.StatusCode);
         var invalid = await invalidResponse.Content.ReadFromJsonAsync<JsonElement>();
@@ -297,7 +297,7 @@ public sealed class ProjectIntegrationTests(PostgreSqlApiFixture fixture)
                 code = $"TL-{Guid.NewGuid():N}"[..12],
                 address = "",
                 googleMapsUrl = (string?)null,
-                clientId = (long?)null,
+                clientIds = Array.Empty<long>(),
                 employeeIds = Array.Empty<long>(),
                 phaseCodes = new[] { "feasibility-studies", "topographic-survey" },
                 currentPhaseIndex = 1
@@ -350,7 +350,7 @@ public sealed class ProjectIntegrationTests(PostgreSqlApiFixture fixture)
             code = $"CHAT-{suffix[..6]}",
             address = "Lisboa",
             googleMapsUrl = (string?)null,
-            clientId = (long?)client.Id,
+            clientIds = new[] { client.Id },
             employeeIds = new[] { architect.Id },
             phaseCodes = Array.Empty<string>(),
             currentPhaseIndex = (int?)null
@@ -496,7 +496,7 @@ public sealed class ProjectIntegrationTests(PostgreSqlApiFixture fixture)
             code,
             address = "Lisboa",
             googleMapsUrl = (string?)null,
-            clientId,
+            clientIds = new[] { clientId },
             employeeIds = Array.Empty<long>(),
             phaseCodes = Array.Empty<string>(),
             currentPhaseIndex = (int?)null

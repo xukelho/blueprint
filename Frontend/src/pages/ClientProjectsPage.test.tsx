@@ -7,8 +7,8 @@ import App from "../App";
 const jsonResponse = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
 const profile = { profileType: "client", userId: 3, username: "marta", displayName: "Marta", fullName: "Marta Silva", nif: "1", email: "marta@example.test", phoneNumber: "9", address: "Lisboa", companyId: null, companyName: null, roles: ["client"], availableCompanies: [{ id: 10, name: "Forma Norte" }, { id: 20, name: "Atelier Sul" }] };
 const projects = [
-  { id: 1, companyId: 10, companyName: "Forma Norte", title: "Casa Norte", code: "N-1", address: "Porto", googleMapsUrl: null, currentPhaseCode: null, isArchived: false, client: { id: 3, displayName: "Marta" }, members: [] },
-  { id: 2, companyId: 20, companyName: "Atelier Sul", title: "Casa Sul", code: "S-1", address: "Faro", googleMapsUrl: null, currentPhaseCode: null, isArchived: false, client: { id: 3, displayName: "Marta" }, members: [] },
+  { id: 1, companyId: 10, companyName: "Forma Norte", title: "Casa Norte", code: "N-1", address: "Porto", googleMapsUrl: null, currentPhaseCode: null, isArchived: false, clients: [{ id: 3, displayName: "Marta" }], members: [] },
+  { id: 2, companyId: 20, companyName: "Atelier Sul", title: "Casa Sul", code: "S-1", address: "Faro", googleMapsUrl: null, currentPhaseCode: null, isArchived: false, clients: [{ id: 3, displayName: "Marta" }], members: [] },
 ];
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); sessionStorage.clear(); });

@@ -70,7 +70,7 @@ const dashboardProjects = [
     googleMapsUrl: null,
     currentPhaseCode: "execution-project",
     isArchived: false,
-    client: { id: 30, displayName: "Marta Silva" },
+    clients: [{ id: 30, displayName: "Marta Silva" }],
     members: [{ employeeId: 2, displayName: "Ana Martins", email: "ana@example.test" }],
   },
   {
@@ -83,7 +83,7 @@ const dashboardProjects = [
     googleMapsUrl: null,
     currentPhaseCode: "preliminary-study",
     isArchived: false,
-    client: { id: 31, displayName: "Inês Costa" },
+    clients: [{ id: 31, displayName: "Inês Costa" }],
     members: [],
   },
   {
@@ -96,7 +96,7 @@ const dashboardProjects = [
     googleMapsUrl: null,
     currentPhaseCode: null,
     isArchived: true,
-    client: null,
+    clients: [],
     members: [],
   },
 ];
@@ -633,7 +633,7 @@ describe("mockup navigation", () => {
                 address: "",
                 googleMapsUrl: null,
                 isArchived: false,
-                client: null,
+                clients: [],
                 members: [],
                 phases: [],
                 canEditTimeline: false,

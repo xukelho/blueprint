@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { ChevronDown, Plus, Search } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import PortalShell from "../components/PortalShell";
-import { getProjects, Project } from "../api/projects";
+import { getProjects, Project, projectClients } from "../api/projects";
 import { useProfile } from "../profile/ProfileContext";
 import { ProjectCard } from "../components/ProjectCard";
 
@@ -23,7 +23,7 @@ export function CompanyProjectsPage() {
     getProjects().then(setProjects).catch((caught) => setError(caught instanceof globalThis.Error ? caught.message : "Não foi possível carregar os projetos."));
   }, []);
 
-  const filtered = projects.filter((project) => `${project.title} ${project.code} ${project.address} ${project.client?.displayName ?? ""} ${project.companyName}`.toLocaleLowerCase("pt-PT").includes(query.toLocaleLowerCase("pt-PT")));
+  const filtered = projects.filter((project) => `${project.title} ${project.code} ${project.address} ${projectClients(project).map((client) => client.displayName).join(" ")} ${project.companyName}`.toLocaleLowerCase("pt-PT").includes(query.toLocaleLowerCase("pt-PT")));
   const canViewArchitects = profile?.profileType === "client" || (profile?.profileType === "employee" && profile.companyRole === "owner");
   const activeProjects = filtered.filter((project) => !project.isArchived);
   const archivedProjects = filtered.filter((project) => project.isArchived);

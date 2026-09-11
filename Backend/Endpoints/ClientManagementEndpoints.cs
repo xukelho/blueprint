@@ -62,8 +62,15 @@ public static class ClientManagementEndpoints
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
         if (!await ProjectEndpoints.LockProject(projectId, access.CompanyId, db, ct)) return TypedResults.NotFound();
         var project = await db.Projects.Include(candidate => candidate.ProjectClients).SingleOrDefaultAsync(candidate => candidate.Id == projectId && candidate.CompanyId == access.CompanyId, ct);
-        if (project is null || project.ProjectClients.Count != 0) return TypedResults.NotFound();
-        ProjectEndpoints.ReplaceClient(project, id); project.UpdatedAt = DateTimeOffset.UtcNow; project.UpdatedBy = access.UserId; await db.SaveChangesAsync(ct); await transaction.CommitAsync(ct); return TypedResults.NoContent();
+        if (project is null) return TypedResults.NotFound();
+        if (project.ProjectClients.All(candidate => candidate.ClientId != id))
+        {
+            project.ProjectClients.Add(new ProjectClient { ProjectId = project.Id, ClientId = id });
+            project.UpdatedAt = DateTimeOffset.UtcNow;
+            project.UpdatedBy = access.UserId;
+            await db.SaveChangesAsync(ct);
+        }
+        await transaction.CommitAsync(ct); return TypedResults.NoContent();
     }
 
     private static async Task<IResult> RemoveProject(long id, long projectId, ClaimsPrincipal principal, BlueprintDbContext db, CancellationToken ct)
