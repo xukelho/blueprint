@@ -7,7 +7,7 @@ import { CompanyProjectsPage } from "./CompanyProjectsPage";
 
 const response = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
 const ownerProfile = { profileType: "employee", userId: 1, username: "ana", displayName: "Ana", fullName: "Ana Martins", nif: "123", email: "ana@example.test", phoneNumber: "910", address: "Lisboa", companyId: 1, companyName: "Forma Norte", roles: ["employee"], availableCompanies: [], companyRole: "owner", isArchitect: true };
-const project = { companyId: 1, companyName: "Forma Norte", address: "Lisboa", googleMapsUrl: null, client: null, members: [], currentPhaseCode: null };
+const project = { companyId: 1, companyName: "Forma Norte", address: "Lisboa", googleMapsUrl: null, clients: [], members: [], currentPhaseCode: null };
 
 afterEach(() => {
   cleanup();

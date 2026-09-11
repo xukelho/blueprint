@@ -193,9 +193,9 @@ describe("CompanyClientPage", () => {
 
   it("shows available projects as selectable cards and toggles their association", async () => {
     const projectCatalog = [
-      { id: 1, companyId: 10, companyName: "Forma Norte", title: "Casa Atual", code: "CA-1", address: "Lisboa", googleMapsUrl: null, isArchived: false, client: { id: 30, displayName: "Marta Silva" }, currentPhaseCode: null },
-      { id: 2, companyId: 10, companyName: "Forma Norte", title: "Casa Livre", code: "CL-2", address: "Porto", googleMapsUrl: null, isArchived: false, client: null, currentPhaseCode: null },
-      { id: 3, companyId: 10, companyName: "Forma Norte", title: "Casa Ocupada", code: "CO-3", address: "Faro", googleMapsUrl: null, isArchived: false, client: { id: 99, displayName: "Outro cliente" }, currentPhaseCode: null },
+      { id: 1, companyId: 10, companyName: "Forma Norte", title: "Casa Atual", code: "CA-1", address: "Lisboa", googleMapsUrl: null, isArchived: false, clients: [{ id: 30, displayName: "Marta Silva" }], currentPhaseCode: null },
+      { id: 2, companyId: 10, companyName: "Forma Norte", title: "Casa Livre", code: "CL-2", address: "Porto", googleMapsUrl: null, isArchived: false, clients: [], currentPhaseCode: null },
+      { id: 3, companyId: 10, companyName: "Forma Norte", title: "Casa Ocupada", code: "CO-3", address: "Faro", googleMapsUrl: null, isArchived: false, clients: [{ id: 99, displayName: "Outro cliente" }], currentPhaseCode: null },
     ];
     const associated = new Set([1]);
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
@@ -229,7 +229,7 @@ describe("CompanyClientPage", () => {
     const availableCard = await screen.findByRole("button", { name: "Associar projeto Casa Livre" });
     expect(assignedCard).toHaveAttribute("aria-pressed", "true");
     expect(availableCard).toHaveAttribute("aria-pressed", "false");
-    expect(screen.queryByText("Casa Ocupada")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Associar projeto Casa Ocupada" })).toHaveAttribute("aria-pressed", "false");
 
     await user.click(availableCard);
     expect(await screen.findByRole("button", { name: "Remover projeto Casa Livre" })).toHaveAttribute("aria-pressed", "true");

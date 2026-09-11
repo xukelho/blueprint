@@ -7,7 +7,7 @@ import { ProfileProvider } from "../profile/ProfileContext";
 import { CompanyProjectPage } from "./CompanyProjectPage";
 
 const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
-const emptyProject = { id: 1, title: "Casa do Vale", code: "CV-001", address: "", googleMapsUrl: null, isArchived: false, client: null, members: [], phases: [], canEditTimeline: true };
+const emptyProject = { id: 1, title: "Casa do Vale", code: "CV-001", address: "", googleMapsUrl: null, isArchived: false, clients: [], members: [], phases: [], canEditTimeline: true };
 const profile = (companyRole: "owner" | "employee") => ({ profileType: "employee", userId: 1, username: "ana", displayName: "Ana", fullName: "Ana Martins", nif: "123", email: "ana@example.test", phoneNumber: "910", address: "Lisboa", companyId: 1, companyName: "Forma Norte", roles: ["employee"], availableCompanies: [], companyRole, isArchitect: true });
 
 function renderPage() {
@@ -43,7 +43,7 @@ describe("CompanyProjectPage", () => {
     const project = {
       ...emptyProject,
       address: "Rua do Vale, Lisboa",
-      client: { id: 7, displayName: "Marta e João" },
+      clients: [{ id: 7, displayName: "Marta e João" }],
       members: [{ employeeId: 3, displayName: "Inês Costa", email: "ines@example.test" }],
       phases: [{ id: 11, code: "preliminary-study", label: "Estudo Prévio", position: 0, isCurrent: true }],
     };
@@ -77,6 +77,38 @@ describe("CompanyProjectPage", () => {
     await user.click(screen.getByRole("button", { name: "Guardar" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/projects/1", expect.objectContaining({ method: "PUT", body: expect.stringContaining('"googleMapsUrl":"https://www.google.com/maps/search/?api=1&query=38.7,-9.1"') })));
+  });
+
+  it("allows an owner to add and remove multiple project clients", async () => {
+    setAuthenticatedRoles(["employee"]);
+    const project = { ...emptyProject, clients: [{ id: 7, displayName: "Marta Silva" }] };
+    const availableClients = [
+      { id: 7, displayName: "Marta Silva", email: "marta@example.test", projectCount: 1 },
+      { id: 8, displayName: "João Costa", email: "joao@example.test", projectCount: 0 },
+    ];
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url === "/api/profile") return response(profile("owner"));
+      if (url === "/api/clients/") return response(availableClients);
+      if (url === "/api/projects/members") return response([]);
+      if (url === "/api/projects/1" && init?.method === "PUT") return response({ ...project, clients: availableClients });
+      if (url === "/api/projects/1/members") return response(project);
+      if (url === "/api/projects/1") return response(project);
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "Editar projeto" }));
+    expect(screen.getByRole("checkbox", { name: /Marta Silva/ })).toBeChecked();
+    await user.click(screen.getByRole("checkbox", { name: /Marta Silva/ }));
+    await user.click(screen.getByRole("checkbox", { name: /João Costa/ }));
+    await user.click(screen.getByRole("button", { name: "Guardar" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/projects/1", expect.objectContaining({
+      method: "PUT",
+      body: expect.stringContaining('"clientIds":[8]'),
+    })));
   });
 
   it("shows a Google Maps preview below the saved project location", async () => {

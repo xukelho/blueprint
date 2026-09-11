@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronRight, FolderKanban, Search, X } from "lucide-react";
-import { getProjects, Project as ApiProject } from "../api/projects";
+import { getProjects, Project as ApiProject, projectClients } from "../api/projects";
 import PortalShell from "../components/PortalShell";
 import { ProjectCard } from "../components/ProjectCard";
 import { useProfile } from "../profile/ProfileContext";
@@ -56,7 +56,7 @@ function DashboardPage() {
         project.title,
         project.code,
         project.address,
-        project.client?.displayName ?? "",
+        ...projectClients(project).map((client) => client.displayName),
         project.companyName,
         ...(project.members?.map((member) => member.displayName) ?? []),
       ]

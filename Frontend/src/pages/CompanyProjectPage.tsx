@@ -7,13 +7,13 @@ import { ProjectTimelineEditor, ProjectTimelineView, TimelinePhase, newTimelineP
 import { ProjectDocuments, ProjectDocumentsByPhase, ProjectWorkspacePanel } from "../components/ProjectWorkspace";
 import { ProjectDocumentViewer } from "../components/ProjectDocumentViewer";
 import { filePreviewKind } from "../components/ProjectFileViewer";
-import { archiveProject, createProjectDocumentDownload, createProjectPartConversation, deleteProjectDocument, getClients, getCompanyMembers, getProject, getProjectDocumentContent, getProjectDocumentDrawing, getProjectDocuments, getProjectPartConversations, Project, ProjectDocument, ProjectMember, reactivateProject, updateMembers, updateProject, updateProjectPhases, uploadProjectDocument, DrawingDocument, DrawingSelection, ProjectPartConversation } from "../api/projects";
+import { archiveProject, createProjectDocumentDownload, createProjectPartConversation, deleteProjectDocument, getClients, getCompanyMembers, getProject, getProjectDocumentContent, getProjectDocumentDrawing, getProjectDocuments, getProjectPartConversations, Project, ProjectDocument, ProjectMember, projectClients, reactivateProject, updateMembers, updateProject, updateProjectPhases, uploadProjectDocument, DrawingDocument, DrawingSelection, ProjectPartConversation } from "../api/projects";
 import { useProfile } from "../profile/ProfileContext";
 import { phaseLabel, PROJECT_PHASES, QUICK_FILL_PHASE_CODES } from "../projectPhases";
 
-type ProjectFormData = { title: string; code: string; address: string; googleMapsUrl: string; clientId: string };
+type ProjectFormData = { title: string; code: string; address: string; googleMapsUrl: string };
 const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toLocaleUpperCase("pt-PT");
-const projectFormData = (project: Project): ProjectFormData => ({ title: project.title, code: project.code, address: project.address, googleMapsUrl: project.googleMapsUrl ?? "", clientId: String(project.client?.id ?? "") });
+const projectFormData = (project: Project): ProjectFormData => ({ title: project.title, code: project.code, address: project.address, googleMapsUrl: project.googleMapsUrl ?? "" });
 const sameMemberIds = (left: number[], right: number[]) => left.length === right.length && left.every((id) => right.includes(id));
 const newestAvailableDocument = (items: ProjectDocument[]) => {
   const available = items.filter((document) => document.status === "Available").sort((left, right) => {
@@ -44,9 +44,10 @@ export function CompanyProjectPage() {
   const navigate = useNavigate();
   const { profile } = useProfile();
   const owner = profile?.companyRole === "owner";
-  const [data, setData] = useState<ProjectFormData>({ title: "", code: "", address: "", googleMapsUrl: "", clientId: "" });
+  const [data, setData] = useState<ProjectFormData>({ title: "", code: "", address: "", googleMapsUrl: "" });
   const [clients, setClients] = useState<Array<{ id: number; displayName: string }>>([]);
   const [members, setMembers] = useState<ProjectMember[]>([]);
+  const [selectedClients, setSelectedClients] = useState<number[]>([]);
   const [selected, setSelected] = useState<number[]>([]);
   const [query, setQuery] = useState("");
   const [project, setProject] = useState<Project | null>(null);
@@ -84,6 +85,7 @@ export function CompanyProjectPage() {
   const loadProject = (loadedProject: Project) => {
     setProject(loadedProject);
     setData(projectFormData(loadedProject));
+    setSelectedClients(projectClients(loadedProject).map((client) => client.id));
     setSelected(loadedProject.members?.map((member) => member.employeeId) ?? []);
     const loadedPhases = (loadedProject.phases ?? []).map((phase) => ({ id: String(phase.id), code: phase.code }));
     const loadedCurrentPhaseId = (loadedProject.phases ?? []).find((phase) => phase.isCurrent)?.id.toString() ?? null;
@@ -120,7 +122,8 @@ export function CompanyProjectPage() {
   const currentPhaseLabel = phaseLabel(currentPhaseCode) ?? "Sem fase atual";
   const CurrentPhaseIcon = PROJECT_PHASES.find((phase) => phase.code === currentPhaseCode)?.icon ?? Milestone;
   const filteredMembers = useMemo(() => { const normalizedQuery = query.trim().toLocaleLowerCase("pt-PT"); return displayedMembers.filter((member) => member.displayName.toLocaleLowerCase("pt-PT").includes(normalizedQuery)); }, [displayedMembers, query]);
-  const hasChanges = Boolean(project) && (Object.entries(projectFormData(project!)).some(([key, value]) => data[key as keyof ProjectFormData] !== value) || !sameMemberIds(selected, project!.members?.map((member) => member.employeeId) ?? []));
+  const hasChanges = Boolean(project) && (Object.entries(projectFormData(project!)).some(([key, value]) => data[key as keyof ProjectFormData] !== value) || !sameMemberIds(selectedClients, projectClients(project!).map((client) => client.id)) || !sameMemberIds(selected, project!.members?.map((member) => member.employeeId) ?? []));
+  const toggleClient = (clientId: number, checked: boolean) => setSelectedClients((current) => checked ? [...current, clientId] : current.filter((selectedClientId) => selectedClientId !== clientId));
   const toggleMember = (employeeId: number, checked: boolean) => setSelected((current) => checked ? [...current, employeeId] : current.filter((memberId) => memberId !== employeeId));
   useEffect(() => {
     if (!viewedPhase) { setViewerDocumentId(null); setViewerPhaseId(null); return; }
@@ -173,12 +176,12 @@ export function CompanyProjectPage() {
     link.remove();
   };
   const startEditing = () => { setNotice(null); setQuery(""); setIsEditing(true); };
-  const discardChanges = () => { if (project) { setData(projectFormData(project)); setSelected(project.members?.map((member) => member.employeeId) ?? []); } setQuery(""); setDiscardDialogOpen(false); setIsEditing(false); };
+  const discardChanges = () => { if (project) { setData(projectFormData(project)); setSelectedClients(projectClients(project).map((client) => client.id)); setSelected(project.members?.map((member) => member.employeeId) ?? []); } setQuery(""); setDiscardDialogOpen(false); setIsEditing(false); };
   const cancelEditing = () => { if (hasChanges) setDiscardDialogOpen(true); else discardChanges(); };
   const submit = async (event: FormEvent) => {
     event.preventDefault(); if (!id || isSaving) return;
     setIsSaving(true); setNotice(null);
-    try { await updateProject(id, { ...data, clientId: data.clientId ? Number(data.clientId) : null }); await updateMembers(id, selected); const updatedProject = await getProject(id); loadProject(updatedProject); setIsEditing(false); setNotice({ type: "success", message: "Alterações guardadas com sucesso." }); }
+    try { await updateProject(id, { ...data, clientIds: selectedClients }); await updateMembers(id, selected); const updatedProject = await getProject(id); loadProject(updatedProject); setIsEditing(false); setNotice({ type: "success", message: "Alterações guardadas com sucesso." }); }
     catch (caught) { setNotice({ type: "error", message: caught instanceof Error ? caught.message : "Não foi possível guardar as alterações." }); }
     finally { setIsSaving(false); }
   };
@@ -215,9 +218,13 @@ export function CompanyProjectPage() {
             <div className="project-hero__edit-grid">
               <label className="mock-field project-hero__title-field">Título<input required value={data.title} onChange={(event) => setData({ ...data, title: event.target.value })} /></label>
               <label className="mock-field">Código<input required value={data.code} onChange={(event) => setData({ ...data, code: event.target.value })} /></label>
-              <label className="mock-field">Cliente<select value={data.clientId} onChange={(event) => setData({ ...data, clientId: event.target.value })}><option value="">Sem cliente</option>{clients.map((client) => <option key={client.id} value={client.id}>{client.displayName}</option>)}</select></label>
               <label className="mock-field project-hero__wide-field">Morada<input value={data.address} onChange={(event) => setData({ ...data, address: event.target.value })} /></label>
               <label className="mock-field project-hero__wide-field">Localização (Google Maps)<input type="url" value={data.googleMapsUrl} placeholder="Cole um link do Google Maps" onChange={(event) => setData({ ...data, googleMapsUrl: event.target.value })} /><small>Opcional. Pode colar um link ou selecionar no mapa.</small></label>
+            </div>
+            <div className="project-hero__architect-editor">
+              <div><strong>Clientes associados</strong><small>Seleciona os clientes que terão acesso a este projeto.</small></div>
+              <div className="mock-project-member-grid">{clients.map((client) => <label className="mock-project-member-card" key={client.id}><input type="checkbox" checked={selectedClients.includes(client.id)} onChange={(event) => toggleClient(client.id, event.target.checked)} /><span className="mock-client-avatar mock-client-avatar--blue" aria-hidden="true">{initials(client.displayName)}</span><span><strong>{client.displayName}</strong></span></label>)}</div>
+              {!clients.length && <p className="mock-empty-state">Não existem clientes a apresentar.</p>}
             </div>
             <div className="project-hero__architect-editor">
               <div><strong>Arquitetos atribuídos</strong><small>Seleciona os arquitetos que podem colaborar neste projeto.</small></div>
@@ -233,7 +240,7 @@ export function CompanyProjectPage() {
             <p className="project-hero__eyebrow">{project.companyName ? `${project.code} · ${project.companyName}` : project.code}</p>
             <h1 id="project-title">{project.title}</h1>
             <div className="project-hero__metadata">
-              {project.client && <div><span className="project-hero__meta-icon"><Building2 size={18} aria-hidden="true" /></span><span><small>Cliente</small><strong>{project.client.displayName}</strong></span></div>}
+              {projectClients(project).length > 0 && <div><span className="project-hero__meta-icon"><Building2 size={18} aria-hidden="true" /></span><span><small>{projectClients(project).length === 1 ? "Cliente" : "Clientes"}</small><strong>{projectClients(project).map((client) => client.displayName).join(", ")}</strong></span></div>}
               {project.address && <div className="project-hero__metadata-address"><span className="project-hero__meta-icon"><MapPin size={18} aria-hidden="true" /></span><span><small>Morada</small><strong>{project.address}</strong></span></div>}
               <div className="project-hero__metadata-architects"><span className="project-hero__meta-icon"><UsersRound size={18} aria-hidden="true" /></span><span><small>Arquitetos atribuídos</small><strong>{project.members?.length ? project.members.map((member) => member.displayName).join(", ") : "Sem arquitetos atribuídos"}</strong></span></div>
             </div>

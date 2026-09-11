@@ -205,7 +205,6 @@ export function CompanyClientDetailPage() {
   const projectCardsById = new Map<number, ClientProjectCard>(client.projects.map((project) => [project.id, project]));
   if (client.canManageProjects) {
     projects
-      .filter((project) => !project.client || project.client.id === client.id)
       .forEach((project) => projectCardsById.set(project.id, project));
   }
   const projectCards = [...projectCardsById.values()].sort((left, right) => left.title.localeCompare(right.title, "pt-PT"));

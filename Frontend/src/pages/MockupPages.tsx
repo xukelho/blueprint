@@ -35,7 +35,7 @@ type Project = {
   id: number;
   title: string;
   code: string;
-  client: string;
+  clients: string[];
   address: string;
   phase: string;
   revision: string;
@@ -45,15 +45,15 @@ type Project = {
 };
 
 const activeProjects: Project[] = [
-  { id: 1, title: "Casa do Vale", code: "CV-024", client: "Marta e João Silva", address: "Azeitão, Setúbal", phase: "Projeto de execução", revision: "R07", status: "A aguardar cliente", notifications: 3, plan: "courtyard" },
-  { id: 2, title: "Apartamento Alvalade", code: "AA-018", client: "Inês Costa", address: "Alvalade, Lisboa", phase: "Estudo prévio", revision: "R03", status: "Em análise", notifications: 1, plan: "linear" },
-  { id: 3, title: "Atelier da Ribeira", code: "AR-031", client: "Ribeira Criativa, Lda.", address: "Alcântara, Lisboa", phase: "Licenciamento", revision: "R05", status: "Ativo", notifications: 0, plan: "compact" },
-  { id: 4, title: "Moradia Monte Estoril", code: "ME-029", client: "Pedro Almeida", address: "Monte Estoril, Cascais", phase: "Projeto de execução", revision: "R09", status: "Ativo", notifications: 2, plan: "courtyard" },
+  { id: 1, title: "Casa do Vale", code: "CV-024", clients: ["Marta", "João Silva"], address: "Azeitão, Setúbal", phase: "Projeto de execução", revision: "R07", status: "A aguardar cliente", notifications: 3, plan: "courtyard" },
+  { id: 2, title: "Apartamento Alvalade", code: "AA-018", clients: ["Inês Costa"], address: "Alvalade, Lisboa", phase: "Estudo prévio", revision: "R03", status: "Em análise", notifications: 1, plan: "linear" },
+  { id: 3, title: "Atelier da Ribeira", code: "AR-031", clients: ["Ribeira Criativa, Lda."], address: "Alcântara, Lisboa", phase: "Licenciamento", revision: "R05", status: "Ativo", notifications: 0, plan: "compact" },
+  { id: 4, title: "Moradia Monte Estoril", code: "ME-029", clients: ["Pedro Almeida"], address: "Monte Estoril, Cascais", phase: "Projeto de execução", revision: "R09", status: "Ativo", notifications: 2, plan: "courtyard" },
 ];
 
 const archivedProjects: Project[] = [
-  { id: 5, title: "Casa Pátio", code: "CP-017", client: "Leonor Ferreira", address: "Comporta, Grândola", phase: "Concluído", revision: "R12", status: "Arquivado", notifications: 0, plan: "compact" },
-  { id: 6, title: "Escritório do Chiado", code: "EC-012", client: "Vértice Partners", address: "Chiado, Lisboa", phase: "Concluído", revision: "R08", status: "Arquivado", notifications: 0, plan: "linear" },
+  { id: 5, title: "Casa Pátio", code: "CP-017", clients: ["Leonor Ferreira"], address: "Comporta, Grândola", phase: "Concluído", revision: "R12", status: "Arquivado", notifications: 0, plan: "compact" },
+  { id: 6, title: "Escritório do Chiado", code: "EC-012", clients: ["Vértice Partners"], address: "Chiado, Lisboa", phase: "Concluído", revision: "R08", status: "Arquivado", notifications: 0, plan: "linear" },
 ];
 
 function PageHeader({ eyebrow, title, description, actions }: { eyebrow?: string; title: string; description?: string; actions?: ReactNode }) {
@@ -109,7 +109,7 @@ function ProjectCard({ project }: { project: Project }) {
       </div>
       <button className="mock-project-content" type="button" onClick={() => navigate("/projects/casa-do-vale")}>
         <span className="mock-project-title"><strong>{project.title}</strong><ChevronRight size={17} /></span>
-        <span>{project.client}</span>
+        <span>{project.clients.join(", ")}</span>
         <span className="mock-muted-row"><MapPin size={14} />{project.address}</span>
         <span className="mock-project-meta"><span>{project.phase}</span><span>{project.revision}</span></span>
       </button>
@@ -128,7 +128,7 @@ export function ProjectsPage() {
   const navigate = useNavigate();
   const filterProjects = (items: Project[]) => {
     const term = query.trim().toLocaleLowerCase("pt-PT");
-    return term ? items.filter((project) => [project.title, project.client, project.address, project.code].join(" ").toLocaleLowerCase("pt-PT").includes(term)) : items;
+    return term ? items.filter((project) => [project.title, ...project.clients, project.address, project.code].join(" ").toLocaleLowerCase("pt-PT").includes(term)) : items;
   };
   const filteredActive = filterProjects(activeProjects);
   const filteredArchived = filterProjects(archivedProjects);
