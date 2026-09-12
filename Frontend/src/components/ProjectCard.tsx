@@ -6,14 +6,14 @@ import { phaseLabel } from "../projectPhases";
 type ProjectCardProps = {
   project: Project;
   canViewArchitects: boolean;
-  showNotificationBar?: boolean;
+  unreadNotificationCount?: number;
   contactDisplay?: "client" | "architects";
 };
 
 export function ProjectCard({
   project,
   canViewArchitects,
-  showNotificationBar = false,
+  unreadNotificationCount = 0,
   contactDisplay = "client",
 }: ProjectCardProps) {
   const navigate = useNavigate();
@@ -53,11 +53,11 @@ export function ProjectCard({
           <span>{project.code}</span>
         </span>
       </button>
-      {showNotificationBar && (
-        <div className="mock-project-footer" aria-label={`Notificações de ${project.title}`}>
-          <span className="mock-notification-count mock-notification-count--empty">
+      {unreadNotificationCount > 0 && (
+        <div className="mock-project-footer" aria-label={`${unreadNotificationCount} notificações não lidas de ${project.title}`}>
+          <span className="mock-notification-count">
             <Bell size={15} aria-hidden="true" />
-            Sem notificações
+            {unreadNotificationCount}
           </span>
         </div>
       )}

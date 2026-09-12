@@ -21,13 +21,14 @@ public static class NotificationEndpoints
         return endpoints;
     }
 
-    private static async Task<IResult> List(long? beforeId, int? limit, bool? unreadOnly, ClaimsPrincipal principal, BlueprintDbContext db, CancellationToken ct)
+    private static async Task<IResult> List(long? beforeId, int? limit, bool? unreadOnly, long? projectId, ClaimsPrincipal principal, BlueprintDbContext db, CancellationToken ct)
     {
         if (!TryUserId(principal, out var userId)) return TypedResults.Unauthorized();
         var pageSize = Math.Clamp(limit ?? DefaultPageSize, 1, MaximumPageSize);
         var query = db.UserNotifications.AsNoTracking().Where(item => item.RecipientUserId == userId);
         if (beforeId is long cursor) query = query.Where(item => item.Id < cursor);
         if (unreadOnly == true) query = query.Where(item => item.ReadAt == null);
+        if (projectId is long requestedProjectId) query = query.Where(item => item.ProjectEvent!.ProjectId == requestedProjectId);
         var rows = await query.OrderByDescending(item => item.Id).Take(pageSize + 1)
             .Select(item => new NotificationResponse(
                 item.Id, item.ProjectEvent!.Type, item.ProjectEvent.ProjectId, item.ProjectEvent.ProjectTitle,
@@ -41,12 +42,21 @@ public static class NotificationEndpoints
     private static async Task<IResult> Summary(ClaimsPrincipal principal, BlueprintDbContext db, TimeProvider timeProvider, CancellationToken ct)
     {
         if (!TryUserId(principal, out var userId)) return TypedResults.Unauthorized();
-        var unread = await db.UserNotifications.CountAsync(item => item.RecipientUserId == userId && item.ReadAt == null, ct);
+        var groupedUnreadCounts = await db.UserNotifications.AsNoTracking()
+            .Where(item => item.RecipientUserId == userId && item.ReadAt == null)
+            .GroupBy(item => item.ProjectEvent!.ProjectId)
+            .Select(group => new { ProjectId = group.Key, UnreadCount = group.Count() })
+            .OrderBy(item => item.ProjectId)
+            .ToArrayAsync(ct);
+        var projectUnreadCounts = groupedUnreadCounts
+            .Select(item => new ProjectUnreadCountResponse(item.ProjectId, item.UnreadCount))
+            .ToArray();
+        var unread = projectUnreadCounts.Sum(item => item.UnreadCount);
         var email = await db.Clients.AsNoTracking().Where(item => item.UserId == userId && item.User!.IsActive)
             .Select(item => item.Email).SingleOrDefaultAsync(ct);
         var invitations = email is null ? 0 : await db.ClientInvitations.CountAsync(item => item.Email == email && item.Company!.IsActive &&
             item.SentAt > timeProvider.GetUtcNow() - ClientInvitationExpiry.Lifetime, ct);
-        return TypedResults.Ok(new NotificationSummaryResponse(unread, invitations, unread + invitations));
+        return TypedResults.Ok(new NotificationSummaryResponse(unread, invitations, unread + invitations, projectUnreadCounts));
     }
 
     private static async Task<IResult> MarkRead(long id, ClaimsPrincipal principal, BlueprintDbContext db, TimeProvider timeProvider, CancellationToken ct)

@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Building2, ExternalLink, MapPin, Milestone, MoreHorizontal, Pencil, Search, UsersRound, X } from "lucide-react";
+import { ArrowLeft, Bell, Building2, ExternalLink, MapPin, Milestone, MoreHorizontal, Pencil, Search, UsersRound, X } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import PortalShell from "../components/PortalShell";
 import { GoogleMapPicker } from "../components/GoogleMapPicker";
@@ -9,6 +9,7 @@ import { ProjectDocumentViewer } from "../components/ProjectDocumentViewer";
 import { filePreviewKind } from "../components/ProjectFileViewer";
 import { archiveProject, createProjectDocumentDownload, createProjectPartConversation, deleteProjectDocument, getClients, getCompanyMembers, getProject, getProjectDocumentContent, getProjectDocumentDrawing, getProjectDocuments, getProjectPartConversations, Project, ProjectDocument, ProjectMember, projectClients, reactivateProject, updateMembers, updateProject, updateProjectPhases, uploadProjectDocument, DrawingDocument, DrawingSelection, ProjectPartConversation } from "../api/projects";
 import { useProfile } from "../profile/ProfileContext";
+import { useNotificationSummary } from "../hooks/useNotificationSummary";
 import { phaseLabel, PROJECT_PHASES, QUICK_FILL_PHASE_CODES } from "../projectPhases";
 
 type ProjectFormData = { title: string; code: string; address: string; googleMapsUrl: string };
@@ -43,6 +44,7 @@ export function CompanyProjectPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { profile } = useProfile();
+  const notificationSummary = useNotificationSummary();
   const owner = profile?.companyRole === "owner";
   const [data, setData] = useState<ProjectFormData>({ title: "", code: "", address: "", googleMapsUrl: "" });
   const [clients, setClients] = useState<Array<{ id: number; displayName: string }>>([]);
@@ -121,6 +123,7 @@ export function CompanyProjectPage() {
   const currentPhaseCode = project?.phases?.find((phase) => phase.isCurrent)?.code ?? project?.currentPhaseCode;
   const currentPhaseLabel = phaseLabel(currentPhaseCode) ?? "Sem fase atual";
   const CurrentPhaseIcon = PROJECT_PHASES.find((phase) => phase.code === currentPhaseCode)?.icon ?? Milestone;
+  const unreadNotificationCount = notificationSummary.summary?.projectUnreadCounts.find((item) => item.projectId === project?.id)?.unreadCount ?? 0;
   const filteredMembers = useMemo(() => { const normalizedQuery = query.trim().toLocaleLowerCase("pt-PT"); return displayedMembers.filter((member) => member.displayName.toLocaleLowerCase("pt-PT").includes(normalizedQuery)); }, [displayedMembers, query]);
   const hasChanges = Boolean(project) && (Object.entries(projectFormData(project!)).some(([key, value]) => data[key as keyof ProjectFormData] !== value) || !sameMemberIds(selectedClients, projectClients(project!).map((client) => client.id)) || !sameMemberIds(selected, project!.members?.map((member) => member.employeeId) ?? []));
   const toggleClient = (clientId: number, checked: boolean) => setSelectedClients((current) => checked ? [...current, clientId] : current.filter((selectedClientId) => selectedClientId !== clientId));
@@ -238,7 +241,7 @@ export function CompanyProjectPage() {
               {owner && <button className="project-hero__edit-action" type="button" onClick={startEditing}><Pencil size={16} />Editar projeto</button>}
             </div>}
             <p className="project-hero__eyebrow">{project.companyName ? `${project.code} · ${project.companyName}` : project.code}</p>
-            <h1 id="project-title">{project.title}</h1>
+            <div className="project-hero__title-row"><h1 id="project-title">{project.title}</h1>{unreadNotificationCount > 0 && <span className="project-notification-count" aria-label={`${unreadNotificationCount} notificações não lidas`}><Bell size={16} aria-hidden="true" />{unreadNotificationCount}</span>}</div>
             <div className="project-hero__metadata">
               {projectClients(project).length > 0 && <div><span className="project-hero__meta-icon"><Building2 size={18} aria-hidden="true" /></span><span><small>{projectClients(project).length === 1 ? "Cliente" : "Clientes"}</small><strong>{projectClients(project).map((client) => client.displayName).join(", ")}</strong></span></div>}
               {project.address && <div className="project-hero__metadata-address"><span className="project-hero__meta-icon"><MapPin size={18} aria-hidden="true" /></span><span><small>Morada</small><strong>{project.address}</strong></span></div>}

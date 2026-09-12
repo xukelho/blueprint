@@ -21,6 +21,21 @@ afterEach(() => {
 });
 
 describe("CompanyProjectPage", () => {
+  it("shows the current user's unread notification count beside the project title", async () => {
+    setAuthenticatedRoles(["employee"]);
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const path = String(input);
+      if (path === "/api/profile") return response(profile("employee"));
+      if (path === "/api/projects/1") return response(emptyProject);
+      if (path === "/api/notifications/summary") return response({ unreadCount: 2, pendingInvitationCount: 0, total: 2, projectUnreadCounts: [{ projectId: 1, unreadCount: 2 }] });
+      return response([]);
+    });
+
+    renderPage();
+
+    expect(await screen.findByLabelText("2 notificações não lidas")).toHaveTextContent("2");
+  });
+
   it("hides empty optional fields in consultation mode", async () => {
     setAuthenticatedRoles(["employee"]);
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => String(input) === "/api/profile" ? response(profile("employee")) : response(emptyProject));
