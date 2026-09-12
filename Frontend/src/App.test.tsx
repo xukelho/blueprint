@@ -126,6 +126,12 @@ function mockCompanyDashboard(companyRole: "owner" | "employee" = "employee", pr
         headers: { "Content-Type": "application/json" },
       });
     }
+    if (path === "/api/notifications?unreadOnly=true&limit=8") {
+      return new Response(JSON.stringify({ items: [], hasMore: false }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    if (path === "/api/notifications/summary") {
+      return new Response(JSON.stringify({ unreadCount: 0, pendingInvitationCount: 0, total: 0, projectUnreadCounts: [] }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
     if (path === "/api/auth/logout" && init?.method === "POST") {
       return new Response(JSON.stringify({ status: "success" }), {
         status: 200,
@@ -139,7 +145,10 @@ function mockCompanyDashboard(companyRole: "owner" | "employee" = "employee", pr
 function mockClientDashboard() {
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
     const path = String(input);
-    const body = path === "/api/profile" ? profileResponse("client") : dashboardProjects;
+    const body = path === "/api/profile" ? profileResponse("client")
+      : path === "/api/projects/" ? dashboardProjects
+      : path === "/api/notifications/summary" ? { unreadCount: 0, pendingInvitationCount: 0, total: 0, projectUnreadCounts: [] }
+      : { items: [], hasMore: false };
     return new Response(JSON.stringify(body), {
       status: 200,
       headers: { "Content-Type": "application/json" },
@@ -404,7 +413,7 @@ describe("dashboard", () => {
     mockCompanyDashboard();
   });
 
-  it("renders real active projects with their phase and notification placeholder", async () => {
+  it("renders real active projects with their phase and an empty attention state", async () => {
     renderApp("/dashboard");
 
     expect(screen.getByRole("heading", { name: "Bom dia, Ana" })).toBeInTheDocument();
@@ -412,7 +421,8 @@ describe("dashboard", () => {
     expect(await screen.findByText("Casa do Vale")).toBeInTheDocument();
     expect(screen.getByText("Projeto de Execução")).toBeInTheDocument();
     expect(screen.queryByText("Projeto Arquivado")).not.toBeInTheDocument();
-    expect(screen.getAllByText("Sem notificações")).toHaveLength(2);
+    expect(screen.getByText("Tudo em dia.")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/notificações não lidas de/)).not.toBeInTheDocument();
     expect(screen.getByLabelText("Navegação principal")).toBeInTheDocument();
     expect(within(screen.getByRole("button", { name: "Dashboard" })).queryByText("Mock"))
       .not.toBeInTheDocument();
@@ -436,6 +446,42 @@ describe("dashboard", () => {
 
     await user.type(screen.getByLabelText("Pesquisar projetos"), "Projeto inexistente");
     expect(screen.getByRole("heading", { name: "Não encontrámos projetos" })).toBeInTheDocument();
+  });
+
+  it("switches to project-grouped unread notifications and remembers the layout for the session", async () => {
+    vi.restoreAllMocks();
+    const notification = (id: number) => ({
+      id, type: "project.global_message_created", projectId: 1, projectTitle: "Casa do Vale",
+      actorDisplayName: "Ana Martins", summary: `adicionou a mensagem ${id}.`, createdAt: `2026-09-11T10:0${id}:00Z`, readAt: null,
+      target: { kind: "globalMessage", projectId: 1, documentId: null, conversationId: null, messageId: id },
+    });
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const path = String(input);
+      const body = path === "/api/profile" ? profileResponse("employee", true)
+        : path === "/api/projects/" ? dashboardProjects
+        : path === "/api/notifications/summary" ? { unreadCount: 4, pendingInvitationCount: 0, total: 4, projectUnreadCounts: [{ projectId: 1, unreadCount: 4 }] }
+        : path === "/api/notifications?unreadOnly=true&limit=8" ? { items: [notification(4)], hasMore: false }
+        : path === "/api/notifications?unreadOnly=true&limit=3&projectId=1" ? { items: [notification(4), notification(3), notification(2)], hasMore: true }
+        : null;
+      if (body === null) throw new Error(`Unexpected request: ${path}`);
+      return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+    });
+    const user = userEvent.setup();
+    const { unmount } = renderApp("/dashboard");
+
+    expect(await screen.findByRole("heading", { name: "Requer a tua atenção" })).toBeInTheDocument();
+    expect(await screen.findByLabelText("4 notificações não lidas de Casa do Vale")).toHaveTextContent("4");
+    const grouped = screen.getByRole("button", { name: "Notificações agrupadas por projeto" });
+    expect(grouped).toHaveAttribute("aria-pressed", "false");
+    await user.click(grouped);
+
+    expect(grouped).toHaveAttribute("aria-pressed", "true");
+    expect(await screen.findByRole("button", { name: /adicionou a mensagem 4/ })).toBeInTheDocument();
+    expect(screen.getByLabelText("4 notificações não lidas de Casa do Vale")).toHaveTextContent("4");
+    expect(sessionStorage.getItem("blueprint.dashboard.notification-layout")).toBe("by-project");
+    unmount();
+    renderApp("/dashboard");
+    expect(screen.getByRole("button", { name: "Notificações agrupadas por projeto" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("shows the owner action and opens a project by its real id", async () => {

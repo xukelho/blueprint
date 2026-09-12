@@ -19,7 +19,8 @@ export type ProjectNotification = {
 };
 
 export type NotificationPage = { items: ProjectNotification[]; hasMore: boolean };
-export type NotificationSummary = { unreadCount: number; pendingInvitationCount: number; total: number };
+export type ProjectUnreadCount = { projectId: number; unreadCount: number };
+export type NotificationSummary = { unreadCount: number; pendingInvitationCount: number; total: number; projectUnreadCounts: ProjectUnreadCount[] };
 export const NOTIFICATIONS_CHANGED_EVENT = "blueprint:notifications-changed";
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -28,11 +29,12 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   return response.status === 204 ? undefined as T : response.json() as Promise<T>;
 }
 
-export function getNotifications(options: { beforeId?: number; unreadOnly?: boolean; limit?: number } = {}) {
+export function getNotifications(options: { beforeId?: number; unreadOnly?: boolean; limit?: number; projectId?: number } = {}) {
   const query = new URLSearchParams();
   if (options.beforeId !== undefined) query.set("beforeId", String(options.beforeId));
   if (options.unreadOnly) query.set("unreadOnly", "true");
   if (options.limit !== undefined) query.set("limit", String(options.limit));
+  if (options.projectId !== undefined) query.set("projectId", String(options.projectId));
   return request<NotificationPage>(`/api/notifications${query.size ? `?${query}` : ""}`);
 }
 

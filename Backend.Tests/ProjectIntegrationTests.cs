@@ -101,6 +101,15 @@ public sealed class ProjectIntegrationTests(PostgreSqlApiFixture fixture)
         Assert.Equal(HttpStatusCode.NoContent, markedRead.StatusCode);
         var notificationSummary = await fixture.Client.GetFromJsonAsync<JsonElement>("/api/notifications/summary");
         Assert.Equal(5, notificationSummary.GetProperty("unreadCount").GetInt32());
+        var projectUnreadCounts = notificationSummary.GetProperty("projectUnreadCounts").EnumerateArray().ToArray();
+        Assert.Single(projectUnreadCounts);
+        Assert.Equal(projectId, projectUnreadCounts[0].GetProperty("projectId").GetInt64());
+        Assert.Equal(5, projectUnreadCounts[0].GetProperty("unreadCount").GetInt32());
+        var projectNotifications = await fixture.Client.GetFromJsonAsync<JsonElement>($"/api/notifications?unreadOnly=true&projectId={projectId}&limit=2");
+        Assert.Equal(2, projectNotifications.GetProperty("items").GetArrayLength());
+        Assert.True(projectNotifications.GetProperty("hasMore").GetBoolean());
+        var otherProjectNotifications = await fixture.Client.GetFromJsonAsync<JsonElement>("/api/notifications?unreadOnly=true&projectId=999999");
+        Assert.Equal(0, otherProjectNotifications.GetProperty("items").GetArrayLength());
         var clientDrawingMessages = await fixture.Client.GetFromJsonAsync<JsonElement[]>($"/api/projects/{projectId}/part-conversations/{conversationId}/messages");
         Assert.Single(clientDrawingMessages!);
         Assert.False(clientDrawingMessages![0].GetProperty("isOwn").GetBoolean());

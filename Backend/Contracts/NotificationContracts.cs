@@ -19,4 +19,9 @@ public sealed record NotificationResponse(
     NotificationTargetResponse Target);
 
 public sealed record NotificationPageResponse(IReadOnlyList<NotificationResponse> Items, bool HasMore);
-public sealed record NotificationSummaryResponse(int UnreadCount, int PendingInvitationCount, int Total);
+public sealed record ProjectUnreadCountResponse(long ProjectId, int UnreadCount);
+public sealed record NotificationSummaryResponse(
+    int UnreadCount,
+    int PendingInvitationCount,
+    int Total,
+    IReadOnlyList<ProjectUnreadCountResponse> ProjectUnreadCounts);
