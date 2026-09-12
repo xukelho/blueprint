@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Blueprint.Api.Contracts;
 using Blueprint.Api.Data;
+using Blueprint.Api.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace Blueprint.Api.Endpoints;
@@ -64,6 +65,7 @@ public static class ProjectMessageEndpoints
         CreateProjectMessageRequest? request,
         ClaimsPrincipal principal,
         BlueprintDbContext db,
+        IProjectNotificationService notifications,
         CancellationToken ct)
     {
         if (!TryGetUserId(principal, out var userId)) return TypedResults.NotFound();
@@ -88,8 +90,15 @@ public static class ProjectMessageEndpoints
             Body = body,
             CreatedAt = DateTimeOffset.UtcNow
         };
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
         db.ProjectMessages.Add(message);
         await db.SaveChangesAsync(ct);
+        await notifications.AddAsync(new ProjectNotificationCommand(
+            projectId, userId, ProjectEventTypes.GlobalMessageCreated,
+            "adicionou uma mensagem à conversa geral.", NotificationTargetKinds.GlobalMessage,
+            $"project-message:{message.Id}", MessageId: message.Id), ct);
+        await db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
         return TypedResults.Created($"/api/projects/{projectId}/messages/{message.Id}", ToResponse(message, userId));
     }
 

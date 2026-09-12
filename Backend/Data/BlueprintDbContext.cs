@@ -24,6 +24,8 @@ public sealed class BlueprintDbContext(DbContextOptions<BlueprintDbContext> opti
     public DbSet<ProjectMessage> ProjectMessages => Set<ProjectMessage>();
     public DbSet<ProjectPartConversation> ProjectPartConversations => Set<ProjectPartConversation>();
     public DbSet<ProjectPartConversationMessage> ProjectPartConversationMessages => Set<ProjectPartConversationMessage>();
+    public DbSet<ProjectEvent> ProjectEvents => Set<ProjectEvent>();
+    public DbSet<UserNotification> UserNotifications => Set<UserNotification>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -40,6 +42,7 @@ public sealed class BlueprintDbContext(DbContextOptions<BlueprintDbContext> opti
         ConfigureProjectMessages(modelBuilder);
         ConfigureProjectPartConversations(modelBuilder);
         ConfigureProjectDocuments(modelBuilder);
+        ConfigureProjectNotifications(modelBuilder);
     }
 
     private static void ConfigureRoles(ModelBuilder modelBuilder)
@@ -383,6 +386,47 @@ public sealed class BlueprintDbContext(DbContextOptions<BlueprintDbContext> opti
             .HasForeignKey(candidate => candidate.ProjectId).OnDelete(DeleteBehavior.Cascade);
         message.HasOne(candidate => candidate.AuthorUser).WithMany(candidate => candidate.ProjectMessages)
             .HasForeignKey(candidate => candidate.AuthorUserId).OnDelete(DeleteBehavior.Restrict);
+    }
+
+    private static void ConfigureProjectNotifications(ModelBuilder modelBuilder)
+    {
+        var projectEvent = modelBuilder.Entity<ProjectEvent>();
+        projectEvent.ToTable("project_events");
+        projectEvent.HasKey(candidate => candidate.Id);
+        projectEvent.Property(candidate => candidate.Id).HasColumnName("id").ValueGeneratedOnAdd();
+        projectEvent.Property(candidate => candidate.ProjectId).HasColumnName("project_id").IsRequired();
+        projectEvent.Property(candidate => candidate.ActorUserId).HasColumnName("actor_user_id").IsRequired();
+        projectEvent.Property(candidate => candidate.ActorDisplayName).HasColumnName("actor_display_name").HasMaxLength(256).IsRequired();
+        projectEvent.Property(candidate => candidate.ProjectTitle).HasColumnName("project_title").HasMaxLength(256).IsRequired();
+        projectEvent.Property(candidate => candidate.Type).HasColumnName("type").HasMaxLength(96).IsRequired();
+        projectEvent.Property(candidate => candidate.Summary).HasColumnName("summary").HasMaxLength(1024).IsRequired();
+        projectEvent.Property(candidate => candidate.TemplateVersion).HasColumnName("template_version").HasDefaultValue(1).IsRequired();
+        projectEvent.Property(candidate => candidate.TargetKind).HasColumnName("target_kind").HasMaxLength(32).IsRequired();
+        projectEvent.Property(candidate => candidate.DocumentId).HasColumnName("document_id");
+        projectEvent.Property(candidate => candidate.ConversationId).HasColumnName("conversation_id");
+        projectEvent.Property(candidate => candidate.MessageId).HasColumnName("message_id");
+        projectEvent.Property(candidate => candidate.ContextJson).HasColumnName("context_json").HasColumnType("jsonb").IsRequired();
+        projectEvent.Property(candidate => candidate.DeduplicationKey).HasColumnName("deduplication_key").HasMaxLength(256).IsRequired();
+        projectEvent.Property(candidate => candidate.OccurredAt).HasColumnName("occurred_at").HasColumnType("timestamp with time zone").IsRequired();
+        projectEvent.HasIndex(candidate => candidate.DeduplicationKey).IsUnique();
+        projectEvent.HasIndex(candidate => new { candidate.ProjectId, candidate.Id });
+        projectEvent.HasOne(candidate => candidate.Project).WithMany(candidate => candidate.Events)
+            .HasForeignKey(candidate => candidate.ProjectId).OnDelete(DeleteBehavior.Restrict);
+
+        var notification = modelBuilder.Entity<UserNotification>();
+        notification.ToTable("user_notifications");
+        notification.HasKey(candidate => candidate.Id);
+        notification.Property(candidate => candidate.Id).HasColumnName("id").ValueGeneratedOnAdd();
+        notification.Property(candidate => candidate.ProjectEventId).HasColumnName("project_event_id").IsRequired();
+        notification.Property(candidate => candidate.RecipientUserId).HasColumnName("recipient_user_id").IsRequired();
+        notification.Property(candidate => candidate.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone").IsRequired();
+        notification.Property(candidate => candidate.ReadAt).HasColumnName("read_at").HasColumnType("timestamp with time zone");
+        notification.HasIndex(candidate => new { candidate.ProjectEventId, candidate.RecipientUserId }).IsUnique();
+        notification.HasIndex(candidate => new { candidate.RecipientUserId, candidate.ReadAt, candidate.Id });
+        notification.HasOne(candidate => candidate.ProjectEvent).WithMany(candidate => candidate.Notifications)
+            .HasForeignKey(candidate => candidate.ProjectEventId).OnDelete(DeleteBehavior.Cascade);
+        notification.HasOne(candidate => candidate.RecipientUser).WithMany(candidate => candidate.Notifications)
+            .HasForeignKey(candidate => candidate.RecipientUserId).OnDelete(DeleteBehavior.Cascade);
     }
 
     private static void ConfigureProjectPartConversations(ModelBuilder modelBuilder)

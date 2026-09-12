@@ -12,7 +12,7 @@ public enum PhaseRemovalMode
 
 public sealed record PhaseRemovalCommand(long ProjectId, long PhaseId, PhaseRemovalMode Mode, long? TargetPhaseId, long ActorId);
 
-public sealed class PhaseRemovalService(BlueprintDbContext db, IFileService fileService, TimeProvider timeProvider)
+public sealed class PhaseRemovalService(BlueprintDbContext db, IFileService fileService, TimeProvider timeProvider, IProjectNotificationService notifications)
 {
     public async Task RemoveAsync(PhaseRemovalCommand command, CancellationToken cancellationToken = default)
     {
@@ -39,7 +39,7 @@ public sealed class PhaseRemovalService(BlueprintDbContext db, IFileService file
                 break;
             case PhaseRemovalMode.DeleteDocuments:
                 foreach (var document in documents.Where(candidate => !candidate.IsDeleted))
-                    await fileService.DeleteAsync(document.Id, command.ActorId, cancellationToken);
+                    await fileService.DeleteAsync(document.Id, command.ActorId, cancellationToken, createNotification: false);
                 // Deleted logical documents cannot retain a required reference to a removed phase.
                 db.ProjectDocuments.RemoveRange(documents);
                 break;
@@ -50,6 +50,13 @@ public sealed class PhaseRemovalService(BlueprintDbContext db, IFileService file
         }
 
         db.ProjectPhases.Remove(phase);
+        await db.SaveChangesAsync(cancellationToken);
+        var now = timeProvider.GetUtcNow();
+        await notifications.AddAsync(new ProjectNotificationCommand(
+            command.ProjectId, command.ActorId, ProjectEventTypes.TimelineChanged,
+            "removeu uma fase da timeline do projeto.", NotificationTargetKinds.Timeline,
+            $"timeline-phase-removed:{command.ProjectId}:{command.PhaseId}:{now.UtcTicks}",
+            Context: new { phase.PhaseCode, mode = command.Mode.ToString(), documentCount = documents.Count }), cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }

@@ -441,6 +441,36 @@ namespace Blueprint.Api.Data.Migrations
                     b.ToTable("project_documents", (string)null);
                 });
 
+            modelBuilder.Entity("Blueprint.Api.Data.ProjectEvent", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("ActorDisplayName").IsRequired().HasMaxLength(256).HasColumnType("character varying(256)").HasColumnName("actor_display_name");
+                    b.Property<long>("ActorUserId").HasColumnType("bigint").HasColumnName("actor_user_id");
+                    b.Property<long?>("ConversationId").HasColumnType("bigint").HasColumnName("conversation_id");
+                    b.Property<string>("ContextJson").IsRequired().HasColumnType("jsonb").HasColumnName("context_json");
+                    b.Property<string>("DeduplicationKey").IsRequired().HasMaxLength(256).HasColumnType("character varying(256)").HasColumnName("deduplication_key");
+                    b.Property<Guid?>("DocumentId").HasColumnType("uuid").HasColumnName("document_id");
+                    b.Property<long?>("MessageId").HasColumnType("bigint").HasColumnName("message_id");
+                    b.Property<DateTimeOffset>("OccurredAt").HasColumnType("timestamp with time zone").HasColumnName("occurred_at");
+                    b.Property<long>("ProjectId").HasColumnType("bigint").HasColumnName("project_id");
+                    b.Property<string>("ProjectTitle").IsRequired().HasMaxLength(256).HasColumnType("character varying(256)").HasColumnName("project_title");
+                    b.Property<string>("Summary").IsRequired().HasMaxLength(1024).HasColumnType("character varying(1024)").HasColumnName("summary");
+                    b.Property<string>("TargetKind").IsRequired().HasMaxLength(32).HasColumnType("character varying(32)").HasColumnName("target_kind");
+                    b.Property<int>("TemplateVersion").ValueGeneratedOnAdd().HasColumnType("integer").HasDefaultValue(1).HasColumnName("template_version");
+                    b.Property<string>("Type").IsRequired().HasMaxLength(96).HasColumnType("character varying(96)").HasColumnName("type");
+
+                    b.HasKey("Id");
+                    b.HasIndex("DeduplicationKey").IsUnique();
+                    b.HasIndex("ProjectId", "Id");
+                    b.ToTable("project_events", (string)null);
+                });
+
             modelBuilder.Entity("Blueprint.Api.Data.ProjectMember", b =>
                 {
                     b.Property<long>("ProjectId")
@@ -805,6 +835,20 @@ namespace Blueprint.Api.Data.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Blueprint.Api.Data.UserNotification", b =>
+                {
+                    b.Property<long>("Id").ValueGeneratedOnAdd().HasColumnType("bigint").HasColumnName("id");
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+                    b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone").HasColumnName("created_at");
+                    b.Property<long>("ProjectEventId").HasColumnType("bigint").HasColumnName("project_event_id");
+                    b.Property<DateTimeOffset?>("ReadAt").HasColumnType("timestamp with time zone").HasColumnName("read_at");
+                    b.Property<long>("RecipientUserId").HasColumnType("bigint").HasColumnName("recipient_user_id");
+                    b.HasKey("Id");
+                    b.HasIndex("ProjectEventId", "RecipientUserId").IsUnique();
+                    b.HasIndex("RecipientUserId", "ReadAt", "Id");
+                    b.ToTable("user_notifications", (string)null);
+                });
+
             modelBuilder.Entity("Blueprint.Api.Data.User", b =>
                 {
                     b.Property<long>("Id")
@@ -1022,6 +1066,17 @@ namespace Blueprint.Api.Data.Migrations
                     b.Navigation("StoredObject");
                 });
 
+            modelBuilder.Entity("Blueprint.Api.Data.ProjectEvent", b =>
+                {
+                    b.HasOne("Blueprint.Api.Data.Project", "Project")
+                        .WithMany("Events")
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Project");
+                });
+
             modelBuilder.Entity("Blueprint.Api.Data.ProjectMember", b =>
                 {
                     b.HasOne("Blueprint.Api.Data.Employee", "Employee")
@@ -1120,6 +1175,24 @@ namespace Blueprint.Api.Data.Migrations
                     b.Navigation("Project");
                 });
 
+            modelBuilder.Entity("Blueprint.Api.Data.UserNotification", b =>
+                {
+                    b.HasOne("Blueprint.Api.Data.ProjectEvent", "ProjectEvent")
+                        .WithMany("Notifications")
+                        .HasForeignKey("ProjectEventId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Blueprint.Api.Data.User", "RecipientUser")
+                        .WithMany("Notifications")
+                        .HasForeignKey("RecipientUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ProjectEvent");
+                    b.Navigation("RecipientUser");
+                });
+
             modelBuilder.Entity("Blueprint.Api.Data.UserRole", b =>
                 {
                     b.HasOne("Blueprint.Api.Data.Role", "Role")
@@ -1166,6 +1239,8 @@ namespace Blueprint.Api.Data.Migrations
 
             modelBuilder.Entity("Blueprint.Api.Data.Project", b =>
                 {
+                    b.Navigation("Events");
+
                     b.Navigation("Documents");
 
                     b.Navigation("Members");
@@ -1184,6 +1259,11 @@ namespace Blueprint.Api.Data.Migrations
             modelBuilder.Entity("Blueprint.Api.Data.ProjectDocument", b =>
                 {
                     b.Navigation("PartConversations");
+                });
+
+            modelBuilder.Entity("Blueprint.Api.Data.ProjectEvent", b =>
+                {
+                    b.Navigation("Notifications");
                 });
 
             modelBuilder.Entity("Blueprint.Api.Data.ProjectPartConversation", b =>
@@ -1211,6 +1291,8 @@ namespace Blueprint.Api.Data.Migrations
                     b.Navigation("Client");
 
                     b.Navigation("Employee");
+
+                    b.Navigation("Notifications");
 
                     b.Navigation("ProjectMessages");
 

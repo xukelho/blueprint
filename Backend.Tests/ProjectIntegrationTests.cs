@@ -88,6 +88,19 @@ public sealed class ProjectIntegrationTests(PostgreSqlApiFixture fixture)
         Assert.Equal(HttpStatusCode.OK, replacedAgain.StatusCode);
 
         await LoginAsync(client.Username);
+        var notifications = await fixture.Client.GetFromJsonAsync<JsonElement>("/api/notifications");
+        var notificationItems = notifications.GetProperty("items").EnumerateArray().ToArray();
+        Assert.Equal(6, notificationItems.Length);
+        Assert.Equal(1, notificationItems.Count(item => item.GetProperty("type").GetString() == "document.uploaded"));
+        Assert.Equal(1, notificationItems.Count(item => item.GetProperty("type").GetString() == "document.replaced"));
+        Assert.Equal(1, notificationItems.Count(item => item.GetProperty("type").GetString() == "project.part_conversation_created"));
+        Assert.Equal(1, notificationItems.Count(item => item.GetProperty("type").GetString() == "project.part_message_created"));
+        Assert.DoesNotContain(notificationItems, item => item.GetRawText().Contains("Confirmar esta", StringComparison.Ordinal));
+        var notificationId = notificationItems[0].GetProperty("id").GetInt64();
+        using var markedRead = await fixture.Client.PutAsync($"/api/notifications/{notificationId}/read", null);
+        Assert.Equal(HttpStatusCode.NoContent, markedRead.StatusCode);
+        var notificationSummary = await fixture.Client.GetFromJsonAsync<JsonElement>("/api/notifications/summary");
+        Assert.Equal(5, notificationSummary.GetProperty("unreadCount").GetInt32());
         var clientDrawingMessages = await fixture.Client.GetFromJsonAsync<JsonElement[]>($"/api/projects/{projectId}/part-conversations/{conversationId}/messages");
         Assert.Single(clientDrawingMessages!);
         Assert.False(clientDrawingMessages![0].GetProperty("isOwn").GetBoolean());
@@ -107,6 +120,8 @@ public sealed class ProjectIntegrationTests(PostgreSqlApiFixture fixture)
         Assert.Equal(HttpStatusCode.NotFound, clientMutation.StatusCode);
 
         await LoginAsync(owner.Username);
+        var ownerNotificationSummary = await fixture.Client.GetFromJsonAsync<JsonElement>("/api/notifications/summary");
+        Assert.Equal(0, ownerNotificationSummary.GetProperty("unreadCount").GetInt32());
         using var archived = await fixture.Client.PostAsync($"/api/projects/{projectId}/archive", null);
         Assert.Equal(HttpStatusCode.NoContent, archived.StatusCode);
         Assert.Single((await fixture.Client.GetFromJsonAsync<JsonElement[]>($"/api/projects/{projectId}/documents"))!);

@@ -1,4 +1,4 @@
-import { ReactNode, useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import {
   Bell,
   Building2,
@@ -16,13 +16,14 @@ import {
   X,
 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { clearAuthenticatedRoles, isEmployee, isPlatformAdmin } from "../auth";
+import { clearAuthenticatedRoles, getAuthenticatedRoles, isEmployee, isPlatformAdmin } from "../auth";
 import {
   profileInitials,
   profileRoleLabel,
   useOptionalProfile,
 } from "../profile/ProfileContext";
 import { BlueprintLogoMark } from "./BlueprintLogoMark";
+import { getNotificationSummary, NOTIFICATIONS_CHANGED_EVENT } from "../api/notifications";
 
 const primaryNav = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard", mockStatus: undefined },
@@ -33,7 +34,7 @@ const primaryNav = [
 ];
 
 const secondaryNav = [
-  { label: "Notificações", icon: Bell, path: "/notifications", badge: 6, mockStatus: "mock" },
+  { label: "Notificações", icon: Bell, path: "/notifications", mockStatus: undefined },
   { label: "Ajuda e suporte", icon: CircleHelp, path: "/help", mockStatus: "mock" },
 ];
 
@@ -46,6 +47,7 @@ export default function PortalShell({ children, wide = false }: PortalShellProps
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [notificationCount, setNotificationCount] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
   const profile = useOptionalProfile()?.profile ?? null;
@@ -54,6 +56,8 @@ export default function PortalShell({ children, wide = false }: PortalShellProps
   const profileCompany = profile?.companyName ?? "Forma Norte";
   const isClientProfile = profile?.profileType === "client";
   const isAdminProfile = isPlatformAdmin();
+  const isAuthenticated = getAuthenticatedRoles().length > 0;
+  const visibleSecondaryNav = secondaryNav.filter((item) => !isAdminProfile || item.path !== "/notifications");
   const visiblePrimaryNav = primaryNav.filter(
       (item) =>
       (!isAdminProfile || item.path !== "/dashboard" && item.path !== "/projects") &&
@@ -66,6 +70,17 @@ export default function PortalShell({ children, wide = false }: PortalShellProps
     navigate(path);
     setMobileNavOpen(false);
   };
+
+  useEffect(() => {
+    if (!isAuthenticated || isAdminProfile) return;
+    let active = true;
+    const refresh = () => { void getNotificationSummary().then((summary) => { if (active) setNotificationCount(summary.total); }).catch(() => undefined); };
+    refresh();
+    const interval = window.setInterval(refresh, 60_000);
+    window.addEventListener("focus", refresh);
+    window.addEventListener(NOTIFICATIONS_CHANGED_EVENT, refresh);
+    return () => { active = false; window.clearInterval(interval); window.removeEventListener("focus", refresh); window.removeEventListener(NOTIFICATIONS_CHANGED_EVENT, refresh); };
+  }, [isAdminProfile, isAuthenticated]);
 
   const isActive = (path: string) =>
     path === "/dashboard"
@@ -140,6 +155,7 @@ export default function PortalShell({ children, wide = false }: PortalShellProps
                   className={`nav-item ${active ? "nav-item--active" : ""}`}
                   type="button"
                   key={item.path}
+                  aria-label={item.label}
                   title={sidebarCollapsed && item.mockStatus ? `${item.label} — Mock` : sidebarCollapsed ? item.label : undefined}
                   aria-current={active ? "page" : undefined}
                   onClick={() => goTo(item.path)}
@@ -157,7 +173,7 @@ export default function PortalShell({ children, wide = false }: PortalShellProps
           </div>
 
           <div className="nav-group nav-group--bottom">
-            {secondaryNav.map((item) => {
+            {visibleSecondaryNav.map((item) => {
               const Icon = item.icon;
               const active = isActive(item.path);
               return (
@@ -165,14 +181,15 @@ export default function PortalShell({ children, wide = false }: PortalShellProps
                   className={`nav-item ${active ? "nav-item--active" : ""}`}
                   type="button"
                   key={item.path}
-                  title={sidebarCollapsed ? (isClientProfile && item.path === "/notifications" ? item.label : `${item.label} — Mock`) : undefined}
+                  aria-label={item.label}
+                  title={sidebarCollapsed ? (item.mockStatus ? `${item.label} — Mock` : item.label) : undefined}
                   aria-current={active ? "page" : undefined}
                   onClick={() => goTo(item.path)}
                 >
                   <Icon size={19} strokeWidth={1.8} aria-hidden="true" />
                   <span className="sidebar-label">{item.label}</span>
-                  {(!isClientProfile || item.path !== "/notifications") && <span className="nav-status nav-status--mock" aria-hidden="true">Mock</span>}
-                  {item.badge && (!isClientProfile || item.path !== "/notifications") && <span className="nav-badge">{item.badge}</span>}
+                  {item.mockStatus && <span className="nav-status nav-status--mock" aria-hidden="true">Mock</span>}
+                  {item.path === "/notifications" && notificationCount > 0 && <span className="nav-badge">{notificationCount > 99 ? "99+" : notificationCount}</span>}
                 </button>
               );
             })}
