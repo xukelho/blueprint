@@ -432,32 +432,6 @@ export function ClientPage() {
   );
 }
 
-const notificationGroups = [
-  { title: "Projetos e revisões", rows: ["Nova revisão publicada", "Alteração de fase ou prazo", "Ficheiro processado com erro"] },
-  { title: "Assuntos", rows: ["Novo assunto, resposta ou menção", "Alteração de estado ou responsável"] },
-  { title: "Aprovações e acesso", rows: ["Pedido, concessão ou rejeição de aprovação", "Convite e alteração de acesso"] },
-  { title: "Resumos", rows: ["Resumo diário", "Resumo semanal"] },
-];
-
-export function NotificationsPage() {
-  const [preferences, setPreferences] = useState<Record<string, { app: boolean; email: boolean }>>(() => Object.fromEntries(notificationGroups.flatMap((group) => group.rows).map((row) => [row, { app: true, email: !row.includes("erro") }])));
-  const toggle = (row: string, channel: "app" | "email") => setPreferences((current) => ({ ...current, [row]: { ...current[row], [channel]: !current[row][channel] } }));
-  return (
-    <PortalShell>
-      <PageHeader eyebrow="Preferências" title="Notificações" description="Escolhe os eventos e os canais pelos quais queres ser notificada." actions={<button className="primary-action" type="button"><Check size={17} />Guardar preferências</button>} />
-      <div className="mock-notification-head"><span>Evento</span><span>Na aplicação</span><span>Email</span></div>
-      <div className="mock-notification-groups">
-        {notificationGroups.map((group) => <section className="mock-surface" key={group.title}><h2>{group.title}</h2>{group.rows.map((row) => <div className="mock-preference-row" key={row}><span>{row}</span><Toggle checked={preferences[row].app} label={`${row} na aplicação`} onChange={() => toggle(row, "app")} /><Toggle checked={preferences[row].email} label={`${row} por email`} onChange={() => toggle(row, "email")} /></div>)}</section>)}
-      </div>
-      <section className="mock-surface mock-digest-card"><div><Clock3 size={21} /><span><strong>Horário dos resumos</strong><small>Recebe resumos às 08:30, no teu fuso horário.</small></span></div><button className="secondary-action" type="button">Alterar horário</button></section>
-    </PortalShell>
-  );
-}
-
-function Toggle({ checked, label, onChange }: { checked: boolean; label: string; onChange: () => void }) {
-  return <button className={`mock-toggle ${checked ? "is-on" : ""}`} type="button" role="switch" aria-checked={checked} aria-label={label} onClick={onChange}><span /></button>;
-}
-
 const guides = [
   { icon: FolderOpen, title: "Começar um projeto", text: "Cria um projeto, convida clientes e prepara a timeline." },
   { icon: CloudUpload, title: "Publicar uma revisão", text: "Carrega, valida e publica um novo conjunto de ficheiros." },

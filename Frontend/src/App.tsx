@@ -8,12 +8,12 @@ import ClientPage from "./pages/ClientPage";
 import CompanySettingsPage from "./pages/CompanySettingsPage";
 import { getAuthenticatedRoles, isClient, isEmployee, isPlatformAdmin } from "./auth";
 import { ProfileProvider, useProfile } from "./profile/ProfileContext";
-import { HelpPage, NotificationsPage } from "./pages/MockupPages";
+import { HelpPage } from "./pages/MockupPages";
 import { CompanyClientPage, CompanyClientDetailPage } from "./pages/CompanyClientPage";
 import { CompanyProjectsPage } from "./pages/CompanyProjectsPage";
 import { CompanyProjectsCreatePage } from "./pages/CompanyProjectsCreatePage";
 import { CompanyProjectPage } from "./pages/CompanyProjectPage";
-import { ClientNotificationsPage } from "./pages/ClientNotificationsPage";
+import { NotificationsPage } from "./pages/NotificationsPage";
 import { ThemeProvider } from "./theme/ThemeContext";
 
 function AdministrationRoute() {
@@ -45,11 +45,10 @@ function CompanySettingsRoute() {
 }
 
 function NotificationsRoute() {
-  const { profile, isLoading } = useProfile();
+  const { isLoading } = useProfile();
+  if (isPlatformAdmin()) return <Navigate to="/administration" replace />;
   if (isLoading) return null;
-  return profile?.profileType === "client"
-    ? <ClientNotificationsPage />
-    : <NotificationsPage />;
+  return <NotificationsPage />;
 }
 
 function subscribeToAuthenticationChanges(onStoreChange: () => void) {

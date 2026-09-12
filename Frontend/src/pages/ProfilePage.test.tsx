@@ -64,7 +64,10 @@ describe("editable profile", () => {
   it("previews and saves an account theme preference", async () => {
     sessionStorage.setItem("blueprint.auth.roles", JSON.stringify(["employee"]));
     let submitted: Record<string, unknown> | null = null;
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/notifications/summary") {
+        return jsonResponse({ unreadCount: 0, pendingInvitationCount: 0, total: 0 });
+      }
       if (init?.method === "PUT") {
         submitted = JSON.parse(String(init.body));
         return jsonResponse({ ...employeeProfile, ...submitted });
@@ -145,7 +148,10 @@ describe("editable profile", () => {
 
   it("preserves entered values and displays backend field errors", async () => {
     sessionStorage.setItem("blueprint.auth.roles", JSON.stringify(["client"]));
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/notifications/summary") {
+        return jsonResponse({ unreadCount: 0, pendingInvitationCount: 0, total: 0 });
+      }
       if (init?.method === "PUT") {
         return jsonResponse({
           title: "Validation failed",
@@ -170,8 +176,7 @@ describe("editable profile", () => {
     await user.click(screen.getByRole("button", { name: "Guardar alterações" }));
 
     expect(await screen.findByText("Username is required.")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Dados pessoais" }));
-    expect(screen.getByLabelText("Nome de utilizador")).toHaveValue("");
+    expect(screen.getByLabelText(/^Nome de utilizador/)).toHaveValue("");
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Não foi possível guardar o perfil.",
     );

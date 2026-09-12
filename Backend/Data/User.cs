@@ -31,4 +31,6 @@ public sealed class User
     public Employee? Employee { get; set; }
 
     public ICollection<ProjectMessage> ProjectMessages { get; set; } = [];
+
+    public ICollection<UserNotification> Notifications { get; set; } = [];
 }

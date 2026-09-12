@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Blueprint.Api.Contracts;
 using Blueprint.Api.Data;
+using Blueprint.Api.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace Blueprint.Api.Endpoints;
@@ -29,7 +30,7 @@ public static class ProjectPartConversationEndpoints
         return TypedResults.Ok(items);
     }
 
-    private static async Task<IResult> Create(long projectId, CreateProjectPartConversationRequest? request, ClaimsPrincipal principal, BlueprintDbContext db, CancellationToken ct)
+    private static async Task<IResult> Create(long projectId, CreateProjectPartConversationRequest? request, ClaimsPrincipal principal, BlueprintDbContext db, IProjectNotificationService notifications, CancellationToken ct)
     {
         if (!TryUserId(principal, out var userId)) return TypedResults.NotFound();
         var project = await (await VisibleProjects(principal, db, ct)).SingleOrDefaultAsync(item => item.Id == projectId, ct);
@@ -52,8 +53,16 @@ public static class ProjectPartConversationEndpoints
             TargetKind = request.TargetKind.Trim(), TargetLabel = request.TargetLabel.Trim(), Title = title,
             AnchorX = request.AnchorX, AnchorY = request.AnchorY, CreatedAt = DateTimeOffset.UtcNow, CreatedBy = userId
         };
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
         db.ProjectPartConversations.Add(conversation);
         await db.SaveChangesAsync(ct);
+        await notifications.AddAsync(new ProjectNotificationCommand(
+            projectId, userId, ProjectEventTypes.PartConversationCreated,
+            $"iniciou a conversa «{conversation.Title}».", NotificationTargetKinds.PartConversation,
+            $"part-conversation:{conversation.Id}", conversation.DocumentId, conversation.Id,
+            Context: new { conversation.Title, conversation.TargetLabel }), ct);
+        await db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
         return TypedResults.Created($"/api/projects/{projectId}/part-conversations/{conversation.Id}", ToResponse(conversation, 0));
     }
 
@@ -66,7 +75,7 @@ public static class ProjectPartConversationEndpoints
         return TypedResults.Ok(messages);
     }
 
-    private static async Task<IResult> CreateMessage(long projectId, long conversationId, CreateProjectPartConversationMessageRequest? request, ClaimsPrincipal principal, BlueprintDbContext db, CancellationToken ct)
+    private static async Task<IResult> CreateMessage(long projectId, long conversationId, CreateProjectPartConversationMessageRequest? request, ClaimsPrincipal principal, BlueprintDbContext db, IProjectNotificationService notifications, CancellationToken ct)
     {
         if (!TryUserId(principal, out var userId)) return TypedResults.NotFound();
         var project = await (await VisibleProjects(principal, db, ct)).SingleOrDefaultAsync(item => item.Id == projectId, ct);
@@ -77,9 +86,18 @@ public static class ProjectPartConversationEndpoints
             return TypedResults.ValidationProblem(new Dictionary<string, string[]> { ["body"] = ["Message text is required and cannot exceed 4000 characters."] });
         var displayName = await CurrentDisplayName(userId, db, ct);
         if (displayName is null) return TypedResults.NotFound();
+        var conversation = await db.ProjectPartConversations.AsNoTracking().SingleAsync(item => item.Id == conversationId, ct);
         var message = new ProjectPartConversationMessage { ConversationId = conversationId, AuthorUserId = userId, AuthorDisplayName = displayName, Body = body, CreatedAt = DateTimeOffset.UtcNow };
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
         db.ProjectPartConversationMessages.Add(message);
         await db.SaveChangesAsync(ct);
+        await notifications.AddAsync(new ProjectNotificationCommand(
+            projectId, userId, ProjectEventTypes.PartMessageCreated,
+            $"adicionou uma mensagem à conversa «{conversation.Title}».", NotificationTargetKinds.PartConversation,
+            $"part-message:{message.Id}", conversation.DocumentId, conversationId, message.Id,
+            new { conversation.Title }), ct);
+        await db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
         return TypedResults.Created($"/api/projects/{projectId}/part-conversations/{conversationId}/messages/{message.Id}", ToMessageResponse(message, userId));
     }
 

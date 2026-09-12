@@ -118,7 +118,7 @@ public sealed class FileServiceTests
         var store = new FakeObjectStore(clock);
         var files = CreateService(db, store, clock);
         var pending = await files.CreatePendingUploadAsync(project.Id, first.Id, "x.bin", "application/octet-stream", 1, 1);
-        var removal = new PhaseRemovalService(db, files, clock);
+        var removal = new PhaseRemovalService(db, files, clock, new NoopNotificationService());
 
         await Assert.ThrowsAsync<PhaseHasDocumentsException>(() => removal.RemoveAsync(
             new PhaseRemovalCommand(project.Id, first.Id, PhaseRemovalMode.EmptyOnly, null, 1)));
@@ -139,7 +139,7 @@ public sealed class FileServiceTests
         var pending = await files.CreatePendingUploadAsync(project.Id, first.Id, "x.bin", "application/octet-stream", 1, 1);
         var stored = await db.StoredObjects.FindAsync(pending.StoredObjectId);
 
-        await new PhaseRemovalService(db, files, clock).RemoveAsync(
+        await new PhaseRemovalService(db, files, clock, new NoopNotificationService()).RemoveAsync(
             new PhaseRemovalCommand(project.Id, first.Id, PhaseRemovalMode.DeleteDocuments, null, 2));
 
         Assert.Null(await db.ProjectPhases.FindAsync(first.Id));
@@ -168,7 +168,13 @@ public sealed class FileServiceTests
         {
             Endpoint = "http://storage.test", Region = "test", Bucket = "private", AccessKey = "a", SecretKey = "s",
             UploadGrantLifetime = TimeSpan.FromMinutes(15), DownloadGrantLifetime = TimeSpan.FromMinutes(5), PendingUploadLifetime = TimeSpan.FromHours(1)
-        }), clock);
+        }), clock, new NoopNotificationService());
+
+    private sealed class NoopNotificationService : IProjectNotificationService
+    {
+        public Task<bool> AddAsync(ProjectNotificationCommand command, CancellationToken cancellationToken = default) => Task.FromResult(true);
+        public Task<long[]> ParticipantUserIdsAsync(long projectId, CancellationToken cancellationToken = default) => Task.FromResult(Array.Empty<long>());
+    }
 
     private sealed class FakeObjectStore(TestTimeProvider clock) : IObjectStore
     {

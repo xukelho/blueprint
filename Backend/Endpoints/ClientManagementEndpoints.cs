@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Blueprint.Api.Contracts;
 using Blueprint.Api.Data;
+using Blueprint.Api.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace Blueprint.Api.Endpoints;
@@ -55,7 +56,7 @@ public static class ClientManagementEndpoints
         membership.InternalNotes = request.InternalNotes.Trim(); await db.SaveChangesAsync(ct); return TypedResults.NoContent();
     }
 
-    private static async Task<IResult> AssociateProject(long id, long projectId, ClaimsPrincipal principal, BlueprintDbContext db, CancellationToken ct)
+    private static async Task<IResult> AssociateProject(long id, long projectId, ClaimsPrincipal principal, BlueprintDbContext db, IProjectNotificationService notifications, CancellationToken ct)
     {
         var access = await Access.ForUser(principal, db, ct); if (access is null || !access.IsOwner) return TypedResults.NotFound();
         if (!await db.CompanyClients.AnyAsync(x => x.ClientId == id && x.CompanyId == access.CompanyId, ct)) return TypedResults.NotFound();
@@ -69,17 +70,30 @@ public static class ClientManagementEndpoints
             project.UpdatedAt = DateTimeOffset.UtcNow;
             project.UpdatedBy = access.UserId;
             await db.SaveChangesAsync(ct);
+            await notifications.AddAsync(new ProjectNotificationCommand(
+                projectId, access.UserId, ProjectEventTypes.ParticipantsChanged,
+                "adicionou um participante ao projeto.", NotificationTargetKinds.Project,
+                $"participant-client-added:{projectId}:{id}:{project.UpdatedAt.UtcTicks}", Context: new { added = 1, removed = 0 }), ct);
+            await db.SaveChangesAsync(ct);
         }
         await transaction.CommitAsync(ct); return TypedResults.NoContent();
     }
 
-    private static async Task<IResult> RemoveProject(long id, long projectId, ClaimsPrincipal principal, BlueprintDbContext db, CancellationToken ct)
+    private static async Task<IResult> RemoveProject(long id, long projectId, ClaimsPrincipal principal, BlueprintDbContext db, IProjectNotificationService notifications, CancellationToken ct)
     {
         var access = await Access.ForUser(principal, db, ct); if (access is null || !access.IsOwner) return TypedResults.NotFound();
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
         if (!await ProjectEndpoints.LockProject(projectId, access.CompanyId, db, ct)) return TypedResults.NotFound();
         var project = await db.Projects.Include(candidate => candidate.ProjectClients).SingleOrDefaultAsync(candidate => candidate.Id == projectId && candidate.CompanyId == access.CompanyId, ct);
         if (project is null || !ProjectEndpoints.RemoveClient(project, id)) return TypedResults.NotFound();
-        project.UpdatedAt = DateTimeOffset.UtcNow; project.UpdatedBy = access.UserId; await db.SaveChangesAsync(ct); await transaction.CommitAsync(ct); return TypedResults.NoContent();
+        var removedUserId = await db.Clients.Where(item => item.Id == id).Select(item => item.UserId).SingleAsync(ct);
+        project.UpdatedAt = DateTimeOffset.UtcNow; project.UpdatedBy = access.UserId; await db.SaveChangesAsync(ct);
+        await notifications.AddAsync(new ProjectNotificationCommand(
+            projectId, access.UserId, ProjectEventTypes.ParticipantsChanged,
+            "removeu um participante do projeto.", NotificationTargetKinds.Project,
+            $"participant-client-removed:{projectId}:{id}:{project.UpdatedAt.UtcTicks}", Context: new { added = 0, removed = 1 },
+            AdditionalRecipientUserIds: [removedUserId]), ct);
+        await db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct); return TypedResults.NoContent();
     }
 }

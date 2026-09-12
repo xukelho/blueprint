@@ -28,6 +28,7 @@ builder.Services.AddSingleton<IDrawingSourceParser, DwfxDrawingSourceParser>();
 builder.Services.AddScoped<DrawingPreviewService>();
 builder.Services.AddScoped<ProjectPhaseService>();
 builder.Services.AddScoped<PhaseRemovalService>();
+builder.Services.AddScoped<IProjectNotificationService, ProjectNotificationService>();
 builder.Services.AddScoped<FileMaintenanceProcessor>();
 builder.Services.AddHostedService<ClientInvitationExpiryService>();
 builder.Services.AddHostedService<FileMaintenanceService>();
@@ -76,6 +77,7 @@ app.MapProjectPartConversationEndpoints();
 app.MapProjectDocumentEndpoints();
 app.MapClientManagementEndpoints();
 app.MapClientInvitationEndpoints();
+app.MapNotificationEndpoints();
 
 app.Run();
 

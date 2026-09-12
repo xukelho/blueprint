@@ -21,6 +21,7 @@ public sealed class Project
     public ICollection<ProjectMessage> Messages { get; set; } = [];
     public ICollection<ProjectPartConversation> PartConversations { get; set; } = [];
     public ICollection<StoredObject> StoredObjects { get; set; } = [];
+    public ICollection<ProjectEvent> Events { get; set; } = [];
 }
 
 public sealed class ProjectPartConversation

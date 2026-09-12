@@ -59,7 +59,7 @@ public static class ProjectEndpoints
         return project is null ? TypedResults.NotFound() : TypedResults.Ok(ToResponse(project, access));
     }
 
-    private static async Task<IResult> Create(CreateProjectRequest? request, ClaimsPrincipal principal, BlueprintDbContext db, CancellationToken ct)
+    private static async Task<IResult> Create(CreateProjectRequest? request, ClaimsPrincipal principal, BlueprintDbContext db, IProjectNotificationService notifications, CancellationToken ct)
     {
         var access = await Access.ForUser(principal, db, ct);
         if (access is null || !access.IsOwner) return TypedResults.NotFound();
@@ -75,12 +75,18 @@ public static class ProjectEndpoints
         ReplaceClients(project, request.ClientIds);
         project.Members = request.EmployeeIds.Distinct().Select(id => new ProjectMember { EmployeeId = id }).ToList();
         project.Phases = BuildPhases(phaseCodes, request.CurrentPhaseIndex);
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
         db.Projects.Add(project); await db.SaveChangesAsync(ct);
+        await notifications.AddAsync(new ProjectNotificationCommand(
+            project.Id, access.UserId, ProjectEventTypes.ProjectCreated, "criou o projeto.",
+            NotificationTargetKinds.Project, $"project-created:{project.Id}"), ct);
+        await db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
         await db.Entry(project).Reference(x => x.Company).LoadAsync(ct); await db.Entry(project).Collection(x => x.ProjectClients).Query().Include(x => x.Client).LoadAsync(ct); await db.Entry(project).Collection(x => x.Members).Query().Include(x => x.Employee).LoadAsync(ct); await db.Entry(project).Collection(x => x.Phases).LoadAsync(ct);
         return TypedResults.Created($"/api/projects/{project.Id}", ToResponse(project, access));
     }
 
-    private static async Task<IResult> Update(long id, UpdateProjectRequest? request, ClaimsPrincipal principal, BlueprintDbContext db, CancellationToken ct)
+    private static async Task<IResult> Update(long id, UpdateProjectRequest? request, ClaimsPrincipal principal, BlueprintDbContext db, IProjectNotificationService notifications, CancellationToken ct)
     {
         var access = await Access.ForUser(principal, db, ct);
         if (access is null || !access.IsOwner) return TypedResults.NotFound();
@@ -91,20 +97,50 @@ public static class ProjectEndpoints
         if (project is null) return TypedResults.NotFound();
         if (!await ValidClients(request!.ClientIds, access.CompanyId, db, ct)) return TypedResults.ValidationProblem(new Dictionary<string, string[]> { ["clientIds"] = ["Select valid company clients."] });
         if (await db.Projects.AnyAsync(x => x.Id != id && x.CompanyId == access.CompanyId && x.Code == request.Code.Trim(), ct)) return TypedResults.Conflict(new AdministrationErrorResponse("A project with this code already exists."));
+        var previousClientIds = project.ProjectClients.Select(item => item.ClientId).ToHashSet();
+        var selectedClientIds = request.ClientIds.ToHashSet();
+        var addedClientIds = selectedClientIds.Except(previousClientIds).ToArray();
+        var removedClientIds = previousClientIds.Except(selectedClientIds).ToArray();
+        var removedUserIds = await ClientUserIds(removedClientIds, db, ct);
         project.Title = request.Title.Trim(); project.Code = request.Code.Trim(); project.Address = request.Address.Trim(); project.GoogleMapsUrl = NormalizeGoogleMapsUrl(request.GoogleMapsUrl); ReplaceClients(project, request.ClientIds); project.UpdatedAt = DateTimeOffset.UtcNow; project.UpdatedBy = access.UserId;
-        await db.SaveChangesAsync(ct); await db.Entry(project).Collection(x => x.ProjectClients).Query().Include(x => x.Client).LoadAsync(ct); await transaction.CommitAsync(ct); return TypedResults.Ok(ToResponse(project, access));
+        await db.SaveChangesAsync(ct);
+        if (addedClientIds.Length != 0 || removedClientIds.Length != 0)
+        {
+            await notifications.AddAsync(new ProjectNotificationCommand(
+                id, access.UserId, ProjectEventTypes.ParticipantsChanged,
+                ParticipantSummary(addedClientIds.Length, removedClientIds.Length), NotificationTargetKinds.Project,
+                $"participants-clients:{id}:{project.UpdatedAt.UtcTicks}", Context: new { added = addedClientIds.Length, removed = removedClientIds.Length },
+                AdditionalRecipientUserIds: removedUserIds), ct);
+            await db.SaveChangesAsync(ct);
+        }
+        await db.Entry(project).Collection(x => x.ProjectClients).Query().Include(x => x.Client).LoadAsync(ct); await transaction.CommitAsync(ct); return TypedResults.Ok(ToResponse(project, access));
     }
 
-    private static async Task<IResult> UpdateMembers(long id, UpdateProjectMembersRequest? request, ClaimsPrincipal principal, BlueprintDbContext db, CancellationToken ct)
+    private static async Task<IResult> UpdateMembers(long id, UpdateProjectMembersRequest? request, ClaimsPrincipal principal, BlueprintDbContext db, IProjectNotificationService notifications, CancellationToken ct)
     {
         var access = await Access.ForUser(principal, db, ct); if (access is null || !access.IsOwner) return TypedResults.NotFound();
         if (request?.EmployeeIds is null || !await ValidEmployees(request.EmployeeIds, access.CompanyId, db, ct)) return TypedResults.ValidationProblem(new Dictionary<string, string[]> { ["employeeIds"] = ["Select valid company members."] });
         var project = await db.Projects.Include(x => x.Company).Include(x => x.Members).ThenInclude(x => x.Employee).Include(x => x.ProjectClients).ThenInclude(x => x.Client).Include(x => x.Phases).SingleOrDefaultAsync(x => x.Id == id && x.CompanyId == access.CompanyId, ct); if (project is null) return TypedResults.NotFound();
+        var previousIds = project.Members.Select(item => item.EmployeeId).ToHashSet();
+        var selectedIds = request.EmployeeIds.ToHashSet();
+        var addedIds = selectedIds.Except(previousIds).ToArray();
+        var removedIds = previousIds.Except(selectedIds).ToArray();
+        if (addedIds.Length == 0 && removedIds.Length == 0) return TypedResults.Ok(ToResponse(project, access));
+        var removedUserIds = await EmployeeUserIds(removedIds, db, ct);
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
         project.Members.Clear(); foreach (var employeeId in request.EmployeeIds.Distinct()) project.Members.Add(new ProjectMember { ProjectId = project.Id, EmployeeId = employeeId });
-        project.UpdatedAt = DateTimeOffset.UtcNow; project.UpdatedBy = access.UserId; await db.SaveChangesAsync(ct); await db.Entry(project).Collection(x => x.Members).Query().Include(x => x.Employee).LoadAsync(ct); return TypedResults.Ok(ToResponse(project, access));
+        project.UpdatedAt = DateTimeOffset.UtcNow; project.UpdatedBy = access.UserId; await db.SaveChangesAsync(ct);
+        await notifications.AddAsync(new ProjectNotificationCommand(
+            id, access.UserId, ProjectEventTypes.ParticipantsChanged,
+            ParticipantSummary(addedIds.Length, removedIds.Length), NotificationTargetKinds.Project,
+            $"participants-employees:{id}:{project.UpdatedAt.UtcTicks}", Context: new { added = addedIds.Length, removed = removedIds.Length },
+            AdditionalRecipientUserIds: removedUserIds), ct);
+        await db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
+        await db.Entry(project).Collection(x => x.Members).Query().Include(x => x.Employee).LoadAsync(ct); return TypedResults.Ok(ToResponse(project, access));
     }
 
-    private static async Task<IResult> UpdatePhases(long id, UpdateProjectPhasesRequest? request, ClaimsPrincipal principal, BlueprintDbContext db, ProjectPhaseService phaseService, CancellationToken ct)
+    private static async Task<IResult> UpdatePhases(long id, UpdateProjectPhasesRequest? request, ClaimsPrincipal principal, BlueprintDbContext db, ProjectPhaseService phaseService, IProjectNotificationService notifications, CancellationToken ct)
     {
         var access = await Access.ForUser(principal, db, ct);
         if (access is null) return TypedResults.NotFound();
@@ -117,6 +153,10 @@ public static class ProjectEndpoints
         var project = await db.Projects.Include(x => x.Company).Include(x => x.ProjectClients).ThenInclude(x => x.Client).Include(x => x.Members).ThenInclude(x => x.Employee).Include(x => x.Phases).SingleOrDefaultAsync(x => x.Id == id && x.CompanyId == access.CompanyId, ct);
         if (project is null || !CanEditTimeline(project, access)) return TypedResults.NotFound();
 
+        var current = project.Phases.OrderBy(item => item.Position).Select(item => (item.PhaseCode, item.IsCurrent)).ToArray();
+        var desired = phaseCodes.Select((code, index) => (code, index == request!.CurrentPhaseIndex)).ToArray();
+        if (current.SequenceEqual(desired)) return TypedResults.Ok(ToResponse(project, access));
+
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
         project.UpdatedAt = DateTimeOffset.UtcNow;
         project.UpdatedBy = access.UserId;
@@ -128,22 +168,34 @@ public static class ProjectEndpoints
         {
             return TypedResults.Conflict(new AdministrationErrorResponse(exception.Message));
         }
+        await notifications.AddAsync(new ProjectNotificationCommand(
+            id, access.UserId, ProjectEventTypes.TimelineChanged, "alterou a timeline do projeto.",
+            NotificationTargetKinds.Timeline, $"timeline:{id}:{project.UpdatedAt.UtcTicks}"), ct);
+        await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
         return TypedResults.Ok(ToResponse(project, access));
     }
 
-    private static async Task<IResult> Archive(long id, ClaimsPrincipal principal, BlueprintDbContext db, CancellationToken ct)
+    private static async Task<IResult> Archive(long id, ClaimsPrincipal principal, BlueprintDbContext db, IProjectNotificationService notifications, CancellationToken ct)
     {
         var access = await Access.ForUser(principal, db, ct); if (access is null || !access.IsOwner) return TypedResults.NotFound();
         var project = await db.Projects.SingleOrDefaultAsync(x => x.Id == id && x.CompanyId == access.CompanyId, ct); if (project is null) return TypedResults.NotFound();
-        project.IsArchived = true; project.UpdatedAt = DateTimeOffset.UtcNow; project.UpdatedBy = access.UserId; await db.SaveChangesAsync(ct); return TypedResults.NoContent();
+        if (project.IsArchived) return TypedResults.NoContent();
+        project.IsArchived = true; project.UpdatedAt = DateTimeOffset.UtcNow; project.UpdatedBy = access.UserId;
+        await notifications.AddAsync(new ProjectNotificationCommand(id, access.UserId, ProjectEventTypes.ProjectArchived,
+            "arquivou o projeto.", NotificationTargetKinds.Project, $"project-archived:{id}:{project.UpdatedAt.UtcTicks}"), ct);
+        await db.SaveChangesAsync(ct); return TypedResults.NoContent();
     }
 
-    private static async Task<IResult> Reactivate(long id, ClaimsPrincipal principal, BlueprintDbContext db, CancellationToken ct)
+    private static async Task<IResult> Reactivate(long id, ClaimsPrincipal principal, BlueprintDbContext db, IProjectNotificationService notifications, CancellationToken ct)
     {
         var access = await Access.ForUser(principal, db, ct); if (access is null || !access.IsOwner) return TypedResults.NotFound();
         var project = await db.Projects.SingleOrDefaultAsync(x => x.Id == id && x.CompanyId == access.CompanyId, ct); if (project is null) return TypedResults.NotFound();
-        project.IsArchived = false; project.UpdatedAt = DateTimeOffset.UtcNow; project.UpdatedBy = access.UserId; await db.SaveChangesAsync(ct); return TypedResults.NoContent();
+        if (!project.IsArchived) return TypedResults.NoContent();
+        project.IsArchived = false; project.UpdatedAt = DateTimeOffset.UtcNow; project.UpdatedBy = access.UserId;
+        await notifications.AddAsync(new ProjectNotificationCommand(id, access.UserId, ProjectEventTypes.ProjectReactivated,
+            "reativou o projeto.", NotificationTargetKinds.Project, $"project-reactivated:{id}:{project.UpdatedAt.UtcTicks}"), ct);
+        await db.SaveChangesAsync(ct); return TypedResults.NoContent();
     }
 
     private static async Task<IResult> ListCompanyMembers(ClaimsPrincipal principal, BlueprintDbContext db, CancellationToken ct)
@@ -217,6 +269,16 @@ public static class ProjectEndpoints
         return await db.CompanyClients.CountAsync(x => x.CompanyId == companyId && ids.Contains(x.ClientId), ct) == ids.Count;
     }
     private static async Task<bool> ValidEmployees(IReadOnlyList<long>? ids, long companyId, BlueprintDbContext db, CancellationToken ct) { if (ids is null || ids.Count != ids.Distinct().Count()) return false; return await db.CompanyEmployees.CountAsync(x => x.CompanyId == companyId && x.IsArchitect && x.Employee!.User!.IsActive && ids.Contains(x.EmployeeId), ct) == ids.Count; }
+    private static Task<long[]> ClientUserIds(IEnumerable<long> ids, BlueprintDbContext db, CancellationToken ct) =>
+        db.Clients.AsNoTracking().Where(item => ids.Contains(item.Id)).Select(item => item.UserId).ToArrayAsync(ct);
+    private static Task<long[]> EmployeeUserIds(IEnumerable<long> ids, BlueprintDbContext db, CancellationToken ct) =>
+        db.Employees.AsNoTracking().Where(item => ids.Contains(item.Id)).Select(item => item.UserId).ToArrayAsync(ct);
+    private static string ParticipantSummary(int added, int removed) => (added, removed) switch
+    {
+        (> 0, > 0) => $"alterou os participantes do projeto: {added} adicionados e {removed} removidos.",
+        (> 0, _) => $"adicionou {added} participantes ao projeto.",
+        _ => $"removeu {removed} participantes do projeto."
+    };
 }
 
 internal sealed record Access(long UserId, long EmployeeId, long CompanyId, bool IsOwner)

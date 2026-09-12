@@ -148,7 +148,7 @@ function mockClientDashboard() {
 }
 
 function mockProfile(profileType: "client" | "employee", architect = false) {
-  return vi.spyOn(globalThis, "fetch").mockResolvedValue(
+  return vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
     new Response(JSON.stringify(profileResponse(profileType, architect)), {
       status: 200,
       headers: { "Content-Type": "application/json" },
@@ -187,7 +187,7 @@ describe("login", () => {
   it.each([
     ["Login as Admin", "admin", "admin"],
     ["Login as Architect", "arc1", "arc1"],
-    ["Login as Client", "cli1", "cli1"],
+    ["Login as Client", "client1", "client1"],
   ])("posts the credentials for %s", async (label, username, password) => {
     vi.stubEnv("MODE", "development");
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(

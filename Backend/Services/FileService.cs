@@ -8,18 +8,18 @@ namespace Blueprint.Api.Services;
 public interface IFileService
 {
     Task<PendingUpload> CreatePendingUploadAsync(long projectId, long phaseId, string fileName, string contentType, long length, long actorId, CancellationToken cancellationToken = default);
-    Task CompleteUploadAsync(Guid documentId, long actorId, CancellationToken cancellationToken = default);
+    Task<bool> CompleteUploadAsync(Guid documentId, long actorId, CancellationToken cancellationToken = default);
     Task<PresignedDownloadGrant> CreateDownloadGrantAsync(Guid documentId, CancellationToken cancellationToken = default);
-    Task MoveAsync(Guid documentId, long targetPhaseId, long actorId, CancellationToken cancellationToken = default);
+    Task<bool> MoveAsync(Guid documentId, long targetPhaseId, long actorId, CancellationToken cancellationToken = default);
     Task<PendingReplacement> CreateReplacementUploadAsync(Guid documentId, string fileName, string contentType, long length, long actorId, CancellationToken cancellationToken = default);
-    Task CompleteReplacementAsync(Guid documentId, Guid replacementObjectId, long actorId, CancellationToken cancellationToken = default);
-    Task DeleteAsync(Guid documentId, long actorId, CancellationToken cancellationToken = default);
+    Task<bool> CompleteReplacementAsync(Guid documentId, Guid replacementObjectId, long actorId, CancellationToken cancellationToken = default);
+    Task<bool> DeleteAsync(Guid documentId, long actorId, CancellationToken cancellationToken = default, bool createNotification = true);
 }
 
 public sealed record PendingUpload(Guid DocumentId, Guid StoredObjectId, PresignedUploadGrant Grant);
 public sealed record PendingReplacement(Guid StoredObjectId, PresignedUploadGrant Grant);
 
-public sealed class FileService(BlueprintDbContext db, IObjectStore objectStore, IOptions<ObjectStorageOptions> options, TimeProvider timeProvider) : IFileService
+public sealed class FileService(BlueprintDbContext db, IObjectStore objectStore, IOptions<ObjectStorageOptions> options, TimeProvider timeProvider, IProjectNotificationService notifications) : IFileService
 {
     private readonly ObjectStorageOptions _options = options.Value;
 
@@ -59,14 +59,20 @@ public sealed class FileService(BlueprintDbContext db, IObjectStore objectStore,
         }
     }
 
-    public async Task CompleteUploadAsync(Guid documentId, long actorId, CancellationToken cancellationToken = default)
+    public async Task<bool> CompleteUploadAsync(Guid documentId, long actorId, CancellationToken cancellationToken = default)
     {
         var document = await db.ProjectDocuments.Include(candidate => candidate.StoredObject)
             .SingleOrDefaultAsync(candidate => candidate.Id == documentId && !candidate.IsDeleted, cancellationToken)
             ?? throw new FileResourceNotFoundException("Document not found.");
-        if (document.StoredObject!.Status == StoredObjectStatus.Available) return;
+        if (document.StoredObject!.Status == StoredObjectStatus.Available) return false;
         await VerifyPendingObjectAsync(document.StoredObject!, actorId, cancellationToken);
+        await notifications.AddAsync(new ProjectNotificationCommand(
+            document.ProjectId, actorId, ProjectEventTypes.DocumentUploaded,
+            $"adicionou o ficheiro «{document.StoredObject.FileName}».", NotificationTargetKinds.Document,
+            $"document-uploaded:{document.Id}:{document.StoredObjectId}", document.Id,
+            Context: new { document.StoredObject.FileName, document.PhaseId }), cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
+        return true;
     }
 
     public async Task<PresignedDownloadGrant> CreateDownloadGrantAsync(Guid documentId, CancellationToken cancellationToken = default)
@@ -79,15 +85,23 @@ public sealed class FileService(BlueprintDbContext db, IObjectStore objectStore,
         return await objectStore.CreateDownloadGrantAsync(document.StoredObject.ObjectKey, document.StoredObject.FileName, _options.DownloadGrantLifetime, cancellationToken);
     }
 
-    public async Task MoveAsync(Guid documentId, long targetPhaseId, long actorId, CancellationToken cancellationToken = default)
+    public async Task<bool> MoveAsync(Guid documentId, long targetPhaseId, long actorId, CancellationToken cancellationToken = default)
     {
         var document = await db.ProjectDocuments.SingleOrDefaultAsync(candidate => candidate.Id == documentId && !candidate.IsDeleted, cancellationToken)
             ?? throw new FileResourceNotFoundException("Document not found.");
         if (!await db.ProjectPhases.AnyAsync(phase => phase.Id == targetPhaseId && phase.ProjectId == document.ProjectId, cancellationToken))
             throw new FileResourceNotFoundException("The target phase was not found.");
+        if (document.PhaseId == targetPhaseId) return false;
+        var previousPhaseId = document.PhaseId;
         document.PhaseId = targetPhaseId;
         Touch(document, actorId);
+        await notifications.AddAsync(new ProjectNotificationCommand(
+            document.ProjectId, actorId, ProjectEventTypes.DocumentMoved,
+            "moveu um ficheiro para outra fase.", NotificationTargetKinds.Document,
+            $"document-moved:{document.Id}:{document.UpdatedAt.UtcTicks}", document.Id,
+            Context: new { previousPhaseId, targetPhaseId }), cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
+        return true;
     }
 
     public async Task<PendingReplacement> CreateReplacementUploadAsync(Guid documentId, string fileName, string contentType, long length, long actorId, CancellationToken cancellationToken = default)
@@ -112,7 +126,7 @@ public sealed class FileService(BlueprintDbContext db, IObjectStore objectStore,
         }
     }
 
-    public async Task CompleteReplacementAsync(Guid documentId, Guid replacementObjectId, long actorId, CancellationToken cancellationToken = default)
+    public async Task<bool> CompleteReplacementAsync(Guid documentId, Guid replacementObjectId, long actorId, CancellationToken cancellationToken = default)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         var document = await db.ProjectDocuments.Include(candidate => candidate.StoredObject)
@@ -120,7 +134,7 @@ public sealed class FileService(BlueprintDbContext db, IObjectStore objectStore,
             ?? throw new FileResourceNotFoundException("Document not found.");
         var replacement = await db.StoredObjects.SingleOrDefaultAsync(candidate => candidate.Id == replacementObjectId && candidate.ProjectId == document.ProjectId, cancellationToken)
             ?? throw new FileResourceNotFoundException("Replacement object not found.");
-        if (document.StoredObjectId == replacementObjectId && replacement.Status == StoredObjectStatus.Available) return;
+        if (document.StoredObjectId == replacementObjectId && replacement.Status == StoredObjectStatus.Available) return false;
         if (await db.ProjectDocuments.AnyAsync(candidate => candidate.StoredObjectId == replacementObjectId, cancellationToken))
             throw new FileConflictException("Replacement object is already in use.");
 
@@ -128,23 +142,37 @@ public sealed class FileService(BlueprintDbContext db, IObjectStore objectStore,
         QueueDeletion(document.StoredObject!, actorId);
         document.StoredObjectId = replacement.Id;
         Touch(document, actorId);
+        await notifications.AddAsync(new ProjectNotificationCommand(
+            document.ProjectId, actorId, ProjectEventTypes.DocumentReplaced,
+            $"substituiu o ficheiro por «{replacement.FileName}».", NotificationTargetKinds.Document,
+            $"document-replaced:{document.Id}:{replacement.Id}", document.Id,
+            Context: new { replacement.FileName, document.PhaseId }), cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+        return true;
     }
 
-    public async Task DeleteAsync(Guid documentId, long actorId, CancellationToken cancellationToken = default)
+    public async Task<bool> DeleteAsync(Guid documentId, long actorId, CancellationToken cancellationToken = default, bool createNotification = true)
     {
         var document = await db.ProjectDocuments.Include(candidate => candidate.StoredObject)
             .SingleOrDefaultAsync(candidate => candidate.Id == documentId, cancellationToken)
             ?? throw new FileResourceNotFoundException("Document not found.");
-        if (document.IsDeleted) return;
+        if (document.IsDeleted) return false;
         var now = timeProvider.GetUtcNow();
+        var storedObject = document.StoredObject!;
         document.IsDeleted = true;
         document.DeletedAt = now;
         document.DeletedBy = actorId;
         Touch(document, actorId);
-        QueueDeletion(document.StoredObject!, actorId);
+        QueueDeletion(storedObject, actorId);
+        if (createNotification)
+            await notifications.AddAsync(new ProjectNotificationCommand(
+                document.ProjectId, actorId, ProjectEventTypes.DocumentDeleted,
+                $"eliminou o ficheiro «{storedObject.FileName}».", NotificationTargetKinds.Document,
+                $"document-deleted:{document.Id}:{now.UtcTicks}", document.Id,
+                Context: new { storedObject.FileName, document.PhaseId }), cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
+        return true;
     }
 
     private StoredObject NewPendingObject(long projectId, string fileName, string contentType, long length, long actorId)

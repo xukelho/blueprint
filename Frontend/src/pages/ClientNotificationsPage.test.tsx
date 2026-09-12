@@ -44,6 +44,8 @@ describe("client notifications", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const path = String(input);
       if (path === "/api/profile") return jsonResponse({ ...profile, availableCompanies: accepted ? [{ id: 10, name: "Forma Norte" }] : [] });
+      if (path === "/api/notifications") return jsonResponse({ items: [], hasMore: false });
+      if (path === "/api/notifications/summary") return jsonResponse({ unreadCount: 0, pendingInvitationCount: 2, total: 2 });
       if (path === "/api/client-invitations/received") return jsonResponse([
         { id: 41, companyId: 10, companyName: "Forma Norte", sentAt: "2026-08-04T10:00:00Z", expiresAt: "2026-08-07T10:00:00Z" },
         { id: 42, companyId: 20, companyName: "Atelier Sul", sentAt: "2026-08-03T10:00:00Z", expiresAt: "2026-08-06T10:00:00Z" },
@@ -76,7 +78,7 @@ describe("client notifications", () => {
     expect(screen.getByText("Empresas associadas").nextElementSibling).toHaveTextContent("1");
 
     await user.click(screen.getByRole("button", { name: "Recusar convite da empresa Atelier Sul" }));
-    expect(await screen.findByText("Não tem convites pendentes")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("Recebeu um convite da empresa Atelier Sul.")).not.toBeInTheDocument());
     expect(screen.getAllByText("Mock").length).toBeGreaterThan(0);
     const notificationsButton = screen.getByRole("button", { name: "Notificações" });
     expect(within(notificationsButton).queryByText("Mock")).not.toBeInTheDocument();
@@ -87,12 +89,38 @@ describe("client notifications", () => {
     const pending = new Promise<Response>((_resolve, reject) => { rejectInvitations = reject; });
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       if (String(input) === "/api/profile") return jsonResponse(profile);
+      if (String(input) === "/api/notifications") return jsonResponse({ items: [], hasMore: false });
+      if (String(input) === "/api/notifications/summary") return jsonResponse({ unreadCount: 0, pendingInvitationCount: 0, total: 0 });
       if (String(input) === "/api/client-invitations/received") return pending;
       throw new Error("Unexpected request");
     });
     renderPage();
-    expect(await screen.findByText("A carregar convites…")).toBeInTheDocument();
+    expect(await screen.findByText("A carregar notificações…")).toBeInTheDocument();
     rejectInvitations(new Error("Falha de rede"));
     expect(await screen.findByRole("alert")).toHaveTextContent("Falha de rede");
+  });
+
+  it("renders project activity and marks a notification read", async () => {
+    let markedRead = false;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const path = String(input);
+      if (path === "/api/profile") return jsonResponse({ ...profile, profileType: "employee", companyId: 10, companyName: "Forma Norte", companyRole: "employee", isArchitect: true, roles: ["employee", "architect"] });
+      if (path === "/api/notifications") return jsonResponse({ items: [{
+        id: 71, type: "project.global_message_created", projectId: 9, projectTitle: "Casa do Vale",
+        actorDisplayName: "Ana Martins", summary: "adicionou uma mensagem à conversa geral.",
+        createdAt: "2026-09-11T10:30:00Z", readAt: markedRead ? "2026-09-11T10:31:00Z" : null,
+        target: { kind: "globalMessage", projectId: 9, documentId: null, conversationId: null, messageId: 101 },
+      }], hasMore: false });
+      if (path === "/api/notifications/summary") return jsonResponse({ unreadCount: markedRead ? 0 : 1, pendingInvitationCount: 0, total: markedRead ? 0 : 1 });
+      if (path === "/api/notifications/71/read" && init?.method === "PUT") { markedRead = true; return new Response(null, { status: 204 }); }
+      throw new Error(`Unexpected request: ${path}`);
+    });
+    sessionStorage.setItem("blueprint.auth.roles", JSON.stringify(["employee", "architect"]));
+    render(<MemoryRouter initialEntries={["/notifications"]}><App /></MemoryRouter>);
+
+    const notification = await screen.findByRole("button", { name: /Ana Martins adicionou uma mensagem/ });
+    await userEvent.setup().click(notification);
+    await waitFor(() => expect(notification).not.toHaveClass("is-unread"));
+    expect(markedRead).toBe(true);
   });
 });
