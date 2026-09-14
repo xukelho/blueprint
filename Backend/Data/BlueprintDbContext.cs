@@ -12,6 +12,8 @@ public sealed class BlueprintDbContext(DbContextOptions<BlueprintDbContext> opti
     public DbSet<Client> Clients => Set<Client>();
     public DbSet<Employee> Employees => Set<Employee>();
     public DbSet<Company> Companies => Set<Company>();
+    public DbSet<StorageConfiguration> StorageConfigurations => Set<StorageConfiguration>();
+    public DbSet<CompanyStorageAllocation> CompanyStorageAllocations => Set<CompanyStorageAllocation>();
     public DbSet<CompanyEmployee> CompanyEmployees => Set<CompanyEmployee>();
     public DbSet<CompanyClient> CompanyClients => Set<CompanyClient>();
     public DbSet<ClientInvitation> ClientInvitations => Set<ClientInvitation>();
@@ -33,6 +35,7 @@ public sealed class BlueprintDbContext(DbContextOptions<BlueprintDbContext> opti
         ConfigureUsers(modelBuilder);
         ConfigureUserRoles(modelBuilder);
         ConfigureCompanies(modelBuilder);
+        ConfigureStorage(modelBuilder);
         ConfigureEmployees(modelBuilder);
         ConfigureCompanyEmployees(modelBuilder);
         ConfigureClients(modelBuilder);
@@ -172,6 +175,38 @@ public sealed class BlueprintDbContext(DbContextOptions<BlueprintDbContext> opti
         company.Property(candidate => candidate.UpdatedBy)
             .HasColumnName("updated_by")
             .IsRequired();
+    }
+
+    private static void ConfigureStorage(ModelBuilder modelBuilder)
+    {
+        var configuration = modelBuilder.Entity<StorageConfiguration>();
+        configuration.ToTable("storage_configuration", table =>
+        {
+            table.HasCheckConstraint("CK_storage_configuration_singleton", "id = 1");
+            table.HasCheckConstraint("CK_storage_configuration_base_limit", "base_limit_bytes >= 0 AND base_limit_bytes % 100000000 = 0");
+        });
+        configuration.HasKey(candidate => candidate.Id);
+        configuration.Property(candidate => candidate.Id).HasColumnName("id").ValueGeneratedNever();
+        configuration.Property(candidate => candidate.BaseLimitBytes).HasColumnName("base_limit_bytes").IsRequired();
+        configuration.Property(candidate => candidate.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone").IsRequired();
+        configuration.Property(candidate => candidate.UpdatedBy).HasColumnName("updated_by").IsRequired();
+
+        var allocation = modelBuilder.Entity<CompanyStorageAllocation>();
+        allocation.ToTable("company_storage_allocations", table =>
+        {
+            table.HasCheckConstraint("CK_company_storage_admin_extra", "admin_extra_bytes >= 0 AND admin_extra_bytes % 100000000 = 0");
+            table.HasCheckConstraint("CK_company_storage_purchased_extra", "purchased_extra_bytes >= 0");
+            table.HasCheckConstraint("CK_company_storage_warning_level", "warning_level IN (0, 80, 90, 100)");
+        });
+        allocation.HasKey(candidate => candidate.CompanyId);
+        allocation.Property(candidate => candidate.CompanyId).HasColumnName("company_id").ValueGeneratedNever();
+        allocation.Property(candidate => candidate.AdminExtraBytes).HasColumnName("admin_extra_bytes").IsRequired();
+        allocation.Property(candidate => candidate.PurchasedExtraBytes).HasColumnName("purchased_extra_bytes").IsRequired();
+        allocation.Property(candidate => candidate.WarningLevel).HasColumnName("warning_level").IsRequired();
+        allocation.Property(candidate => candidate.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone").IsRequired();
+        allocation.Property(candidate => candidate.UpdatedBy).HasColumnName("updated_by").IsRequired();
+        allocation.HasOne(candidate => candidate.Company).WithOne(candidate => candidate.StorageAllocation)
+            .HasForeignKey<CompanyStorageAllocation>(candidate => candidate.CompanyId).OnDelete(DeleteBehavior.Cascade);
     }
 
     private static void ConfigureEmployees(ModelBuilder modelBuilder)
@@ -328,6 +363,7 @@ public sealed class BlueprintDbContext(DbContextOptions<BlueprintDbContext> opti
         storedObject.Property(candidate => candidate.ContentType).HasColumnName("content_type").HasMaxLength(256).IsRequired();
         storedObject.Property(candidate => candidate.ExpectedLength).HasColumnName("expected_length").IsRequired();
         storedObject.Property(candidate => candidate.VerifiedLength).HasColumnName("verified_length");
+        storedObject.Property(candidate => candidate.QuotaChargeBytes).HasColumnName("quota_charge_bytes").IsRequired();
         storedObject.Property(candidate => candidate.ETag).HasColumnName("etag").HasMaxLength(256);
         storedObject.Property(candidate => candidate.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(32).IsRequired();
         storedObject.Property(candidate => candidate.UploadExpiresAt).HasColumnName("upload_expires_at").HasColumnType("timestamp with time zone").IsRequired();
@@ -394,7 +430,9 @@ public sealed class BlueprintDbContext(DbContextOptions<BlueprintDbContext> opti
         projectEvent.ToTable("project_events");
         projectEvent.HasKey(candidate => candidate.Id);
         projectEvent.Property(candidate => candidate.Id).HasColumnName("id").ValueGeneratedOnAdd();
-        projectEvent.Property(candidate => candidate.ProjectId).HasColumnName("project_id").IsRequired();
+        projectEvent.Property(candidate => candidate.CompanyId).HasColumnName("company_id").IsRequired();
+        projectEvent.Property(candidate => candidate.ProjectId).HasColumnName("project_id");
+        projectEvent.Property(candidate => candidate.Scope).HasColumnName("scope").HasMaxLength(16).IsRequired();
         projectEvent.Property(candidate => candidate.ActorUserId).HasColumnName("actor_user_id").IsRequired();
         projectEvent.Property(candidate => candidate.ActorDisplayName).HasColumnName("actor_display_name").HasMaxLength(256).IsRequired();
         projectEvent.Property(candidate => candidate.ProjectTitle).HasColumnName("project_title").HasMaxLength(256).IsRequired();
@@ -410,8 +448,11 @@ public sealed class BlueprintDbContext(DbContextOptions<BlueprintDbContext> opti
         projectEvent.Property(candidate => candidate.OccurredAt).HasColumnName("occurred_at").HasColumnType("timestamp with time zone").IsRequired();
         projectEvent.HasIndex(candidate => candidate.DeduplicationKey).IsUnique();
         projectEvent.HasIndex(candidate => new { candidate.ProjectId, candidate.Id });
+        projectEvent.HasIndex(candidate => new { candidate.CompanyId, candidate.Id });
         projectEvent.HasOne(candidate => candidate.Project).WithMany(candidate => candidate.Events)
             .HasForeignKey(candidate => candidate.ProjectId).OnDelete(DeleteBehavior.Restrict);
+        projectEvent.HasOne(candidate => candidate.Company).WithMany(candidate => candidate.Events)
+            .HasForeignKey(candidate => candidate.CompanyId).OnDelete(DeleteBehavior.Restrict);
 
         var notification = modelBuilder.Entity<UserNotification>();
         notification.ToTable("user_notifications");

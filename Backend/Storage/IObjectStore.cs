@@ -2,7 +2,7 @@ namespace Blueprint.Api.Storage;
 
 public interface IObjectStore
 {
-    Task<PresignedUploadGrant> CreateUploadGrantAsync(string key, string contentType, TimeSpan lifetime, CancellationToken cancellationToken = default);
+    Task<PresignedUploadGrant> CreateUploadGrantAsync(string key, string contentType, long length, TimeSpan lifetime, CancellationToken cancellationToken = default);
     Task<ObjectMetadata?> GetMetadataAsync(string key, CancellationToken cancellationToken = default);
     Task<PresignedDownloadGrant> CreateDownloadGrantAsync(string key, string downloadFileName, TimeSpan lifetime, CancellationToken cancellationToken = default);
     Task<Stream?> OpenReadAsync(string key, CancellationToken cancellationToken = default);

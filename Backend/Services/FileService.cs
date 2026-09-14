@@ -19,7 +19,7 @@ public interface IFileService
 public sealed record PendingUpload(Guid DocumentId, Guid StoredObjectId, PresignedUploadGrant Grant);
 public sealed record PendingReplacement(Guid StoredObjectId, PresignedUploadGrant Grant);
 
-public sealed class FileService(BlueprintDbContext db, IObjectStore objectStore, IOptions<ObjectStorageOptions> options, TimeProvider timeProvider, IProjectNotificationService notifications) : IFileService
+public sealed class FileService(BlueprintDbContext db, IObjectStore objectStore, IOptions<ObjectStorageOptions> options, TimeProvider timeProvider, IProjectNotificationService notifications, IStorageQuotaService quotas) : IFileService
 {
     private readonly ObjectStorageOptions _options = options.Value;
 
@@ -29,7 +29,10 @@ public sealed class FileService(BlueprintDbContext db, IObjectStore objectStore,
         if (!await db.ProjectPhases.AnyAsync(phase => phase.Id == phaseId && phase.ProjectId == projectId, cancellationToken))
             throw new FileResourceNotFoundException("The phase was not found.");
 
-        var storedObject = NewPendingObject(projectId, fileName, contentType, length, actorId);
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        var quota = await quotas.LockCompanyForProjectAsync(projectId, cancellationToken);
+        if (quota.CurrentChargeBytes > quota.LimitBytes - length) throw new StorageQuotaExceededException();
+        var storedObject = NewPendingObject(projectId, fileName, contentType, length, length, actorId);
         var now = timeProvider.GetUtcNow();
         var document = new ProjectDocument
         {
@@ -45,18 +48,11 @@ public sealed class FileService(BlueprintDbContext db, IObjectStore objectStore,
         db.StoredObjects.Add(storedObject);
         db.ProjectDocuments.Add(document);
         await db.SaveChangesAsync(cancellationToken);
-        try
-        {
-            return new PendingUpload(document.Id, storedObject.Id,
-                await objectStore.CreateUploadGrantAsync(storedObject.ObjectKey, contentType, _options.UploadGrantLifetime, cancellationToken));
-        }
-        catch
-        {
-            db.ProjectDocuments.Remove(document);
-            db.StoredObjects.Remove(storedObject);
-            await db.SaveChangesAsync(cancellationToken);
-            throw;
-        }
+        await quotas.EvaluateWarningAsync(quota.CompanyId, actorId, cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+        var grant = await objectStore.CreateUploadGrantAsync(storedObject.ObjectKey, contentType, length, _options.UploadGrantLifetime, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return new PendingUpload(document.Id, storedObject.Id, grant);
     }
 
     public async Task<bool> CompleteUploadAsync(Guid documentId, long actorId, CancellationToken cancellationToken = default)
@@ -107,23 +103,22 @@ public sealed class FileService(BlueprintDbContext db, IObjectStore objectStore,
     public async Task<PendingReplacement> CreateReplacementUploadAsync(Guid documentId, string fileName, string contentType, long length, long actorId, CancellationToken cancellationToken = default)
     {
         ValidateUpload(fileName, contentType, length);
-        var projectId = await db.ProjectDocuments.Where(candidate => candidate.Id == documentId && !candidate.IsDeleted)
-            .Select(candidate => (long?)candidate.ProjectId).SingleOrDefaultAsync(cancellationToken)
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        var existing = await db.ProjectDocuments.AsNoTracking().Include(candidate => candidate.StoredObject)
+            .SingleOrDefaultAsync(candidate => candidate.Id == documentId && !candidate.IsDeleted, cancellationToken)
             ?? throw new FileResourceNotFoundException("Document not found.");
-        var storedObject = NewPendingObject(projectId, fileName, contentType, length, actorId);
+        var projectId = existing.ProjectId;
+        var quota = await quotas.LockCompanyForProjectAsync(projectId, cancellationToken);
+        var reservation = Math.Max(0, length - (existing.StoredObject!.VerifiedLength ?? existing.StoredObject.ExpectedLength));
+        if (quota.CurrentChargeBytes > quota.LimitBytes - reservation) throw new StorageQuotaExceededException();
+        var storedObject = NewPendingObject(projectId, fileName, contentType, length, reservation, actorId);
         db.StoredObjects.Add(storedObject);
         await db.SaveChangesAsync(cancellationToken);
-        try
-        {
-            return new PendingReplacement(storedObject.Id,
-                await objectStore.CreateUploadGrantAsync(storedObject.ObjectKey, contentType, _options.UploadGrantLifetime, cancellationToken));
-        }
-        catch
-        {
-            db.StoredObjects.Remove(storedObject);
-            await db.SaveChangesAsync(cancellationToken);
-            throw;
-        }
+        await quotas.EvaluateWarningAsync(quota.CompanyId, actorId, cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+        var grant = await objectStore.CreateUploadGrantAsync(storedObject.ObjectKey, contentType, length, _options.UploadGrantLifetime, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return new PendingReplacement(storedObject.Id, grant);
     }
 
     public async Task<bool> CompleteReplacementAsync(Guid documentId, Guid replacementObjectId, long actorId, CancellationToken cancellationToken = default)
@@ -139,6 +134,8 @@ public sealed class FileService(BlueprintDbContext db, IObjectStore objectStore,
             throw new FileConflictException("Replacement object is already in use.");
 
         await VerifyPendingObjectAsync(replacement, actorId, cancellationToken);
+        replacement.QuotaChargeBytes = replacement.VerifiedLength!.Value;
+        document.StoredObject!.QuotaChargeBytes = 0;
         QueueDeletion(document.StoredObject!, actorId);
         document.StoredObjectId = replacement.Id;
         Touch(document, actorId);
@@ -147,6 +144,9 @@ public sealed class FileService(BlueprintDbContext db, IObjectStore objectStore,
             $"substituiu o ficheiro por «{replacement.FileName}».", NotificationTargetKinds.Document,
             $"document-replaced:{document.Id}:{replacement.Id}", document.Id,
             Context: new { replacement.FileName, document.PhaseId }), cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+        var companyId = await db.Projects.Where(item => item.Id == document.ProjectId).Select(item => item.CompanyId).SingleAsync(cancellationToken);
+        await quotas.EvaluateWarningAsync(companyId, actorId, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return true;
@@ -175,7 +175,7 @@ public sealed class FileService(BlueprintDbContext db, IObjectStore objectStore,
         return true;
     }
 
-    private StoredObject NewPendingObject(long projectId, string fileName, string contentType, long length, long actorId)
+    private StoredObject NewPendingObject(long projectId, string fileName, string contentType, long length, long quotaChargeBytes, long actorId)
     {
         var id = Guid.NewGuid();
         var now = timeProvider.GetUtcNow();
@@ -187,6 +187,7 @@ public sealed class FileService(BlueprintDbContext db, IObjectStore objectStore,
             FileName = fileName.Trim(),
             ContentType = contentType.Trim(),
             ExpectedLength = length,
+            QuotaChargeBytes = quotaChargeBytes,
             Status = StoredObjectStatus.PendingUpload,
             UploadExpiresAt = now.Add(_options.PendingUploadLifetime),
             CreatedAt = now,

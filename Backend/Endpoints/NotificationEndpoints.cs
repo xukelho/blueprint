@@ -28,10 +28,11 @@ public static class NotificationEndpoints
         var query = db.UserNotifications.AsNoTracking().Where(item => item.RecipientUserId == userId);
         if (beforeId is long cursor) query = query.Where(item => item.Id < cursor);
         if (unreadOnly == true) query = query.Where(item => item.ReadAt == null);
-        if (projectId is long requestedProjectId) query = query.Where(item => item.ProjectEvent!.ProjectId == requestedProjectId);
+        if (projectId is long requestedProjectId) query = query.Where(item => item.ProjectEvent!.Scope == NotificationScopes.Project && item.ProjectEvent.ProjectId == requestedProjectId);
         var rows = await query.OrderByDescending(item => item.Id).Take(pageSize + 1)
             .Select(item => new NotificationResponse(
-                item.Id, item.ProjectEvent!.Type, item.ProjectEvent.ProjectId, item.ProjectEvent.ProjectTitle,
+                item.Id, item.ProjectEvent!.Type, item.ProjectEvent.Scope, item.ProjectEvent.CompanyId,
+                item.ProjectEvent.ProjectId, item.ProjectEvent.ProjectTitle,
                 item.ProjectEvent.ActorDisplayName, item.ProjectEvent.Summary, item.CreatedAt, item.ReadAt,
                 new NotificationTargetResponse(item.ProjectEvent.TargetKind, item.ProjectEvent.ProjectId,
                     item.ProjectEvent.DocumentId, item.ProjectEvent.ConversationId, item.ProjectEvent.MessageId)))
@@ -43,15 +44,15 @@ public static class NotificationEndpoints
     {
         if (!TryUserId(principal, out var userId)) return TypedResults.Unauthorized();
         var groupedUnreadCounts = await db.UserNotifications.AsNoTracking()
-            .Where(item => item.RecipientUserId == userId && item.ReadAt == null)
-            .GroupBy(item => item.ProjectEvent!.ProjectId)
+            .Where(item => item.RecipientUserId == userId && item.ReadAt == null && item.ProjectEvent!.Scope == NotificationScopes.Project)
+            .GroupBy(item => item.ProjectEvent!.ProjectId!.Value)
             .Select(group => new { ProjectId = group.Key, UnreadCount = group.Count() })
             .OrderBy(item => item.ProjectId)
             .ToArrayAsync(ct);
         var projectUnreadCounts = groupedUnreadCounts
             .Select(item => new ProjectUnreadCountResponse(item.ProjectId, item.UnreadCount))
             .ToArray();
-        var unread = projectUnreadCounts.Sum(item => item.UnreadCount);
+        var unread = await db.UserNotifications.AsNoTracking().CountAsync(item => item.RecipientUserId == userId && item.ReadAt == null, ct);
         var email = await db.Clients.AsNoTracking().Where(item => item.UserId == userId && item.User!.IsActive)
             .Select(item => item.Email).SingleOrDefaultAsync(ct);
         var invitations = email is null ? 0 : await db.ClientInvitations.CountAsync(item => item.Email == email && item.Company!.IsActive &&

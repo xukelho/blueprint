@@ -4,10 +4,12 @@ import {
   Check,
   ChevronRight,
   CreditCard,
+  HardDrive,
   Link2,
   Settings,
   Users,
 } from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   CompanyApiError,
   loadCurrentCompany,
@@ -16,6 +18,7 @@ import {
 } from "../api/company";
 import PortalShell from "../components/PortalShell";
 import MembersSettings from "../components/MembersSettings";
+import StorageSettings from "../components/StorageSettings";
 
 function PageHeader({
   eyebrow,
@@ -41,6 +44,7 @@ function PageHeader({
 const settingsNav = [
   { label: "Atelier", icon: Building2 },
   { label: "Membros e permissões", icon: Users },
+  { label: "Armazenamento", icon: HardDrive },
   { label: "Faturação e subscrição", icon: CreditCard },
   { label: "Integrações", icon: Link2 },
 ];
@@ -56,13 +60,20 @@ const emptyForm: UpdateCurrentCompany = {
 };
 
 export default function CompanySettingsPage() {
-  const [section, setSection] = useState("Atelier");
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [section, setSection] = useState(location.pathname.endsWith("/storage") ? "Armazenamento" : "Atelier");
   const [form, setForm] = useState(emptyForm);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (location.pathname.endsWith("/storage")) setSection("Armazenamento");
+    else setSection((current) => current === "Armazenamento" ? "Atelier" : current);
+  }, [location.pathname]);
 
   useEffect(() => {
     let active = true;
@@ -173,7 +184,7 @@ export default function CompanySettingsPage() {
                 className={section === item.label ? "is-active" : ""}
                 type="button"
                 key={item.label}
-                onClick={() => setSection(item.label)}
+                onClick={() => { setSection(item.label); navigate(item.label === "Armazenamento" ? "/settings/storage" : "/settings"); }}
               >
                 <Icon size={18} />
                 {item.label}
@@ -194,7 +205,7 @@ export default function CompanySettingsPage() {
               </p>
             </div>
           </div>
-          {section === settingsNav[1].label ? <MembersSettings /> : section === "Atelier" ? (
+          {section === "Armazenamento" ? <StorageSettings /> : section === settingsNav[1].label ? <MembersSettings /> : section === "Atelier" ? (
             isLoading ? (
               <div className="mock-settings-placeholder" role="status">
                 <Building2 size={28} />

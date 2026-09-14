@@ -10,6 +10,67 @@ public sealed class CompanyIntegrationTests(
     : IClassFixture<PostgreSqlApiFixture>
 {
     [Fact]
+    public async Task StorageQuotaIsOwnerOnlyAndReservesUploadsAtTheExactLimit()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        await LoginAdminAsync();
+        var companyId = await CreateCompanyAsync($"Storage {suffix}");
+        var username = $"storage.owner.{suffix}";
+        await CreateEmployeeAsync(username, companyId);
+        await LoginAsync(username);
+        using var nonOwnerUsage = await fixture.Client.GetAsync("/api/company/storage");
+        Assert.Equal(HttpStatusCode.NotFound, nonOwnerUsage.StatusCode);
+
+        await LoginAdminAsync();
+        await PromoteToOwnerAsync(username);
+        using var baseUpdate = await fixture.Client.PutAsJsonAsync("/api/admin/storage-settings", new { baseLimitBytes = 100_000_000L });
+        Assert.Equal(HttpStatusCode.OK, baseUpdate.StatusCode);
+
+        await LoginAsync(username);
+        using var projectResponse = await fixture.Client.PostAsJsonAsync("/api/projects/", new
+        {
+            title = "Storage project", code = $"ST-{suffix}", address = "Lisboa", googleMapsUrl = (string?)null,
+            clientIds = Array.Empty<long>(), employeeIds = Array.Empty<long>(), phaseCodes = new[] { "feasibility-studies" }, currentPhaseIndex = 0
+        });
+        Assert.Equal(HttpStatusCode.Created, projectResponse.StatusCode);
+        var project = await projectResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var projectId = project.GetProperty("id").GetInt64();
+        var phaseId = project.GetProperty("phases")[0].GetProperty("id").GetInt64();
+
+        using var exact = await fixture.Client.PostAsJsonAsync($"/api/projects/{projectId}/phases/{phaseId}/documents/uploads",
+            new { fileName = "exact.bin", contentType = "application/octet-stream", length = 100_000_000L });
+        Assert.Equal(HttpStatusCode.Created, exact.StatusCode);
+        using var exceeded = await fixture.Client.PostAsJsonAsync($"/api/projects/{projectId}/phases/{phaseId}/documents/uploads",
+            new { fileName = "over.bin", contentType = "application/octet-stream", length = 1L });
+        Assert.Equal(HttpStatusCode.Conflict, exceeded.StatusCode);
+        Assert.Equal("storage-quota-exceeded", (await exceeded.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString());
+
+        var usage = await fixture.Client.GetFromJsonAsync<JsonElement>("/api/company/storage");
+        Assert.Equal(100_000_000, usage.GetProperty("totalCapacityBytes").GetInt64());
+        Assert.Equal(0, usage.GetProperty("occupiedBytes").GetInt64());
+        Assert.Equal(100_000_000, usage.GetProperty("reservedBytes").GetInt64());
+        Assert.Equal(0, usage.GetProperty("availableBytes").GetInt64());
+
+        using var forbiddenAdmin = await fixture.Client.PutAsJsonAsync($"/api/admin/companies/{companyId}/storage", new { adminExtraBytes = 100_000_000L });
+        Assert.Equal(HttpStatusCode.Forbidden, forbiddenAdmin.StatusCode);
+
+        await LoginAdminAsync();
+        using var addCapacity = await fixture.Client.PutAsJsonAsync($"/api/admin/companies/{companyId}/storage", new { adminExtraBytes = 100_000_000L });
+        Assert.Equal(HttpStatusCode.OK, addCapacity.StatusCode);
+        await LoginAsync(username);
+        var concurrentUploads = await Task.WhenAll(
+            fixture.Client.PostAsJsonAsync($"/api/projects/{projectId}/phases/{phaseId}/documents/uploads",
+                new { fileName = "concurrent-a.bin", contentType = "application/octet-stream", length = 60_000_000L }),
+            fixture.Client.PostAsJsonAsync($"/api/projects/{projectId}/phases/{phaseId}/documents/uploads",
+                new { fileName = "concurrent-b.bin", contentType = "application/octet-stream", length = 60_000_000L }));
+        Assert.Equal([HttpStatusCode.Created, HttpStatusCode.Conflict], concurrentUploads.Select(item => item.StatusCode).Order().ToArray());
+        foreach (var response in concurrentUploads) response.Dispose();
+        usage = await fixture.Client.GetFromJsonAsync<JsonElement>("/api/company/storage");
+        Assert.Equal(160_000_000, usage.GetProperty("reservedBytes").GetInt64());
+        Assert.Equal(40_000_000, usage.GetProperty("availableBytes").GetInt64());
+    }
+
+    [Fact]
     public async Task CompanyRequiresAnAuthenticatedEmployee()
     {
         using var anonymous = new HttpClient { BaseAddress = fixture.Client.BaseAddress };
@@ -120,6 +181,12 @@ public sealed class CompanyIntegrationTests(
         using var login = await fixture.Client.PostAsJsonAsync(
             "/api/auth/login",
             new { username, password = "secret" });
+        Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+    }
+
+    private async Task LoginAdminAsync()
+    {
+        using var login = await fixture.Client.PostAsJsonAsync("/api/auth/login", new { username = "admin", password = "admin" });
         Assert.Equal(HttpStatusCode.OK, login.StatusCode);
     }
 

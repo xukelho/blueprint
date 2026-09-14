@@ -642,6 +642,7 @@ describe("mockup navigation", () => {
     ["/clients/marta-silva", "Marta Silva"],
     ["/administration", "Administração"],
     ["/settings", "Definições"],
+    ["/settings/storage", "Definições"],
     ["/notifications", "Notificações"],
     ["/help", "Como podemos ajudar?"],
     ["/profile", "Perfil de colaboradora"],
@@ -654,13 +655,15 @@ describe("mockup navigation", () => {
       sessionStorage.setItem("blueprint.auth.roles", JSON.stringify(["employee", "architect"]));
       mockProfile("employee", true);
     }
-    if (path === "/settings") {
+    if (path.startsWith("/settings")) {
       sessionStorage.setItem("blueprint.auth.roles", JSON.stringify(["employee"]));
       vi.spyOn(globalThis, "fetch").mockImplementation(async (input) =>
         new Response(JSON.stringify(
           String(input) === "/api/company"
             ? companyResponse
-            : { ...profileResponse("employee"), companyRole: "owner" },
+            : String(input) === "/api/company/storage"
+              ? { baseLimitBytes: 5_000_000_000, adminExtraBytes: 0, purchasedExtraBytes: 0, totalCapacityBytes: 5_000_000_000, occupiedBytes: 0, reservedBytes: 0, availableBytes: 5_000_000_000, usagePercent: 0, isOverCapacity: false, projects: [] }
+              : { ...profileResponse("employee"), companyRole: "owner" },
         ), {
           status: 200,
           headers: { "Content-Type": "application/json" },

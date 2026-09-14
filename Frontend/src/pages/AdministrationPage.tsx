@@ -22,6 +22,7 @@ import {
   type UserFormValue,
 } from "../components/administration/AdminForms";
 import PortalShell from "../components/PortalShell";
+import AdminStoragePanel from "../components/administration/AdminStoragePanel";
 
 type TabId = "users" | "employees" | "clients" | "companies";
 type Entity = UserResponse | EmployeeResponse | ClientResponse | CompanyResponse;
@@ -416,6 +417,7 @@ export default function AdministrationPage() {
                       {activeTab === "employees" && <EmployeeForm value={profileForm} errors={fieldErrors} creating={creating} employee={selectedEmployee} user={linkedUser} companies={data.companies} onChange={updateProfile} />}
                       {activeTab === "clients" && <ClientForm value={profileForm} errors={fieldErrors} creating={creating} client={selectedClient} user={linkedUser} companies={data.companies} onChange={updateProfile} />}
                       {activeTab === "companies" && <CompanyForm value={companyForm} errors={fieldErrors} disabled={readOnly} company={creating ? null : selectedCompany} onChange={updateCompany} />}
+                      {activeTab === "companies" && !creating && selectedCompany && <AdminStoragePanel companyId={selectedCompany.id} disabled={readOnly} />}
                     </div>
                     <footer className="admin-form__footer">
                       {!creating && !readOnly && (

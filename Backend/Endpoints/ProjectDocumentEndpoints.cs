@@ -396,6 +396,8 @@ public static class ProjectDocumentEndpoints
         }
         catch (FileConflictException exception)
         {
+            if (exception is StorageQuotaExceededException)
+                return TypedResults.Conflict(new StorageQuotaExceededResponse("storage-quota-exceeded", exception.Message));
             return TypedResults.Conflict(new AdministrationErrorResponse(exception.Message));
         }
         catch (ObjectStoreException exception)

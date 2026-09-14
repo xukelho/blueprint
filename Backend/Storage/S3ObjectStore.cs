@@ -13,12 +13,12 @@ public sealed class S3ObjectStore(IAmazonS3 client, IAmazonS3 grantClient, IOpti
     public S3ObjectStore(IAmazonS3 client, IOptions<ObjectStorageOptions> options, TimeProvider timeProvider)
         : this(client, client, options, timeProvider) { }
 
-    public async Task<PresignedUploadGrant> CreateUploadGrantAsync(string key, string contentType, TimeSpan lifetime, CancellationToken cancellationToken = default)
+    public async Task<PresignedUploadGrant> CreateUploadGrantAsync(string key, string contentType, long length, TimeSpan lifetime, CancellationToken cancellationToken = default)
     {
         var expiresAt = timeProvider.GetUtcNow().Add(lifetime);
         try
         {
-            var url = await grantClient.GetPreSignedURLAsync(new GetPreSignedUrlRequest
+            var request = new GetPreSignedUrlRequest
             {
                 BucketName = _options.Bucket,
                 Key = key,
@@ -26,7 +26,9 @@ public sealed class S3ObjectStore(IAmazonS3 client, IAmazonS3 grantClient, IOpti
                 Protocol = PresignProtocol(),
                 Expires = expiresAt.UtcDateTime,
                 ContentType = contentType
-            });
+            };
+            request.Headers.ContentLength = length;
+            var url = await grantClient.GetPreSignedURLAsync(request);
             return new PresignedUploadGrant(new Uri(url), expiresAt, new Dictionary<string, string> { ["Content-Type"] = contentType });
         }
         catch (AmazonS3Exception exception)

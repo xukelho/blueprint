@@ -22,6 +22,7 @@ public sealed class FileServiceTests
         var pending = await service.CreatePendingUploadAsync(project.Id, first.Id, "drawing.pdf", "application/pdf", 12, 7);
         var stored = await db.StoredObjects.SingleAsync(candidate => candidate.Id == pending.StoredObjectId);
         Assert.Equal(StoredObjectStatus.PendingUpload, stored.Status);
+        Assert.Equal(12, stored.QuotaChargeBytes);
         Assert.DoesNotContain("drawing.pdf", stored.ObjectKey);
 
         store.Metadata[stored.ObjectKey] = new ObjectMetadata(12, "application/pdf", "etag-one", clock.GetUtcNow());
@@ -37,10 +38,13 @@ public sealed class FileServiceTests
         var replacement = await service.CreateReplacementUploadAsync(pending.DocumentId, "drawing-new.pdf", "application/pdf", 20, 8);
         var newObject = await db.StoredObjects.SingleAsync(candidate => candidate.Id == replacement.StoredObjectId);
         Assert.NotEqual(stored.ObjectKey, newObject.ObjectKey);
+        Assert.Equal(8, newObject.QuotaChargeBytes);
         store.Metadata[newObject.ObjectKey] = new ObjectMetadata(20, "application/pdf", "etag-two", clock.GetUtcNow());
         await service.CompleteReplacementAsync(pending.DocumentId, replacement.StoredObjectId, 8);
         await service.CompleteReplacementAsync(pending.DocumentId, replacement.StoredObjectId, 8);
         Assert.Equal(StoredObjectStatus.DeletionPending, stored.Status);
+        Assert.Equal(0, stored.QuotaChargeBytes);
+        Assert.Equal(20, newObject.QuotaChargeBytes);
         Assert.Equal(replacement.StoredObjectId, (await db.ProjectDocuments.FindAsync(pending.DocumentId))!.StoredObjectId);
 
         await service.DeleteAsync(pending.DocumentId, 9);
@@ -80,13 +84,14 @@ public sealed class FileServiceTests
         await service.CompleteUploadAsync(pending.DocumentId, 1);
         await service.DeleteAsync(pending.DocumentId, 1);
 
-        var processor = new FileMaintenanceProcessor(db, store, clock, NullLogger<FileMaintenanceProcessor>.Instance);
+        var processor = new FileMaintenanceProcessor(db, store, clock, new NoopQuotaService(), NullLogger<FileMaintenanceProcessor>.Instance);
         await processor.ProcessBatchAsync();
         Assert.Equal(StoredObjectStatus.DeletionPending, stored.Status);
         Assert.Equal(1, stored.MaintenanceAttempts);
         clock.Advance(TimeSpan.FromMinutes(2));
         await processor.ProcessBatchAsync();
         Assert.Equal(StoredObjectStatus.Deleted, stored.Status);
+        Assert.Equal(0, stored.QuotaChargeBytes);
         Assert.Contains(stored.ObjectKey, store.DeletedKeys);
     }
 
@@ -102,9 +107,10 @@ public sealed class FileServiceTests
         var stored = await db.StoredObjects.FindAsync(pending.StoredObjectId);
         clock.Advance(TimeSpan.FromHours(2));
 
-        await new FileMaintenanceProcessor(db, store, clock, NullLogger<FileMaintenanceProcessor>.Instance).ProcessBatchAsync();
+        await new FileMaintenanceProcessor(db, store, clock, new NoopQuotaService(), NullLogger<FileMaintenanceProcessor>.Instance).ProcessBatchAsync();
 
         Assert.Equal(StoredObjectStatus.Deleted, stored!.Status);
+        Assert.Equal(0, stored.QuotaChargeBytes);
         Assert.True((await db.ProjectDocuments.FindAsync(pending.DocumentId))!.IsDeleted);
         Assert.Contains(stored.ObjectKey, store.DeletedKeys);
     }
@@ -168,7 +174,17 @@ public sealed class FileServiceTests
         {
             Endpoint = "http://storage.test", Region = "test", Bucket = "private", AccessKey = "a", SecretKey = "s",
             UploadGrantLifetime = TimeSpan.FromMinutes(15), DownloadGrantLifetime = TimeSpan.FromMinutes(5), PendingUploadLifetime = TimeSpan.FromHours(1)
-        }), clock, new NoopNotificationService());
+        }), clock, new NoopNotificationService(), new NoopQuotaService());
+
+    private sealed class NoopQuotaService : IStorageQuotaService
+    {
+        public Task<(long CompanyId, long CurrentChargeBytes, long LimitBytes)> LockCompanyForProjectAsync(long projectId, CancellationToken cancellationToken = default) =>
+            Task.FromResult((1L, 0L, long.MaxValue));
+        public Task<CompanyStorageUsage> GetUsageAsync(long companyId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new CompanyStorageUsage(companyId, long.MaxValue, 0, 0, 0, 0, []));
+        public Task EvaluateWarningAsync(long companyId, long actorUserId, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task ResetWarningAsync(long companyId, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    }
 
     private sealed class NoopNotificationService : IProjectNotificationService
     {
@@ -181,7 +197,7 @@ public sealed class FileServiceTests
         public Dictionary<string, ObjectMetadata> Metadata { get; } = [];
         public List<string> DeletedKeys { get; } = [];
         public int DeleteFailuresRemaining { get; set; }
-        public Task<PresignedUploadGrant> CreateUploadGrantAsync(string key, string contentType, TimeSpan lifetime, CancellationToken cancellationToken = default) =>
+        public Task<PresignedUploadGrant> CreateUploadGrantAsync(string key, string contentType, long length, TimeSpan lifetime, CancellationToken cancellationToken = default) =>
             Task.FromResult(new PresignedUploadGrant(new Uri($"https://storage.test/{key}"), clock.GetUtcNow().Add(lifetime), new Dictionary<string, string> { ["Content-Type"] = contentType }));
         public Task<ObjectMetadata?> GetMetadataAsync(string key, CancellationToken cancellationToken = default) => Task.FromResult(Metadata.GetValueOrDefault(key));
         public Task<PresignedDownloadGrant> CreateDownloadGrantAsync(string key, string downloadFileName, TimeSpan lifetime, CancellationToken cancellationToken = default) =>

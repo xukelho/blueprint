@@ -3,7 +3,9 @@ namespace Blueprint.Api.Data;
 public sealed class ProjectEvent
 {
     public long Id { get; set; }
-    public long ProjectId { get; set; }
+    public long CompanyId { get; set; }
+    public long? ProjectId { get; set; }
+    public required string Scope { get; set; }
     public long ActorUserId { get; set; }
     public required string ActorDisplayName { get; set; }
     public required string ProjectTitle { get; set; }
@@ -18,6 +20,7 @@ public sealed class ProjectEvent
     public required string DeduplicationKey { get; set; }
     public DateTimeOffset OccurredAt { get; set; }
     public Project? Project { get; set; }
+    public Company? Company { get; set; }
     public ICollection<UserNotification> Notifications { get; set; } = [];
 }
 
@@ -46,6 +49,13 @@ public static class ProjectEventTypes
     public const string GlobalMessageCreated = "project.global_message_created";
     public const string PartConversationCreated = "project.part_conversation_created";
     public const string PartMessageCreated = "project.part_message_created";
+    public const string StorageWarning = "company.storage_warning";
+}
+
+public static class NotificationScopes
+{
+    public const string Project = "project";
+    public const string Company = "company";
 }
 
 public static class NotificationTargetKinds
@@ -55,4 +65,5 @@ public static class NotificationTargetKinds
     public const string Document = "document";
     public const string GlobalMessage = "globalMessage";
     public const string PartConversation = "partConversation";
+    public const string CompanyStorage = "companyStorage";
 }

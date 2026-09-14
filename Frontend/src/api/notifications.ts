@@ -1,6 +1,6 @@
 export type NotificationTarget = {
-  kind: "project" | "timeline" | "document" | "globalMessage" | "partConversation";
-  projectId: number;
+  kind: "project" | "timeline" | "document" | "globalMessage" | "partConversation" | "companyStorage";
+  projectId: number | null;
   documentId: string | null;
   conversationId: number | null;
   messageId: number | null;
@@ -9,8 +9,11 @@ export type NotificationTarget = {
 export type ProjectNotification = {
   id: number;
   type: string;
-  projectId: number;
-  projectTitle: string;
+  scope?: "project" | "company";
+  companyId?: number;
+  projectId: number | null;
+  subjectTitle?: string;
+  projectTitle?: string;
   actorDisplayName: string;
   summary: string;
   createdAt: string;
