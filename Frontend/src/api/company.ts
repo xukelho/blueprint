@@ -24,6 +24,13 @@ export type UpdateCurrentCompany = {
   website: string;
 };
 
+export type ProjectStorageUsage = { projectId: number; title: string; code: string; isArchived: boolean; occupiedBytes: number; reservedBytes: number; totalBytes: number };
+export type CompanyStorageUsage = {
+  baseLimitBytes: number; adminExtraBytes: number; purchasedExtraBytes: number; totalCapacityBytes: number;
+  occupiedBytes: number; reservedBytes: number; availableBytes: number; usagePercent: number; isOverCapacity: boolean;
+  projects: ProjectStorageUsage[];
+};
+
 export class CompanyApiError extends Error {
   constructor(
     message: string,
@@ -60,6 +67,12 @@ async function companyRequest<T>(init?: RequestInit): Promise<T> {
   return body as T;
 }
 
+async function companyPathRequest<T>(path: string): Promise<T> {
+  const response = await fetch(path);
+  if (!response.ok) throw new CompanyApiError("Não foi possível carregar o armazenamento do atelier.", response.status);
+  return response.json() as Promise<T>;
+}
+
 export function loadCurrentCompany() {
   return companyRequest<CompanyResponse>();
 }
@@ -71,3 +84,5 @@ export function saveCurrentCompany(payload: UpdateCurrentCompany) {
     body: JSON.stringify(payload),
   });
 }
+
+export const loadCompanyStorage = () => companyPathRequest<CompanyStorageUsage>("/api/company/storage");

@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Blueprint.Api.Services;
 
-public sealed class FileMaintenanceProcessor(BlueprintDbContext db, IObjectStore objectStore, TimeProvider timeProvider, ILogger<FileMaintenanceProcessor> logger)
+public sealed class FileMaintenanceProcessor(BlueprintDbContext db, IObjectStore objectStore, TimeProvider timeProvider, IStorageQuotaService quotas, ILogger<FileMaintenanceProcessor> logger)
 {
     public async Task<int> ProcessBatchAsync(int batchSize = 50, CancellationToken cancellationToken = default)
     {
@@ -31,6 +31,7 @@ public sealed class FileMaintenanceProcessor(BlueprintDbContext db, IObjectStore
         var candidates = await db.StoredObjects
             .Where(candidate => candidate.Status == StoredObjectStatus.DeletionPending && (candidate.RetryAfter == null || candidate.RetryAfter <= now))
             .OrderBy(candidate => candidate.DeletionRequestedAt).Take(batchSize).ToListAsync(cancellationToken);
+        var changedCompanyIds = new HashSet<long>();
         foreach (var storedObject in candidates)
         {
             try
@@ -38,9 +39,11 @@ public sealed class FileMaintenanceProcessor(BlueprintDbContext db, IObjectStore
                 await objectStore.DeleteAsync(storedObject.ObjectKey, cancellationToken);
                 await objectStore.DeleteAsync(DrawingPreviewService.ArtifactKey(storedObject), cancellationToken);
                 storedObject.Status = StoredObjectStatus.Deleted;
+                storedObject.QuotaChargeBytes = 0;
                 storedObject.DeletedAt = timeProvider.GetUtcNow();
                 storedObject.RetryAfter = null;
                 storedObject.LastStorageError = null;
+                changedCompanyIds.Add(await db.Projects.Where(item => item.Id == storedObject.ProjectId).Select(item => item.CompanyId).SingleAsync(cancellationToken));
             }
             catch (ObjectStoreException exception)
             {
@@ -53,6 +56,8 @@ public sealed class FileMaintenanceProcessor(BlueprintDbContext db, IObjectStore
             storedObject.UpdatedBy = AuditActors.System;
             await db.SaveChangesAsync(cancellationToken);
         }
+        foreach (var companyId in changedCompanyIds) await quotas.ResetWarningAsync(companyId, cancellationToken);
+        if (changedCompanyIds.Count > 0) await db.SaveChangesAsync(cancellationToken);
         return expired.Count + candidates.Count;
     }
 

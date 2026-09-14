@@ -24,7 +24,7 @@ public sealed class S3ObjectStoreTests
         using var grantClient = CreateClient(options, options.PublicEndpoint);
         var store = new S3ObjectStore(internalClient, grantClient, Options.Create(options), TimeProvider.System);
 
-        var upload = await store.CreateUploadGrantAsync("projects/1/objects/test", "image/png", TimeSpan.FromMinutes(2));
+        var upload = await store.CreateUploadGrantAsync("projects/1/objects/test", "image/png", 123, TimeSpan.FromMinutes(2));
         var download = await store.CreateDownloadGrantAsync("projects/1/objects/test", "test.png", TimeSpan.FromMinutes(2));
 
         Assert.Equal("localhost", upload.Url.Host);

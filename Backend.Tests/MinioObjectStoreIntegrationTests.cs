@@ -29,7 +29,7 @@ public sealed class MinioObjectStoreIntegrationTests
         var bytes = "blueprint-minio-integration"u8.ToArray();
         using var http = new HttpClient();
 
-        var upload = await store.CreateUploadGrantAsync(key, "text/plain", TimeSpan.FromMinutes(2));
+        var upload = await store.CreateUploadGrantAsync(key, "text/plain", bytes.Length, TimeSpan.FromMinutes(2));
         using var uploadContent = new ByteArrayContent(bytes);
         uploadContent.Headers.ContentType = new MediaTypeHeaderValue("text/plain");
         using var uploaded = await http.PutAsync(upload.Url, uploadContent);

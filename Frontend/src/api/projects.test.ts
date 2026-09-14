@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createProjectDocumentDownload, getProjectMessages, sendProjectMessage, uploadProjectDocument } from "./projects";
+import { ClientManagementApiError, createProjectDocumentDownload, createProjectDocumentUpload, getProjectMessages, sendProjectMessage, uploadProjectDocument } from "./projects";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -35,6 +35,23 @@ describe("project document API", () => {
       headers: { "Content-Type": "application/octet-stream", "X-Required": "yes" },
       body: file,
     }));
+  });
+
+  it("shows the generic company storage message when quota reservation is rejected", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      code: "storage-quota-exceeded",
+      error: "The company storage limit has been reached.",
+    }), { status: 409, headers: { "Content-Type": "application/json" } }));
+
+    const file = new File(["abc"], "drawing.pdf", { type: "application/pdf" });
+    const error = await createProjectDocumentUpload("1", "12", file).catch((caught) => caught);
+
+    expect(error).toBeInstanceOf(ClientManagementApiError);
+    expect(error).toMatchObject({
+      status: 409,
+      code: "storage-quota-exceeded",
+      message: "O limite de armazenamento do atelier foi atingido. Contacte o proprietário do atelier.",
+    });
   });
 });
 

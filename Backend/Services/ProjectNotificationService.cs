@@ -44,7 +44,7 @@ public sealed class ProjectNotificationService(BlueprintDbContext db, TimeProvid
             return false;
 
         var project = await db.Projects.AsNoTracking().Where(item => item.Id == command.ProjectId)
-            .Select(item => new { item.Id, item.Title }).SingleAsync(cancellationToken);
+            .Select(item => new { item.Id, item.CompanyId, item.Title }).SingleAsync(cancellationToken);
         var actor = await db.Users.AsNoTracking().Where(item => item.Id == command.ActorUserId)
             .Select(item => item.Employee != null ? item.Employee.DisplayName : item.Client != null ? item.Client.DisplayName : item.Username)
             .SingleAsync(cancellationToken);
@@ -63,7 +63,9 @@ public sealed class ProjectNotificationService(BlueprintDbContext db, TimeProvid
         var now = timeProvider.GetUtcNow();
         var projectEvent = new ProjectEvent
         {
+            CompanyId = project.CompanyId,
             ProjectId = project.Id,
+            Scope = NotificationScopes.Project,
             ActorUserId = command.ActorUserId,
             ActorDisplayName = actor,
             ProjectTitle = project.Title,

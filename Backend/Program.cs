@@ -29,6 +29,7 @@ builder.Services.AddScoped<DrawingPreviewService>();
 builder.Services.AddScoped<ProjectPhaseService>();
 builder.Services.AddScoped<PhaseRemovalService>();
 builder.Services.AddScoped<IProjectNotificationService, ProjectNotificationService>();
+builder.Services.AddScoped<IStorageQuotaService, StorageQuotaService>();
 builder.Services.AddScoped<FileMaintenanceProcessor>();
 builder.Services.AddHostedService<ClientInvitationExpiryService>();
 builder.Services.AddHostedService<FileMaintenanceService>();
@@ -78,6 +79,7 @@ app.MapProjectDocumentEndpoints();
 app.MapClientManagementEndpoints();
 app.MapClientInvitationEndpoints();
 app.MapNotificationEndpoints();
+app.MapStorageEndpoints();
 
 app.Run();
 

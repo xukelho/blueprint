@@ -17,6 +17,7 @@ public sealed class StoredObject
     public required string ContentType { get; set; }
     public long ExpectedLength { get; set; }
     public long? VerifiedLength { get; set; }
+    public long QuotaChargeBytes { get; set; }
     public string? ETag { get; set; }
     public StoredObjectStatus Status { get; set; }
     public DateTimeOffset UploadExpiresAt { get; set; }

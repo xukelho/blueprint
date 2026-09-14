@@ -88,6 +88,7 @@ function App() {
               element={<AdministrationRoute />}
             />
             <Route path="/settings" element={<CompanySettingsRoute />} />
+            <Route path="/settings/storage" element={<CompanySettingsRoute />} />
             <Route path="/notifications" element={<NotificationsRoute />} />
             <Route path="/help" element={<HelpPage />} />
             <Route path="/profile" element={<ProfileRoute />} />

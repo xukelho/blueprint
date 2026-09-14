@@ -71,8 +71,8 @@ export function NotificationsPage() {
       </article>)}</div>
     </section>}
     <section className="notifications-section" aria-labelledby="notification-activity-title">
-      <div className="notifications-toolbar"><h2 id="notification-activity-title">Atividade dos projetos</h2><div role="group" aria-label="Filtrar notificações"><button type="button" className={!unreadOnly ? "is-active" : ""} onClick={() => setUnreadOnly(false)}>Todas</button><button type="button" className={unreadOnly ? "is-active" : ""} onClick={() => setUnreadOnly(true)}>Não lidas</button></div></div>
-      <NotificationList items={notifications.items} loading={notifications.loading || invitationsLoading} emptyText={unreadOnly ? "Não tem notificações por ler." : "Ainda não existem notificações de projetos."} onRead={notifications.read} />
+      <div className="notifications-toolbar"><h2 id="notification-activity-title">Atividade</h2><div role="group" aria-label="Filtrar notificações"><button type="button" className={!unreadOnly ? "is-active" : ""} onClick={() => setUnreadOnly(false)}>Todas</button><button type="button" className={unreadOnly ? "is-active" : ""} onClick={() => setUnreadOnly(true)}>Não lidas</button></div></div>
+      <NotificationList items={notifications.items} loading={notifications.loading || invitationsLoading} emptyText={unreadOnly ? "Não tem notificações por ler." : "Ainda não existem notificações."} onRead={notifications.read} />
       {notifications.hasMore && <button className="secondary-action notifications-more" type="button" disabled={notifications.loadingMore} onClick={() => void notifications.loadMore()}>{notifications.loadingMore ? "A carregar…" : "Carregar mais"}</button>}
     </section>
   </PortalShell>;

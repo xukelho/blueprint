@@ -46,6 +46,8 @@ public sealed class ProjectClientMigrationIntegrationTests
             var assignedProjectId = await InsertProject(connection, companyId, clientId, "MIGRATION-ASSIGNED");
             var unassignedProjectId = await InsertProject(connection, companyId, null, "MIGRATION-UNASSIGNED");
 
+            await migrator.MigrateAsync("20260911130000_AddProjectNotifications");
+            await InsertPreQuotaData(connection, assignedProjectId, userId);
             await migrator.MigrateAsync();
 
             await using var assertion = connection.CreateCommand();
@@ -62,16 +64,39 @@ public sealed class ProjectClientMigrationIntegrationTests
                     NOT EXISTS (
                         SELECT 1 FROM project_clients
                         WHERE project_id = @unassignedProjectId
+                    ),
+                    (SELECT base_limit_bytes = 5000000000 FROM storage_configuration WHERE id = 1),
+                    EXISTS (
+                        SELECT 1 FROM company_storage_allocations
+                        WHERE company_id = @companyId AND admin_extra_bytes = 0 AND purchased_extra_bytes = 0
+                    ),
+                    EXISTS (SELECT 1 FROM stored_objects WHERE object_key = 'migration/available' AND quota_charge_bytes = 42),
+                    EXISTS (SELECT 1 FROM stored_objects WHERE object_key = 'migration/pending' AND quota_charge_bytes = 30),
+                    EXISTS (SELECT 1 FROM stored_objects WHERE object_key = 'migration/deleted' AND quota_charge_bytes = 0),
+                    EXISTS (
+                        SELECT 1 FROM project_events event
+                        JOIN user_notifications notification ON notification.project_event_id = event.id
+                        WHERE event.deduplication_key = 'migration-notification'
+                          AND event.company_id = @companyId AND event.scope = 'project'
+                          AND notification.recipient_user_id = @userId AND notification.read_at IS NOT NULL
                     );
                 """;
             assertion.Parameters.AddWithValue("assignedProjectId", assignedProjectId);
             assertion.Parameters.AddWithValue("clientId", clientId);
             assertion.Parameters.AddWithValue("unassignedProjectId", unassignedProjectId);
+            assertion.Parameters.AddWithValue("companyId", companyId);
+            assertion.Parameters.AddWithValue("userId", userId);
             await using var reader = await assertion.ExecuteReaderAsync();
             Assert.True(await reader.ReadAsync());
             Assert.True(reader.GetBoolean(0));
             Assert.True(reader.GetBoolean(1));
             Assert.True(reader.GetBoolean(2));
+            Assert.True(reader.GetBoolean(3));
+            Assert.True(reader.GetBoolean(4));
+            Assert.True(reader.GetBoolean(5));
+            Assert.True(reader.GetBoolean(6));
+            Assert.True(reader.GetBoolean(7));
+            Assert.True(reader.GetBoolean(8));
         }
         finally
         {
@@ -139,5 +164,37 @@ public sealed class ProjectClientMigrationIntegrationTests
         command.Parameters.AddWithValue("clientId", clientId is null ? DBNull.Value : clientId.Value);
         command.Parameters.AddWithValue("code", code);
         return (long)(await command.ExecuteScalarAsync())!;
+    }
+
+    private static async Task InsertPreQuotaData(NpgsqlConnection connection, long projectId, long userId)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO stored_objects
+                (id, project_id, object_key, file_name, content_type, expected_length, verified_length, status,
+                 upload_expires_at, created_at, created_by, updated_at, updated_by)
+            VALUES
+                (@availableId, @projectId, 'migration/available', 'available.bin', 'application/octet-stream', 40, 42, 'Available', now(), now(), @userId, now(), @userId),
+                (@pendingId, @projectId, 'migration/pending', 'pending.bin', 'application/octet-stream', 30, NULL, 'PendingUpload', now(), now(), @userId, now(), @userId),
+                (@deletedId, @projectId, 'migration/deleted', 'deleted.bin', 'application/octet-stream', 20, 20, 'Deleted', now(), now(), @userId, now(), @userId);
+
+            WITH inserted_event AS (
+                INSERT INTO project_events
+                    (project_id, actor_user_id, actor_display_name, project_title, type, summary, template_version,
+                     target_kind, context_json, deduplication_key, occurred_at)
+                VALUES
+                    (@projectId, @userId, 'Migration client', 'Migration project', 'project.created', 'created a project', 1,
+                     'project', '{}'::jsonb, 'migration-notification', now())
+                RETURNING id
+            )
+            INSERT INTO user_notifications (project_event_id, recipient_user_id, created_at, read_at)
+            SELECT id, @userId, now(), now() FROM inserted_event;
+            """;
+        command.Parameters.AddWithValue("availableId", Guid.NewGuid());
+        command.Parameters.AddWithValue("pendingId", Guid.NewGuid());
+        command.Parameters.AddWithValue("deletedId", Guid.NewGuid());
+        command.Parameters.AddWithValue("projectId", projectId);
+        command.Parameters.AddWithValue("userId", userId);
+        await command.ExecuteNonQueryAsync();
     }
 }

@@ -2,7 +2,7 @@ namespace Blueprint.Api.Contracts;
 
 public sealed record NotificationTargetResponse(
     string Kind,
-    long ProjectId,
+    long? ProjectId,
     Guid? DocumentId,
     long? ConversationId,
     long? MessageId);
@@ -10,7 +10,9 @@ public sealed record NotificationTargetResponse(
 public sealed record NotificationResponse(
     long Id,
     string Type,
-    long ProjectId,
+    string Scope,
+    long CompanyId,
+    long? ProjectId,
     string ProjectTitle,
     string ActorDisplayName,
     string Summary,

@@ -6,6 +6,8 @@
 
 `ProjectDocument` is the project-owned logical document. It must reference exactly one project phase and one `StoredObject`. Moving a document changes only its phase. Replacing content creates a new `StoredObject`, switches the document atomically, and queues the old object for physical deletion. This release intentionally has no version history.
 
+Company storage is a shared quota across all of its projects. The effective limit is the global decimal-GB base plus non-negative administrative and purchased allowances. Stored objects carry an explicit quota charge: pending uploads reserve capacity, ordinary deletions release it only after physical deletion, and replacements reserve only their net increase while superseded bytes are treated as platform overhead.
+
 ## Lifecycle
 
 - Stored objects: `PendingUpload` -> `Available` -> `DeletionPending` -> `Deleted`.
@@ -20,6 +22,7 @@
 - Object keys are unique, server-generated, and provider-neutral.
 - Available object content is immutable. Replacement never overwrites a key.
 - Download grants are issued only for active documents backed by available objects.
+- Upload initiation serializes reservations per company and rejects growth beyond the effective company limit.
 - A phase may be removed only when empty, after an explicit move of all documents, or after explicit logical deletion of all documents.
 - Timeline reconciliation preserves phase identity by occurrence of phase code, so repeated phase codes remain supported and reordering does not recreate matched rows.
 

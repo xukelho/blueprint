@@ -38,7 +38,7 @@ export type ProjectPartConversation = { id: number; documentId: string; targetKe
 export type ProjectPartConversationMessage = { id: number; authorDisplayName: string; body: string; createdAt: string; isOwn: boolean };
 
 export class ClientManagementApiError extends Error {
-  constructor(message: string, public status: number, public fieldErrors: Record<string, string> = {}) {
+  constructor(message: string, public status: number, public fieldErrors: Record<string, string> = {}, public code?: string) {
     super(message);
   }
 }
@@ -53,31 +53,17 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
       key.charAt(0).toLocaleLowerCase() + key.slice(1),
       Array.isArray(messages) ? messages.join(" ") : String(messages),
     ]));
-    const message = typeof body?.error === "string"
+    const code = typeof body?.code === "string" ? body.code : undefined;
+    const message = code === "storage-quota-exceeded"
+      ? "O limite de armazenamento do atelier foi atingido. Contacte o proprietário do atelier."
+      : typeof body?.error === "string"
       ? body.error
       : response.status === 403
         ? "Apenas o proprietário da empresa pode convidar clientes."
         : response.status === 404
           ? "Não tens acesso a este recurso."
           : "Não foi possível concluir a operação.";
-    throw new ClientManagementApiError(message, response.status, fieldErrors);
-  }
-  if (!response.ok) {
-    const hasJson = response.headers.get("content-type")?.includes("application/json");
-    const body = hasJson ? await response.json() as Record<string, unknown> : null;
-    const problemErrors = body?.errors as Record<string, string[]> | undefined;
-    const fieldErrors = Object.fromEntries(Object.entries(problemErrors ?? {}).map(([key, messages]) => [
-      key.charAt(0).toLocaleLowerCase() + key.slice(1),
-      Array.isArray(messages) ? messages.join(" ") : String(messages),
-    ]));
-    const message = typeof body?.error === "string"
-      ? body.error
-      : response.status === 403
-        ? "Apenas o proprietário da empresa pode convidar clientes."
-        : response.status === 404
-          ? "Não tens acesso a este recurso."
-          : "Não foi possível concluir a operação.";
-    throw new ClientManagementApiError(message, response.status, fieldErrors);
+    throw new ClientManagementApiError(message, response.status, fieldErrors, code);
   }
   return response.status === 204 ? undefined as T : response.json() as Promise<T>;
 }

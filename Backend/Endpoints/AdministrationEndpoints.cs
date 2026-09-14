@@ -679,6 +679,14 @@ public static class AdministrationEndpoints
             UpdatedAt = now,
             UpdatedBy = AuditActors.System
         };
+        company.StorageAllocation = new CompanyStorageAllocation
+        {
+            AdminExtraBytes = 0,
+            PurchasedExtraBytes = 0,
+            WarningLevel = 0,
+            UpdatedAt = now,
+            UpdatedBy = AuditActors.System
+        };
         dbContext.Companies.Add(company);
         await dbContext.SaveChangesAsync(cancellationToken);
 
