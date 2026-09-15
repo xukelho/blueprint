@@ -11,6 +11,7 @@ import {
   loadCurrentProfile,
   ProfileApiError,
   saveCurrentProfile,
+  saveThemePreference,
   UpdateCurrentProfile,
 } from "../api/profile";
 import { getAuthenticatedRoles } from "../auth";
@@ -22,6 +23,9 @@ type ProfileContextValue = {
   fieldErrors: Record<string, string>;
   refresh: () => Promise<void>;
   updateProfile: (payload: UpdateCurrentProfile) => Promise<CurrentProfile>;
+  updateThemePreference: (
+    themePreference: UpdateCurrentProfile["themePreference"],
+  ) => Promise<CurrentProfile>;
 };
 
 const ProfileContext = createContext<ProfileContextValue | null>(null);
@@ -82,9 +86,37 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const updateThemePreference = useCallback(async (
+    themePreference: UpdateCurrentProfile["themePreference"],
+  ) => {
+    setError("");
+    setFieldErrors({});
+    try {
+      const updated = await saveThemePreference(themePreference);
+      setProfile(updated);
+      return updated;
+    } catch (caught) {
+      if (caught instanceof ProfileApiError) {
+        setError(caught.message);
+        setFieldErrors(caught.fieldErrors);
+      } else {
+        setError("NÃ£o foi possÃ­vel guardar o tema.");
+      }
+      throw caught;
+    }
+  }, []);
+
   return (
     <ProfileContext.Provider
-      value={{ profile, isLoading, error, fieldErrors, refresh, updateProfile }}
+      value={{
+        profile,
+        isLoading,
+        error,
+        fieldErrors,
+        refresh,
+        updateProfile,
+        updateThemePreference,
+      }}
     >
       {children}
     </ProfileContext.Provider>

@@ -52,8 +52,8 @@ export class ProfileApiError extends Error {
   }
 }
 
-async function profileRequest<T>(init?: RequestInit): Promise<T> {
-  const response = await fetch("/api/profile", init);
+async function profileRequest<T>(init?: RequestInit, path = "/api/profile"): Promise<T> {
+  const response = await fetch(path, init);
   const hasJson = response.headers.get("content-type")?.includes("application/json");
   const body = hasJson ? await response.json() as Record<string, unknown> : null;
   if (!response.ok) {
@@ -93,6 +93,15 @@ export async function saveCurrentProfile(payload: UpdateCurrentProfile) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
+  return normalizeThemePreference(profile);
+}
+
+export async function saveThemePreference(themePreference: ThemePreference) {
+  const profile = await profileRequest<CurrentProfile>({
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ themePreference }),
+  }, "/api/profile/theme");
   return normalizeThemePreference(profile);
 }
 
