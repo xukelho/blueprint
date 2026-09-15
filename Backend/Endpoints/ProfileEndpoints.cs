@@ -31,6 +31,13 @@ public static class ProfileEndpoints
             .Produces(StatusCodes.Status404NotFound)
             .Produces<AdministrationErrorResponse>(StatusCodes.Status409Conflict)
             .ProducesValidationProblem();
+        profile.MapPut("/theme", UpdateThemePreference)
+            .WithName("UpdateThemePreference")
+            .Accepts<UpdateThemePreferenceRequest>("application/json")
+            .Produces<CurrentProfileResponse>()
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status404NotFound)
+            .ProducesValidationProblem();
         profile.MapPut("/password", ChangePassword)
             .Accepts<ChangePasswordRequest>("application/json")
             .Produces(StatusCodes.Status204NoContent)
@@ -224,6 +231,35 @@ public static class ProfileEndpoints
             companies.FirstOrDefault(company => company.Id ==
                 employee?.CompanyEmployee?.CompanyId)?.Name,
             roles));
+    }
+
+    private static async Task<IResult> UpdateThemePreference(
+        UpdateThemePreferenceRequest? request,
+        ClaimsPrincipal principal,
+        BlueprintDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(principal, out var userId)) return TypedResults.Unauthorized();
+        if (!UserThemePreferences.IsValid(request?.ThemePreference))
+        {
+            return TypedResults.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["themePreference"] = ["Theme preference must be light, dark, or dynamic."]
+            });
+        }
+
+        var user = await ProfileQuery(dbContext)
+            .SingleOrDefaultAsync(candidate => candidate.Id == userId && candidate.IsActive, cancellationToken);
+        if (user?.Employee is null && user?.Client is null) return TypedResults.NotFound();
+
+        user.ThemePreference = request!.ThemePreference;
+        user.UpdatedAt = DateTimeOffset.UtcNow;
+        user.UpdatedBy = user.Id;
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        var companies = await LoadCompanyOptions(dbContext, cancellationToken);
+        var companyName = user.Employee?.CompanyEmployee?.Company?.Name;
+        return TypedResults.Ok(ToResponse(user, companies, companyName));
     }
 
     private static async Task<IResult> ChangePassword(

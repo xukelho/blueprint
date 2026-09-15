@@ -1,4 +1,4 @@
-import { FormEvent, ReactNode, useEffect, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useRef, useState } from "react";
 import {
   Check,
   ChevronRight,
@@ -122,12 +122,13 @@ export default function UserPage({
   simplifiedSecurity?: boolean;
   securityOnlyDeactivation?: boolean;
 }) {
-  const { profile, isLoading, error, fieldErrors, updateProfile } = useProfile();
+  const { profile, isLoading, error, fieldErrors, updateProfile, updateThemePreference } = useProfile();
   const { previewTheme, clearThemePreview } = useTheme();
   const [section, setSection] = useState("Dados pessoais");
   const [form, setForm] = useState<ProfileForm>(emptyForm);
   const [saved, setSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const themeRequest = useRef(0);
   const sections = [
     "Dados pessoais",
     "Contactos",
@@ -160,9 +161,19 @@ export default function UserPage({
     setForm((current) => ({ ...current, [field]: value }));
   };
 
-  const setThemePreference = (themePreference: ThemePreference) => {
+  const setThemePreference = async (themePreference: ThemePreference) => {
     setField("themePreference", themePreference);
     previewTheme(themePreference);
+    const request = ++themeRequest.current;
+    try {
+      await updateThemePreference(themePreference);
+      if (request === themeRequest.current) {
+        clearThemePreview();
+        setSaved(true);
+      }
+    } catch {
+      if (request === themeRequest.current) clearThemePreview();
+    }
   };
 
   const save = async (event: FormEvent<HTMLFormElement>) => {
@@ -427,7 +438,7 @@ export default function UserPage({
                           value={option.value}
                           aria-label={option.title}
                           checked={selected}
-                          onChange={() => setThemePreference(option.value)}
+                          onChange={() => void setThemePreference(option.value)}
                         />
                         <span className="theme-option__icon" aria-hidden="true"><Icon size={22} /></span>
                         <span className="theme-option__copy">

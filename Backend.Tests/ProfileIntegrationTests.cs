@@ -162,6 +162,16 @@ public sealed class ProfileIntegrationTests(
 
         var persisted = await fixture.Client.GetFromJsonAsync<JsonElement>("/api/profile");
         Assert.Equal("dynamic", persisted.GetProperty("themePreference").GetString());
+
+        using var themeUpdate = await fixture.Client.PutAsJsonAsync(
+            "/api/profile/theme",
+            new { themePreference = "dark" });
+        Assert.Equal(HttpStatusCode.OK, themeUpdate.StatusCode);
+        var themeUpdated = await themeUpdate.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("dark", themeUpdated.GetProperty("themePreference").GetString());
+
+        var persistedAfterThemeUpdate = await fixture.Client.GetFromJsonAsync<JsonElement>("/api/profile");
+        Assert.Equal("dark", persistedAfterThemeUpdate.GetProperty("themePreference").GetString());
     }
 
     private async Task LoginAsync(string username)

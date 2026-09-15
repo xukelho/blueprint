@@ -32,4 +32,6 @@ public sealed record UpdateCurrentProfileRequest(
     bool IsArchitect,
     string ThemePreference = "light");
 
+public sealed record UpdateThemePreferenceRequest(string ThemePreference);
+
 public sealed record ChangePasswordRequest(string CurrentPassword, string NewPassword);

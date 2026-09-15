@@ -83,7 +83,12 @@ describe("editable profile", () => {
     await user.click(screen.getByRole("radio", { name: "Escuro" }));
 
     expect(document.documentElement).toHaveAttribute("data-theme", "dark");
-    expect(sessionStorage.getItem("blueprint.theme.preference")).toBe("light");
+    await waitFor(() => expect(submitted).toEqual({ themePreference: "dark" }));
+    expect(sessionStorage.getItem("blueprint.theme.preference")).toBe("dark");
+    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
+      "/api/profile/theme",
+      expect.objectContaining({ method: "PUT" }),
+    );
     await user.click(screen.getByRole("button", { name: "Guardar alterações" }));
 
     expect(await screen.findByRole("button", { name: /Guardado/ })).toBeInTheDocument();
