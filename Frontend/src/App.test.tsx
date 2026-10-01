@@ -246,7 +246,7 @@ describe("login", () => {
   it("redirects an unauthenticated visit to the dashboard to sign-in", async () => {
     renderApp("/dashboard");
 
-    expect(await screen.findByText("Sign in to Blueprint")).toBeInTheDocument();
+    expect(await screen.findByText("Sign in to blueprint")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /Bom dia, Ana/ })).not.toBeInTheDocument();
   });
 
@@ -279,7 +279,7 @@ describe("login", () => {
 
     await user.click(screen.getByRole("button", { name: "Sign in" }));
 
-    await waitFor(() => expect(screen.queryByText("Sign in to Blueprint")).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText("Sign in to blueprint")).not.toBeInTheDocument());
     expect(await screen.findByRole("heading", { name: "Administração", level: 1 })).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith("/api/auth/login", {
       method: "POST",
@@ -392,7 +392,7 @@ describe("login", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "The username or password is incorrect.",
     );
-    expect(screen.getByText("Sign in to Blueprint")).toBeInTheDocument();
+    expect(screen.getByText("Sign in to blueprint")).toBeInTheDocument();
   });
 
   it("shows a network error when the API cannot be reached", async () => {
@@ -402,7 +402,7 @@ describe("login", () => {
     await user.click(screen.getByRole("button", { name: "Sign in" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "We couldn't reach Blueprint. Please try again.",
+      "We couldn't reach blueprint. Please try again.",
     );
   });
 });
@@ -558,7 +558,7 @@ describe("dashboard", () => {
 
     await user.click(screen.getByRole("button", { name: "Terminar sessão" }));
 
-    expect(await screen.findByText("Sign in to Blueprint")).toBeInTheDocument();
+    expect(await screen.findByText("Sign in to blueprint")).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith("/api/auth/logout", { method: "POST" });
     expect(sessionStorage.getItem("blueprint.auth.roles")).toBeNull();
     expect(sessionStorage.getItem("blueprint.auth.role")).toBeNull();
@@ -570,7 +570,7 @@ describe("dashboard", () => {
     expect(screen.getByRole("heading", { name: "Bom dia, Ana" })).toBeInTheDocument();
     clearAuthenticatedRoles();
 
-    expect(await screen.findByText("Sign in to Blueprint")).toBeInTheDocument();
+    expect(await screen.findByText("Sign in to blueprint")).toBeInTheDocument();
   });
 });
 
@@ -746,7 +746,7 @@ describe("mockup navigation", () => {
   it("does not route the removed company role to a company profile", () => {
     sessionStorage.setItem("blueprint.auth.roles", JSON.stringify(["company"]));
     renderApp("/profile");
-    expect(screen.getByText("Sign in to Blueprint")).toBeInTheDocument();
+    expect(screen.getByText("Sign in to blueprint")).toBeInTheDocument();
     expect(screen.queryByText("Perfil de empresa")).not.toBeInTheDocument();
   });
 

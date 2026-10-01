@@ -90,7 +90,7 @@ const themeOptions: Array<{
   {
     value: "light",
     title: "Claro",
-    description: "A aparência atual do Blueprint, luminosa e limpa.",
+    description: "A aparência atual do blueprint, luminosa e limpa.",
     icon: Sun,
   },
   {
@@ -302,7 +302,7 @@ export default function UserPage({
           <div className="mock-section-title">
             <div>
               <h2>{section}</h2>
-              <p>Informação associada à tua conta Blueprint.</p>
+              <p>Informação associada à tua conta blueprint.</p>
             </div>
           </div>
 
@@ -419,7 +419,7 @@ export default function UserPage({
               </div>
             ) : section === "Aparência" ? (
               <fieldset className="theme-picker">
-                <legend>Escolhe o tema do Blueprint</legend>
+                <legend>Escolhe o tema do blueprint</legend>
                 <p className="theme-picker__intro">
                   A preferência fica associada à tua conta e é aplicada em todos os dispositivos.
                 </p>

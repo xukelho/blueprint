@@ -69,15 +69,15 @@ button { cursor: pointer; }
   height: 38px;
   display: grid;
   place-items: center;
-  color: var(--forest-dark);
-  background: var(--mint);
+  background: #eff6ff;
   border-radius: 10px;
 }
 
-.brand__mark svg {
-  width: 25px;
-  height: 25px;
+.brand__mark img {
+  width: 34px;
+  height: 34px;
   display: block;
+  object-fit: contain;
 }
 
 .brand__name {
@@ -2815,15 +2815,15 @@ html[data-theme="dark"] .app-shell {
   flex: 0 0 36px;
   display: grid;
   place-items: center;
-  color: #fff;
-  background: #006d77;
+  background: #eff6ff;
   border-radius: 9px;
 }
 
-.sidebar-brand__mark svg {
-  width: 24px;
-  height: 24px;
+.sidebar-brand__mark img {
+  width: 32px;
+  height: 32px;
   display: block;
+  object-fit: contain;
 }
 
 .sidebar-brand__name {
@@ -3753,6 +3753,10 @@ html[data-theme="dark"] .app-shell :is(
   color: #0f181c;
   background: var(--theme-accent);
   border-color: var(--theme-accent);
+}
+
+html[data-theme="dark"] .app-shell .sidebar-brand__mark {
+  background: #eff6ff;
 }
 
 html[data-theme="dark"] .app-shell :is(

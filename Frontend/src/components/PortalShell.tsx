@@ -22,7 +22,7 @@ import {
   profileRoleLabel,
   useOptionalProfile,
 } from "../profile/ProfileContext";
-import { BlueprintLogoMark } from "./BlueprintLogoMark";
+import { BrandLogoMark } from "./BrandLogoMark";
 import { getNotificationSummary, NOTIFICATIONS_CHANGED_EVENT } from "../api/notifications";
 
 const primaryNav = [
@@ -121,9 +121,9 @@ export default function PortalShell({ children, wide = false }: PortalShellProps
 
       <aside className={`sidebar ${mobileNavOpen ? "sidebar--mobile-open" : ""}`}>
         <div className="sidebar__header">
-          <button className="sidebar-brand sidebar-brand--button" type="button" onClick={() => goTo("/dashboard")}>
+          <button className="sidebar-brand sidebar-brand--button" type="button" aria-label="blueprint dashboard" onClick={() => goTo("/dashboard")}>
             <span className="sidebar-brand__mark" aria-hidden="true">
-              <BlueprintLogoMark />
+              <BrandLogoMark />
             </span>
             <span className="sidebar-label sidebar-brand__name">blueprint</span>
           </button>
