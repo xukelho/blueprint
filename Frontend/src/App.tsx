@@ -8,7 +8,6 @@ import ClientPage from "./pages/ClientPage";
 import CompanySettingsPage from "./pages/CompanySettingsPage";
 import { getAuthenticatedRoles, isClient, isEmployee, isPlatformAdmin } from "./auth";
 import { ProfileProvider, useProfile } from "./profile/ProfileContext";
-import { HelpPage } from "./pages/MockupPages";
 import { CompanyClientPage, CompanyClientDetailPage } from "./pages/CompanyClientPage";
 import { CompanyProjectsPage } from "./pages/CompanyProjectsPage";
 import { CompanyProjectsCreatePage } from "./pages/CompanyProjectsCreatePage";
@@ -90,7 +89,6 @@ function App() {
             <Route path="/settings" element={<CompanySettingsRoute />} />
             <Route path="/settings/storage" element={<CompanySettingsRoute />} />
             <Route path="/notifications" element={<NotificationsRoute />} />
-            <Route path="/help" element={<HelpPage />} />
             <Route path="/profile" element={<ProfileRoute />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

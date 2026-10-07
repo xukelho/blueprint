@@ -1,4 +1,8 @@
 import { applyThemePreference, clearCachedThemePreference } from "./theme";
+import {
+  clearApplicationEnvironment,
+  setApplicationEnvironment,
+} from "./environment";
 
 export const PLATFORM_ADMIN_ROLE = "platform admin";
 export const EMPLOYEE_ROLE = "employee";
@@ -18,15 +22,17 @@ export function getAuthenticatedRoles(): string[] {
   }
 }
 
-export function setAuthenticatedRoles(roles: string[]) {
+export function setAuthenticatedRoles(roles: string[], environment?: unknown) {
   sessionStorage.setItem(AUTH_ROLES_KEY, JSON.stringify([...new Set(roles)]));
   sessionStorage.removeItem(LEGACY_AUTH_ROLE_KEY);
+  setApplicationEnvironment(environment);
   window.dispatchEvent(new Event("blueprint:auth-changed"));
 }
 
 export function clearAuthenticatedRoles() {
   sessionStorage.removeItem(AUTH_ROLES_KEY);
   sessionStorage.removeItem(LEGACY_AUTH_ROLE_KEY);
+  clearApplicationEnvironment();
   clearCachedThemePreference();
   applyThemePreference("light");
   window.dispatchEvent(new Event("blueprint:auth-changed"));

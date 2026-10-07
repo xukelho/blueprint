@@ -1,3 +1,12 @@
+name: racletty
+
+# The local default lives here. A pipeline can provide APPLICATION_ENVIRONMENT
+# (for example, "staging" or "production") and Compose will pass that value
+# to every service below when it creates the stack.
+x-application-environment: &application-environment
+  APPLICATION_ENVIRONMENT: "${APPLICATION_ENVIRONMENT:-development}"
+  ASPNETCORE_ENVIRONMENT: "${APPLICATION_ENVIRONMENT:-development}"
+
 services:
   blueprint-frontend:
     build:
@@ -9,6 +18,7 @@ services:
       - ./Frontend:/app
       - blueprint-frontend-node-modules:/app/node_modules
     environment:
+      <<: *application-environment
       WATCHPACK_POLLING: "true"
       VITE_API_PROXY_TARGET: "http://blueprint-api:1818"
       VITE_GOOGLE_MAPS_API_KEY: "${VITE_GOOGLE_MAPS_API_KEY:-}"
@@ -20,6 +30,7 @@ services:
     ports:
       - "1818:1818"
     environment:
+      <<: *application-environment
       ConnectionStrings__DefaultConnection: "Host=postgresdb;Port=7584;Database=blueprint;Username=blueprint;Password=blueprint_dev_password"
       ObjectStorage__Endpoint: "http://minio:9000"
       ObjectStorage__PublicEndpoint: "http://localhost:9000"
@@ -41,6 +52,7 @@ services:
       - "127.0.0.1:9000:9000"
       - "127.0.0.1:9001:9001"
     environment:
+      <<: *application-environment
       MINIO_ROOT_USER: blueprint_dev
       MINIO_ROOT_PASSWORD: blueprint_dev_password
     volumes:
@@ -57,6 +69,8 @@ services:
       minio:
         condition: service_healthy
     entrypoint: ["/bin/sh", "-c"]
+    environment:
+      <<: *application-environment
     command:
       - >-
         mc alias set local http://minio:9000 blueprint_dev blueprint_dev_password &&
@@ -72,6 +86,7 @@ services:
       # development database to the local network.
       - "127.0.0.1:5837:7584"
     environment:
+      <<: *application-environment
       POSTGRES_DB: blueprint
       POSTGRES_USER: blueprint
       POSTGRES_PASSWORD: blueprint_dev_password

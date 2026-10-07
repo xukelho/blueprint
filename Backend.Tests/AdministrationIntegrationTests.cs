@@ -29,6 +29,7 @@ public sealed class AdministrationIntegrationTests(
         Assert.Equal(HttpStatusCode.OK, login.StatusCode);
         var loginBody = await login.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal("success", loginBody.GetProperty("status").GetString());
+        Assert.Equal("testing", loginBody.GetProperty("environment").GetString());
         Assert.Equal(
             ["platform admin"],
             loginBody.GetProperty("roles")

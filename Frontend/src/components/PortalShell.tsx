@@ -4,7 +4,6 @@ import {
   Building2,
   ChevronLeft,
   ChevronRight,
-  CircleHelp,
   FolderKanban,
   LayoutDashboard,
   LogOut,
@@ -19,7 +18,6 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { clearAuthenticatedRoles, getAuthenticatedRoles, isEmployee, isPlatformAdmin } from "../auth";
 import {
   profileInitials,
-  profileRoleLabel,
   useOptionalProfile,
 } from "../profile/ProfileContext";
 import { BrandLogoMark } from "./BrandLogoMark";
@@ -34,8 +32,7 @@ const primaryNav = [
 ];
 
 const secondaryNav = [
-  { label: "Notificações", icon: Bell, path: "/notifications", mockStatus: undefined },
-  { label: "Ajuda e suporte", icon: CircleHelp, path: "/help", mockStatus: "mock" },
+  { label: "Notificações", icon: Bell, path: "/notifications" },
 ];
 
 type PortalShellProps = {
@@ -52,7 +49,6 @@ export default function PortalShell({ children, wide = false }: PortalShellProps
   const location = useLocation();
   const profile = useOptionalProfile()?.profile ?? null;
   const profileName = profile?.displayName ?? "Ana Martins";
-  const profileRole = profile ? profileRoleLabel(profile) : "Arquiteta";
   const profileCompany = profile?.companyName ?? "Forma Norte";
   const isClientProfile = profile?.profileType === "client";
   const isAdminProfile = isPlatformAdmin();
@@ -137,13 +133,15 @@ export default function PortalShell({ children, wide = false }: PortalShellProps
           </button>
         </div>
 
-        <div className="atelier-context">
-          <span className="atelier-context__icon" aria-hidden="true"><Building2 size={17} /></span>
-          <span className="sidebar-label">
-            <small>{isClientProfile ? "Empresas associadas" : "Atelier ativo"}</small>
-            <strong>{isClientProfile ? profile.availableCompanies.length : profileCompany}</strong>
-          </span>
-        </div>
+        {!isAdminProfile && (
+          <div className="atelier-context">
+            <span className="atelier-context__icon" aria-hidden="true"><Building2 size={17} /></span>
+            <span className="sidebar-label">
+              {isClientProfile && <small>Empresas associadas</small>}
+              <strong>{isClientProfile ? profile?.availableCompanies.length ?? 0 : profileCompany}</strong>
+            </span>
+          </div>
+        )}
 
         <nav className="sidebar__nav" aria-label="Navegação principal">
           <div className="nav-group">
@@ -156,17 +154,12 @@ export default function PortalShell({ children, wide = false }: PortalShellProps
                   type="button"
                   key={item.path}
                   aria-label={item.label}
-                  title={sidebarCollapsed && item.mockStatus ? `${item.label} — Mock` : sidebarCollapsed ? item.label : undefined}
+                  title={sidebarCollapsed ? item.label : undefined}
                   aria-current={active ? "page" : undefined}
                   onClick={() => goTo(item.path)}
                 >
                   <Icon size={19} strokeWidth={1.8} aria-hidden="true" />
                   <span className="sidebar-label">{item.label}</span>
-                  {item.mockStatus && (
-                    <span className={`nav-status nav-status--${item.mockStatus}`} aria-hidden="true">
-                      Mock
-                    </span>
-                  )}
                 </button>
               );
             })}
@@ -182,13 +175,12 @@ export default function PortalShell({ children, wide = false }: PortalShellProps
                   type="button"
                   key={item.path}
                   aria-label={item.label}
-                  title={sidebarCollapsed ? (item.mockStatus ? `${item.label} — Mock` : item.label) : undefined}
+                  title={sidebarCollapsed ? item.label : undefined}
                   aria-current={active ? "page" : undefined}
                   onClick={() => goTo(item.path)}
                 >
                   <Icon size={19} strokeWidth={1.8} aria-hidden="true" />
                   <span className="sidebar-label">{item.label}</span>
-                  {item.mockStatus && <span className="nav-status nav-status--mock" aria-hidden="true">Mock</span>}
                   {item.path === "/notifications" && notificationCount > 0 && <span className="nav-badge">{notificationCount > 99 ? "99+" : notificationCount}</span>}
                 </button>
               );
@@ -203,7 +195,6 @@ export default function PortalShell({ children, wide = false }: PortalShellProps
                 <span className="user-avatar">{profileInitials(profileName)}</span>
                 <span className="sidebar-label user-menu__copy">
                   <strong>{profileName}</strong>
-                  <small>{profileRole}</small>
                 </span>
                 <MoreHorizontal className="sidebar-label" size={18} aria-hidden="true" />
               </button>

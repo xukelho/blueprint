@@ -2222,6 +2222,9 @@ button.mock-client-project-card:disabled { cursor: wait; }
 
 .mock-settings-nav button:hover { background: #edf6f9; }
 .mock-settings-nav button.is-active { color: #005864; background: #e3f5fa; font-weight: 600; }
+.mock-settings-nav button.is-disabled,
+.mock-settings-nav button:disabled { cursor: not-allowed; color: #9a9ca0; background: #f4f5f5; opacity: .7; }
+.mock-settings-nav button:disabled:hover { background: #f4f5f5; }
 .mock-settings-nav button svg:last-child { margin-left: auto; }
 .mock-settings-nav button .nav-status + svg { margin-left: 0; }
 
@@ -2865,6 +2868,8 @@ html[data-theme="dark"] .app-shell {
 
 .atelier-context small { color: #92959a; font-size: 10px; line-height: 15px; }
 .atelier-context strong { overflow: hidden; color: #333538; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.atelier-context:not(:has(small)) { min-height: 48px; margin-top: 18px; margin-bottom: 18px; }
+.atelier-context:not(:has(small)) .sidebar-label { align-items: center; }
 
 .sidebar__nav {
   flex: 1;
@@ -2940,7 +2945,6 @@ html[data-theme="dark"] .app-shell {
 .user-avatar { width: 34px; height: 34px; flex: 0 0 34px; display: grid; place-items: center; color: #fff; background: #3f6e93; border-radius: 50%; font-size: 11px; font-weight: 700; }
 .user-menu__copy { min-width: 0; flex: 1; display: flex; flex-direction: column; }
 .user-menu__copy strong { overflow: hidden; color: #303236; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.user-menu__copy small { color: #92959a; font-size: 11px; }
 .logout-button { margin-top: 2px; }
 .logout-button:hover { color: #005864; background: #e3f5fa; }
 .logout-button:disabled { cursor: wait; opacity: .65; }
