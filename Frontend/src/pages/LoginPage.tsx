@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { setAuthenticatedRoles } from "../auth";
-import { BlueprintLogoMark } from "../components/BlueprintLogoMark";
+import { BrandLogoMark } from "../components/BrandLogoMark";
 
 type FieldErrors = {
   username?: string;
@@ -71,7 +71,7 @@ function LoginPage() {
         setMessage("We couldn't sign you in. Please try again.");
       }
     } catch {
-      setMessage("We couldn't reach Blueprint. Please try again.");
+      setMessage("We couldn't reach blueprint. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -100,11 +100,11 @@ function LoginPage() {
 
   return (
     <main className="login-page">
-      <section className="brand-panel" aria-label="About Blueprint">
+      <section className="brand-panel" aria-label="About blueprint">
         <div className="brand-panel__grid" aria-hidden="true" />
         <header className="brand">
           <span className="brand__mark" aria-hidden="true">
-            <BlueprintLogoMark />
+            <BrandLogoMark />
           </span>
           <span className="brand__name">blueprint</span>
         </header>
@@ -140,14 +140,14 @@ function LoginPage() {
 
         <footer className="brand-panel__footer">
           <span>One source of truth for every project.</span>
-          <span>© 2026 Blueprint</span>
+          <span>© 2026 blueprint</span>
         </footer>
       </section>
 
       <section className="form-panel">
         <div className="mobile-brand brand">
           <span className="brand__mark" aria-hidden="true">
-            <BlueprintLogoMark />
+            <BrandLogoMark />
           </span>
           <span className="brand__name">blueprint</span>
         </div>
@@ -155,7 +155,7 @@ function LoginPage() {
         <div className="login-card">
           <div className="login-card__heading">
             <p className="eyebrow">Welcome back</p>
-            <h2>Sign in to Blueprint</h2>
+            <h2>Sign in to blueprint</h2>
             <p>Continue to your projects and conversations.</p>
           </div>
 
@@ -257,7 +257,7 @@ function LoginPage() {
           )}
 
           <p className="support-copy">
-            New to Blueprint? <button className="text-button" type="button">Contact your practice administrator</button>
+            New to blueprint? <button className="text-button" type="button">Contact your practice administrator</button>
           </p>
         </div>
 
