@@ -222,6 +222,17 @@ describe("AdministrationPage", () => {
     })));
   });
 
+  it("marks NIF as required when creating a company", async () => {
+    installApiMock();
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole("tab", { name: /Empresas/ }));
+    await user.click(screen.getByRole("button", { name: "Criar empresa" }));
+
+    expect(screen.getByLabelText("NIF")).toBeRequired();
+  });
+
   it("edits and soft-deletes an active company", async () => {
     const fetchMock = installApiMock((path, method, init) => {
       if (path === "/api/admin/companies/10" && method === "PUT") {

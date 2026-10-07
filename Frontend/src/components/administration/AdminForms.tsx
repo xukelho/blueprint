@@ -292,7 +292,7 @@ export function CompanyForm({
           ] as const).map(([name, label]) => (
             <label key={name}>
               {label}
-              <input type={name === "email" ? "email" : "text"} value={value[name]} onChange={(event) => onChange(name, event.target.value)} aria-invalid={Boolean(errors[name])} />
+              <input type={name === "email" ? "email" : "text"} value={value[name]} onChange={(event) => onChange(name, event.target.value)} aria-invalid={Boolean(errors[name])} required={name === "nif"} />
               <ErrorText errors={errors} name={name} />
             </label>
           ))}
