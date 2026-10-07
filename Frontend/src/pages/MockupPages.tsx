@@ -7,21 +7,17 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
-  Clock3,
   CloudUpload,
   CreditCard,
   FileCheck2,
   FileText,
-  FolderOpen,
   GripVertical,
-  Headphones,
   Image,
   Mail,
   MapPin,
   MessageSquare,
   MoreHorizontal,
   Paperclip,
-  Phone,
   Plus,
   Search,
   SlidersHorizontal,
@@ -428,30 +424,6 @@ export function ClientPage() {
           <section className="mock-surface"><div className="mock-section-title"><div><h2>Atividade</h2></div></div><div className="mock-mini-activity"><p>Respondeu ao assunto #18<small>Ontem, 16:18</small></p><p>Consultou a revisão R07<small>Ontem, 15:52</small></p><p>Aprovou a revisão R05<small>30 jun., 10:14</small></p></div></section>
         </aside>
       </div>
-    </PortalShell>
-  );
-}
-
-const guides = [
-  { icon: FolderOpen, title: "Começar um projeto", text: "Cria um projeto, convida clientes e prepara a timeline." },
-  { icon: CloudUpload, title: "Publicar uma revisão", text: "Carrega, valida e publica um novo conjunto de ficheiros." },
-  { icon: MessageSquare, title: "Gerir assuntos", text: "Cria marcações e acompanha cada decisão até à resolução." },
-  { icon: FileCheck2, title: "Pedir uma aprovação", text: "Envia um pedido claro e consulta o histórico da decisão." },
-];
-
-export function HelpPage() {
-  const [ticketOpen, setTicketOpen] = useState(false);
-  const [sent, setSent] = useState(false);
-  return (
-    <PortalShell>
-      <PageHeader eyebrow="Centro de ajuda" title="Como podemos ajudar?" description="Encontra respostas rápidas ou fala diretamente com a equipa 2Rivr." />
-      <label className="mock-help-search"><Search size={21} /><span className="sr-only">Pesquisar guias</span><input type="search" placeholder="Pesquisar guias, funcionalidades ou dúvidas" /></label>
-      <section className="mock-help-section"><div className="mock-section-title"><div><h2>Guias essenciais</h2><p>Passos curtos para as tarefas mais frequentes.</p></div><button type="button">Ver todos os guias</button></div><div className="mock-guide-grid">{guides.map((guide) => { const Icon = guide.icon; return <button type="button" className="mock-guide-card" key={guide.title}><span><Icon size={21} /></span><strong>{guide.title}</strong><p>{guide.text}</p><small>Ler guia <ChevronRight size={14} /></small></button>; })}</div></section>
-      <div className="mock-support-grid">
-        <section className="mock-surface mock-support-card"><span className="mock-support-icon"><Headphones size={24} /></span><div><h2>Contactar o suporte</h2><p>Reporta um erro ou pede ajuda com outra questão. Respondemos normalmente num dia útil.</p><button className="primary-action" type="button" onClick={() => setTicketOpen(true)}>Criar pedido de suporte</button></div></section>
-        <section className="mock-surface mock-contact-card"><h2>2Rivr</h2><p>Equipa responsável pelo blueprint.</p><a href="mailto:suporte@2rivr.com"><Mail size={17} />suporte@2rivr.com</a><a href="tel:+351210000000"><Phone size={17} />+351 210 000 000</a><span><Clock3 size={17} />Dias úteis, 09:00–18:00</span></section>
-      </div>
-      {ticketOpen && <div className="mock-modal-backdrop" role="presentation"><section className="mock-modal" role="dialog" aria-modal="true" aria-labelledby="support-title"><button className="mock-modal-close" type="button" aria-label="Fechar" onClick={() => setTicketOpen(false)}><X size={19} /></button><h2 id="support-title">Novo pedido de suporte</h2><p>Descreve o que aconteceu e inclui o contexto necessário.</p><label className="mock-field">Assunto<input placeholder="Resumo do pedido" /></label><label className="mock-field">Categoria<select><option>Problema técnico</option><option>Dúvida de utilização</option><option>Faturação</option></select></label><label className="mock-field">Descrição<textarea placeholder="O que estavas a tentar fazer?" /></label><div className="mock-form-actions"><button className="secondary-action" type="button" onClick={() => setTicketOpen(false)}>Cancelar</button><button className="primary-action" type="button" onClick={() => { setSent(true); window.setTimeout(() => { setTicketOpen(false); setSent(false); }, 900); }}>{sent ? <><Check size={17} />Pedido enviado</> : "Enviar pedido"}</button></div></section></div>}
     </PortalShell>
   );
 }

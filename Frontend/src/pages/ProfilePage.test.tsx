@@ -60,7 +60,57 @@ function renderApp(path: string) {
   );
 }
 
+function profileSectionButton(name: string) {
+  const profileNavigation = screen.getByRole("navigation", { name: "Secções do perfil" });
+  const button = within(profileNavigation).getAllByRole("button")
+    .find((candidate) => candidate.textContent?.includes(name));
+  if (!button) throw new Error(`Profile section ${name} was not found.`);
+  return button;
+}
+
 describe("editable profile", () => {
+  it("hides client mock sections when the session environment is missing", async () => {
+    sessionStorage.setItem("blueprint.auth.roles", JSON.stringify(["client"]));
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => jsonResponse(clientProfile));
+    renderApp("/profile");
+
+    await screen.findByDisplayValue("Marta Isabel Silva");
+    const profileNavigation = screen.getByRole("navigation", { name: "Secções do perfil" });
+    expect(within(profileNavigation).queryByRole("button", { name: "Segurança" })).not.toBeInTheDocument();
+    expect(within(profileNavigation).queryByRole("button", { name: "Notificações" })).not.toBeInTheDocument();
+    expect(within(profileNavigation).queryByRole("button", { name: "Dados financeiros" })).not.toBeInTheDocument();
+  });
+
+  it("shows client mock sections with their Mock label in development", async () => {
+    sessionStorage.setItem("blueprint.auth.roles", JSON.stringify(["client"]));
+    sessionStorage.setItem("blueprint.application.environment", "development");
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => jsonResponse(clientProfile));
+    const user = userEvent.setup();
+    renderApp("/profile");
+
+    await screen.findByDisplayValue("Marta Isabel Silva");
+    const security = profileSectionButton("Segurança");
+    expect(security).toBeEnabled();
+    expect(within(security).getByText("Mock")).toBeInTheDocument();
+    expect(profileSectionButton("Notificações")).toBeEnabled();
+    expect(profileSectionButton("Dados financeiros")).toBeEnabled();
+    await user.click(security);
+    expect(screen.getByRole("heading", { name: "Segurança", level: 2 })).toBeInTheDocument();
+  });
+
+  it("shows but blocks client mock sections in testing", async () => {
+    sessionStorage.setItem("blueprint.auth.roles", JSON.stringify(["client"]));
+    sessionStorage.setItem("blueprint.application.environment", "testing");
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => jsonResponse(clientProfile));
+    renderApp("/profile");
+
+    await screen.findByDisplayValue("Marta Isabel Silva");
+    const security = profileSectionButton("Segurança");
+    expect(security).toBeDisabled();
+    expect(profileSectionButton("Notificações")).toBeDisabled();
+    expect(profileSectionButton("Dados financeiros")).toBeDisabled();
+  });
+
   it("previews and saves an account theme preference", async () => {
     sessionStorage.setItem("blueprint.auth.roles", JSON.stringify(["employee"]));
     let submitted: Record<string, unknown> | null = null;

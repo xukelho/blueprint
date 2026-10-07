@@ -583,6 +583,8 @@ describe("mockup navigation", () => {
     expect(screen.queryByRole("button", { name: "Projetos" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Administração" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Ana Martins/ })).not.toBeInTheDocument();
+    expect(screen.queryByText("Atelier ativo")).not.toBeInTheDocument();
+    expect(screen.queryByText("Forma Norte")).not.toBeInTheDocument();
     expect(screen.queryByText("Mock parcial")).not.toBeInTheDocument();
   });
 
@@ -644,7 +646,6 @@ describe("mockup navigation", () => {
     ["/settings", "Definições"],
     ["/settings/storage", "Definições"],
     ["/notifications", "Notificações"],
-    ["/help", "Como podemos ajudar?"],
     ["/profile", "Perfil de colaboradora"],
   ])("renders %s", async (path, heading) => {
     sessionStorage.setItem("blueprint.auth.roles", JSON.stringify(["employee"]));
@@ -736,11 +737,14 @@ describe("mockup navigation", () => {
     expect(screen.queryByText("Perfil de utilizador")).not.toBeInTheDocument();
   });
 
-  it("shows architect as an additional employee role", async () => {
+  it("does not show the architect role label in the navigation", async () => {
     sessionStorage.setItem("blueprint.auth.roles", JSON.stringify(["employee", "architect"]));
     mockProfile("employee", true);
     renderApp("/profile");
-    expect(await screen.findByText(/Colaboradora · Arquiteta · Forma Norte/)).toBeInTheDocument();
+    await screen.findByRole("heading", { name: "Perfil de colaboradora", level: 1 });
+    const profileButton = screen.getByRole("button", { name: /Ana Martins/ });
+    expect(within(profileButton).queryByText(/Colaboradora/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Atelier ativo")).not.toBeInTheDocument();
   });
 
   it("does not route the removed company role to a company profile", () => {

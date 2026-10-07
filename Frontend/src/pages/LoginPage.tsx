@@ -19,6 +19,7 @@ type FieldErrors = {
 type LoginResponse = {
   status: string;
   roles?: string[];
+  environment?: unknown;
 };
 
 type QuickLoginOption = {
@@ -59,7 +60,7 @@ function LoginPage() {
         const result = (await response.json()) as LoginResponse;
         if (result.status === "success") {
           const roles = result.roles ?? [];
-          setAuthenticatedRoles(roles);
+          setAuthenticatedRoles(roles, result.environment);
           navigate("/dashboard", { replace: true });
           return;
         }

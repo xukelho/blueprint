@@ -1,4 +1,5 @@
 using Blueprint.Api.Authentication;
+using Blueprint.Api.Configuration;
 using Blueprint.Api.Contracts;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -28,18 +29,23 @@ public static class AuthenticationEndpoints
 
     private static async Task<IResult> Logout(
         HttpContext httpContext,
+        IHostEnvironment hostEnvironment,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         await httpContext.SignOutAsync(
             CookieAuthenticationDefaults.AuthenticationScheme);
-        return TypedResults.Ok(new LoginResponse("success"));
+        return TypedResults.Ok(new LoginResponse(
+            "success",
+            Environment: ApplicationEnvironment.FromHostingEnvironmentName(
+                hostEnvironment.EnvironmentName)));
     }
 
     private static async Task<IResult> Login(
         LoginRequest? request,
         ICredentialValidator credentialValidator,
         HttpContext httpContext,
+        IHostEnvironment hostEnvironment,
         CancellationToken cancellationToken)
     {
         var errors = Validate(request);
@@ -73,7 +79,11 @@ public static class AuthenticationEndpoints
             CookieAuthenticationDefaults.AuthenticationScheme,
             new ClaimsPrincipal(identity));
 
-        return TypedResults.Ok(new LoginResponse("success", user.Roles));
+        return TypedResults.Ok(new LoginResponse(
+            "success",
+            user.Roles,
+            ApplicationEnvironment.FromHostingEnvironmentName(
+                hostEnvironment.EnvironmentName)));
     }
 
     private static Dictionary<string, string[]> Validate(LoginRequest? request)

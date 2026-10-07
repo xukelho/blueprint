@@ -20,6 +20,7 @@ import {
 } from "../profile/ProfileContext";
 import type { ThemePreference } from "../theme";
 import { useTheme } from "../theme/ThemeContext";
+import { isMockFeatureDisabled, isMockFeatureVisible } from "../mockFeatures";
 
 function PageHeader({
   eyebrow,
@@ -129,12 +130,14 @@ export default function UserPage({
   const [saved, setSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const themeRequest = useRef(0);
+  const showClientMockSections = expectedProfileType === "client" && isMockFeatureVisible();
+  const clientMockSectionsDisabled = expectedProfileType === "client" && isMockFeatureDisabled();
   const sections = [
     "Dados pessoais",
     "Contactos",
     "Aparência",
-    "Segurança",
-    ...(!simplifiedNavigation ? ["Notificações", "Dados financeiros"] : []),
+    ...(showClientMockSections ? ["Segurança"] : expectedProfileType === "employee" ? ["Segurança"] : []),
+    ...(!simplifiedNavigation && showClientMockSections ? ["Notificações", "Dados financeiros"] : []),
   ];
 
   useEffect(() => {
@@ -285,17 +288,24 @@ export default function UserPage({
 
       <div className="mock-settings-layout">
         <nav className="mock-settings-nav" aria-label="Secções do perfil">
-          {sections.map((item) => (
+          {sections.map((item) => {
+            const isMockSection = expectedProfileType === "client" && ["Segurança", "Notificações", "Dados financeiros"].includes(item);
+            const disabled = isMockSection && clientMockSectionsDisabled;
+            return (
             <button
-              className={section === item ? "is-active" : ""}
+              className={`${section === item ? "is-active" : ""}${disabled ? " is-disabled" : ""}`}
               type="button"
               key={item}
+              aria-label={isMockSection ? `${item} — Mock` : undefined}
+              disabled={disabled}
               onClick={() => setSection(item)}
             >
               {item}
+              {isMockSection && <span className="nav-status" aria-hidden="true">Mock</span>}
               <ChevronRight size={16} />
             </button>
-          ))}
+            );
+          })}
         </nav>
 
         <section className="mock-surface mock-settings-content">
