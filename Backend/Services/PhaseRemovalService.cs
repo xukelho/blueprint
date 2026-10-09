@@ -22,6 +22,11 @@ public sealed class PhaseRemovalService(BlueprintDbContext db, IFileService file
             ?? throw new FileResourceNotFoundException("Phase not found.");
         var documents = await db.ProjectDocuments.Where(document => document.ProjectId == command.ProjectId && document.PhaseId == command.PhaseId).ToListAsync(cancellationToken);
 
+        // Stable lock ordering also coordinates phase-wide changes with publication.
+        foreach (var document in documents.OrderBy(item => item.Id))
+            await ProjectDocumentAccessService.LockAsync(db, document.Id, cancellationToken);
+        documents = documents.Where(item => item.PhaseId == command.PhaseId).ToList();
+
         switch (command.Mode)
         {
             case PhaseRemovalMode.EmptyOnly when documents.Count != 0:

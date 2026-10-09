@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { setAuthenticatedRoles } from "../auth";
 import { ProfileProvider } from "../profile/ProfileContext";
 import { CompanyProjectPage } from "./CompanyProjectPage";
@@ -12,6 +12,11 @@ const profile = (companyRole: "owner" | "employee") => ({ profileType: "employee
 
 function renderPage() {
   return render(<MemoryRouter initialEntries={["/projects/1"]}><ProfileProvider><Routes><Route path="/projects/:id" element={<CompanyProjectPage />} /><Route path="/projects" element={<p>Lista de projetos</p>} /></Routes></ProfileProvider></MemoryRouter>);
+}
+
+function NavigateToSecondProject() {
+  const navigate = useNavigate();
+  return <button type="button" onClick={() => navigate("/projects/2")}>Abrir segundo projeto</button>;
 }
 
 afterEach(() => {
@@ -382,5 +387,68 @@ describe("CompanyProjectPage", () => {
     expect(await screen.findByText("Histórico")).toBeInTheDocument();
     expect(screen.getByLabelText("Nova mensagem")).toBeDisabled();
     expect(screen.getByText("A conversa está disponível apenas para leitura.")).toBeInTheDocument();
+  });
+
+  it("sends the desired visibility and merges the full server response without selecting the document", async () => {
+    setAuthenticatedRoles(["employee"]);
+    const phasedProject = { ...emptyProject, phases: [{ id: 11, code: "preliminary-study", label: "Estudo Prévio", position: 0, isCurrent: true }] };
+    const original = { id: "document-1", phaseId: 11, fileName: "Memoria.pdf", contentType: "application/pdf", length: 100, status: "Available", isVisible: false, createdBy: 1, createdByDisplayName: "Ana", createdAt: "2026-08-12T09:00:00Z", uploadedAt: "2026-08-12T09:00:00Z", preview: null };
+    const updated = { ...original, isVisible: true, length: 2300, uploadedAt: "2026-08-12T10:00:00Z" };
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url === "/api/profile") return response(profile("employee"));
+      if (url === "/api/projects/1" && !init?.method) return response(phasedProject);
+      if (url === "/api/projects/1/documents" && !init?.method) return response([original]);
+      if (url === "/api/projects/1/documents/document-1/visibility" && init?.method === "PUT") return response(updated);
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    const option = await screen.findByRole("option", { name: /Memoria\.pdf/ });
+    expect(option).toHaveAttribute("aria-selected", "false");
+    await user.click(screen.getByRole("button", { name: "Mostrar Memoria.pdf aos clientes" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/projects/1/documents/document-1/visibility", expect.objectContaining({
+      method: "PUT",
+      headers: expect.objectContaining({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ isVisible: true }),
+    })));
+    expect(await screen.findByRole("button", { name: "Ocultar Memoria.pdf dos clientes" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("option", { name: /Memoria\.pdf/ })).toHaveAttribute("aria-selected", "false");
+    expect(screen.getByText("2 KB")).toBeInTheDocument();
+  });
+
+  it("ignores a delayed visibility response after navigating to another project", async () => {
+    setAuthenticatedRoles(["employee"]);
+    const phases = [{ id: 11, code: "preliminary-study", label: "Estudo Prévio", position: 0, isCurrent: true }];
+    const project = (id: number) => ({ ...emptyProject, id, title: `Projeto ${id}`, phases });
+    const firstDocument = { id: "first-document", phaseId: 11, fileName: "Primeiro.dwg", contentType: "application/octet-stream", length: 100, status: "Available", isVisible: true, createdBy: 1, createdByDisplayName: "Ana", createdAt: "2026-08-12T09:00:00Z", uploadedAt: "2026-08-12T09:00:00Z", preview: null };
+    const secondDocument = { ...firstDocument, id: "second-document", fileName: "Segundo.dwg", isVisible: false };
+    let resolveFirstVisibility: ((result: Response) => void) | undefined;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url === "/api/profile") return response(profile("employee"));
+      if (url === "/api/notifications/summary") return response({ unreadCount: 0, pendingInvitationCount: 0, total: 0, projectUnreadCounts: [] });
+      if (url === "/api/projects/1" && !init?.method) return response(project(1));
+      if (url === "/api/projects/2" && !init?.method) return response(project(2));
+      if (url === "/api/projects/1/documents" && !init?.method) return response([firstDocument]);
+      if (url === "/api/projects/2/documents" && !init?.method) return response([secondDocument]);
+      if (url === "/api/projects/1/documents/first-document/visibility" && init?.method === "PUT") return new Promise((resolve) => { resolveFirstVisibility = resolve; });
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const user = userEvent.setup();
+    render(<MemoryRouter initialEntries={["/projects/1"]}><ProfileProvider><NavigateToSecondProject /><Routes><Route path="/projects/:id" element={<CompanyProjectPage />} /></Routes></ProfileProvider></MemoryRouter>);
+
+    await screen.findByRole("option", { name: /Primeiro\.dwg/ });
+    await user.click(screen.getByRole("button", { name: "Ocultar Primeiro.dwg dos clientes" }));
+    await waitFor(() => expect(resolveFirstVisibility).toBeDefined());
+    await user.click(screen.getByRole("button", { name: "Abrir segundo projeto" }));
+    await screen.findByRole("option", { name: /Segundo\.dwg/ });
+    await act(async () => { resolveFirstVisibility?.(response({ ...firstDocument, isVisible: false })); });
+
+    expect(screen.getByRole("heading", { name: "Projeto 2" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Segundo\.dwg/ })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /Primeiro\.dwg/ })).not.toBeInTheDocument();
   });
 });

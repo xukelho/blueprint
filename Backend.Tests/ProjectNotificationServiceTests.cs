@@ -6,8 +6,11 @@ namespace Blueprint.Api.IntegrationTests;
 
 public sealed class ProjectNotificationServiceTests
 {
-    [Fact]
-    public async Task FanoutUsesOnlyActiveExplicitParticipantsAndAdditionalRemovedUsers()
+    [Theory]
+    [InlineData(ProjectNotificationAudience.AllParticipants)]
+    [InlineData(ProjectNotificationAudience.EmployeesOnly)]
+    [InlineData(ProjectNotificationAudience.ClientsOnly)]
+    public async Task FanoutUsesOnlyActiveExplicitParticipantsAndAdditionalRemovedUsers(ProjectNotificationAudience audience)
     {
         await using var db = new BlueprintDbContext(new DbContextOptionsBuilder<BlueprintDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
@@ -40,16 +43,35 @@ public sealed class ProjectNotificationServiceTests
         var service = new ProjectNotificationService(db, new FixedTimeProvider(now));
         var command = new ProjectNotificationCommand(project.Id, actor.Id, ProjectEventTypes.GlobalMessageCreated,
             "adicionou uma mensagem.", NotificationTargetKinds.GlobalMessage, "message:1", MessageId: 1,
-            AdditionalRecipientUserIds: [removed.Id]);
+            AdditionalRecipientUserIds: [removed.Id, inactive.Id, assigned.Id, clientUser.Id], Audience: audience);
         Assert.True(await service.AddAsync(command));
         await db.SaveChangesAsync();
 
         var recipients = await db.UserNotifications.Select(item => item.RecipientUserId).OrderBy(id => id).ToArrayAsync();
-        Assert.Equal(new[] { assigned.Id, clientUser.Id, removed.Id }, recipients);
+        Assert.Equal(audience switch
+        {
+            ProjectNotificationAudience.EmployeesOnly => new[] { assigned.Id },
+            ProjectNotificationAudience.ClientsOnly => new[] { clientUser.Id },
+            _ => new[] { assigned.Id, clientUser.Id, removed.Id }
+        }, recipients);
         Assert.False(await service.AddAsync(command));
         Assert.DoesNotContain(unassignedOwner.Id, recipients);
         Assert.DoesNotContain(actor.Id, recipients);
         Assert.DoesNotContain(inactive.Id, recipients);
+        Assert.True(await service.AddAsync(command with { ActorUserId = clientUser.Id, DeduplicationKey = "client-actor", Audience = ProjectNotificationAudience.ClientsOnly }));
+        await db.SaveChangesAsync();
+        Assert.Empty((await db.ProjectEvents.Include(x => x.Notifications).SingleAsync(x => x.DeduplicationKey == "client-actor")).Notifications);
+        clientUser.IsActive = false;
+        await db.SaveChangesAsync();
+        Assert.True(await service.AddAsync(command with { DeduplicationKey = "inactive-client", Audience = ProjectNotificationAudience.ClientsOnly }));
+        await db.SaveChangesAsync();
+        Assert.Empty((await db.ProjectEvents.Include(x => x.Notifications).SingleAsync(x => x.DeduplicationKey == "inactive-client")).Notifications);
+        clientUser.IsActive = true;
+        db.CompanyClients.RemoveRange(db.CompanyClients);
+        await db.SaveChangesAsync();
+        Assert.True(await service.AddAsync(command with { DeduplicationKey = "removed-company", Audience = ProjectNotificationAudience.ClientsOnly }));
+        await db.SaveChangesAsync();
+        Assert.Empty((await db.ProjectEvents.Include(x => x.Notifications).SingleAsync(x => x.DeduplicationKey == "removed-company")).Notifications);
     }
 
     private static User User(long id, string name, bool active = true) => new()

@@ -6,7 +6,7 @@ using Npgsql;
 
 namespace Blueprint.Api.IntegrationTests;
 
-public sealed class ProjectIntegrationTests(PostgreSqlApiFixture fixture)
+public sealed partial class ProjectIntegrationTests(PostgreSqlApiFixture fixture)
     : IClassFixture<PostgreSqlApiFixture>
 {
     [Fact]
@@ -46,6 +46,9 @@ public sealed class ProjectIntegrationTests(PostgreSqlApiFixture fixture)
 
         using var completed = await fixture.Client.PostAsync($"/api/projects/{projectId}/documents/{documentId}/complete", null);
         Assert.Equal(HttpStatusCode.OK, completed.StatusCode);
+        Assert.False((await completed.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("document").GetProperty("isVisible").GetBoolean());
+        using var published = await fixture.Client.PutAsJsonAsync($"/api/projects/{projectId}/documents/{documentId}/visibility", new { isVisible = true });
+        Assert.Equal(HttpStatusCode.OK, published.StatusCode);
         using var completedAgain = await fixture.Client.PostAsync($"/api/projects/{projectId}/documents/{documentId}/complete", null);
         Assert.Equal(HttpStatusCode.OK, completedAgain.StatusCode);
 
@@ -91,7 +94,7 @@ public sealed class ProjectIntegrationTests(PostgreSqlApiFixture fixture)
         var notifications = await fixture.Client.GetFromJsonAsync<JsonElement>("/api/notifications");
         var notificationItems = notifications.GetProperty("items").EnumerateArray().ToArray();
         Assert.Equal(6, notificationItems.Length);
-        Assert.Equal(1, notificationItems.Count(item => item.GetProperty("type").GetString() == "document.uploaded"));
+        Assert.Equal(1, notificationItems.Count(item => item.GetProperty("type").GetString() == "document.added"));
         Assert.Equal(1, notificationItems.Count(item => item.GetProperty("type").GetString() == "document.replaced"));
         Assert.Equal(1, notificationItems.Count(item => item.GetProperty("type").GetString() == "project.part_conversation_created"));
         Assert.Equal(1, notificationItems.Count(item => item.GetProperty("type").GetString() == "project.part_message_created"));

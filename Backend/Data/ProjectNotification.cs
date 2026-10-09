@@ -43,6 +43,8 @@ public static class ProjectEventTypes
     public const string ProjectArchived = "project.archived";
     public const string ProjectReactivated = "project.reactivated";
     public const string DocumentUploaded = "document.uploaded";
+    public const string DocumentAdded = "document.added";
+    public const string DocumentRemoved = "document.removed";
     public const string DocumentReplaced = "document.replaced";
     public const string DocumentMoved = "document.moved";
     public const string DocumentDeleted = "document.deleted";

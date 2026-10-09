@@ -6,6 +6,8 @@
 
 `ProjectDocument` is the project-owned logical document. It must reference exactly one project phase and one `StoredObject`. Moving a document changes only its phase. Replacing content creates a new `StoredObject`, switches the document atomically, and queues the old object for physical deletion. This release intentionally has no version history.
 
+Document visibility belongs to the logical document: `IsVisible` in C#, `isVisible` in JSON, and `project_documents.is_visible` in PostgreSQL. New documents start hidden (`false`), including pending uploads. The visibility migration explicitly preserves every existing document as visible (`true`), including pending and deleted records, without changing lifecycle rules or creating notifications. Moving and replacing a document preserve visibility; hiding does not delete content or discussions, or change storage charges.
+
 Company storage is a shared quota across all of its projects. The effective limit is the global decimal-GB base plus non-negative administrative and purchased allowances. Stored objects carry an explicit quota charge: pending uploads reserve capacity, ordinary deletions release it only after physical deletion, and replacements reserve only their net increase while superseded bytes are treated as platform overhead.
 
 ## Lifecycle
@@ -21,7 +23,7 @@ Company storage is a shared quota across all of its projects. The effective limi
 - A document always has a phase. Phase deletion is restrictive while documents reference it.
 - Object keys are unique, server-generated, and provider-neutral.
 - Available object content is immutable. Replacement never overwrites a key.
-- Download grants are issued only for active documents backed by available objects.
+- Download grants are issued only for active documents backed by available objects; client grants also require current visibility.
 - Upload initiation serializes reservations per company and rejects growth beyond the effective company limit.
 - A phase may be removed only when empty, after an explicit move of all documents, or after explicit logical deletion of all documents.
 - Timeline reconciliation preserves phase identity by occurrence of phase code, so repeated phase codes remain supported and reordering does not recreate matched rows.
@@ -32,7 +34,7 @@ The `ObjectStorage` section defines `Endpoint`, optional `PublicEndpoint`, `Regi
 
 ## Non-goals
 
-Frontend integration remains deferred. General-purpose folders, file version history, and detailed filename/presentation rules are excluded.
+General-purpose folders, file version history, per-client visibility, and bulk publication are excluded.
 
 ## API/UI handoff
 
@@ -46,6 +48,7 @@ Service contract:
 | `CompleteUploadAsync` | document ID, actor | verifies remote length/media type and changes the object to `Available` |
 | `CreateDownloadGrantAsync` | active document ID | short-lived GET grant; rejects pending/deleted documents |
 | `MoveAsync` | document ID, target phase, actor | changes only the phase after same-project validation |
+| `SetVisibilityAsync` | document ID, explicit desired visibility, actor | updates visibility and audit fields atomically with the client transition event; same-value requests are successful no-ops |
 | `CreateReplacementUploadAsync` | document and new upload properties | new immutable object ID and PUT grant; current content remains active |
 | `CompleteReplacementAsync` | document, replacement object, actor | verifies and swaps atomically; queues the prior object for deletion |
 | `DeleteAsync` | document ID, actor | logical document deletion and physical-deletion queueing |
@@ -55,20 +58,33 @@ Expected API mappings are domain validation -> 400, missing or inaccessible aggr
 
 ## HTTP API
 
-All routes require authentication and are scoped beneath `/api/projects/{projectId}`. Inaccessible projects and nested resources return `404` so the API does not disclose their existence. Company owners and assigned architects may perform mutations. The project's associated client may list and download available documents, but cannot see pending uploads or perform mutations. Archived projects remain readable and reject file or phase mutations with `409`.
+All routes require authentication and are scoped beneath `/api/projects/{projectId}`. Inaccessible projects and nested resources return `404` so the API does not disclose their existence. Company owners and assigned architects may perform mutations, including visibility changes by employees other than the uploader. All currently assigned clients share one visibility state: they may access only active, available, visible documents, and cannot perform document mutations. Archived projects remain readable and reject file, phase, or visibility mutations with `409`.
 
 | Method and route | Purpose |
 | --- | --- |
-| `GET /documents` | List active documents in phase/creation order. Professionals also see pending uploads; clients see only available documents. |
+| `GET /documents` | List active documents in phase/creation order. Professionals also see hidden documents and pending uploads; clients see only available, visible documents. |
 | `POST /phases/{phaseId}/documents/uploads` | Persist a pending document and return its document/object IDs and presigned PUT grant. |
 | `POST /documents/{documentId}/complete` | Verify a direct upload and make the document available. Repeating a successful completion is safe. |
 | `POST /documents/{documentId}/download` | Return a short-lived presigned GET grant for an available document. |
 | `PUT /documents/{documentId}/phase` | Move an active document to another phase in the same project. |
+| `PUT /documents/{documentId}/visibility` | Set `{ "isVisible": true }` or `{ "isVisible": false }` for an active document backed by an available object; return `200` with the full authoritative document response. Missing/null body or value returns `400`; clients and inaccessible/deleted resources return `404`; archived projects and non-available objects return `409`. |
 | `POST /documents/{documentId}/replacements` | Create an immutable pending replacement and return its object ID and PUT grant. |
 | `POST /documents/{documentId}/replacements/{storedObjectId}/complete` | Verify and activate the specified replacement. Repeating an applied completion is safe. |
 | `DELETE /documents/{documentId}` | Logically delete the document and queue physical deletion. Repeating deletion is safe. |
 | `POST /phases/{phaseId}/remove` | Remove a phase using explicit `emptyOnly`, `moveDocuments`, or `deleteDocuments` behavior. |
 
-Document responses expose logical IDs, phase, filename, media type, verified-or-expected length, lifecycle status, uploader ID/display name, creation time, and upload time. They never expose object keys, ETags, credentials, or provider SDK types. Upload-grant responses contain the URL, absolute expiry, and every header the direct PUT must send.
+Document responses expose logical IDs, phase, filename, media type, verified-or-expected length, lifecycle status, required boolean `isVisible`, uploader ID/display name, creation time, and upload time. They never expose object keys, ETags, credentials, or provider SDK types. Upload-grant responses contain the URL, absolute expiry, and every header the direct PUT must send.
 
 HTTP failures use validation problems for invalid request fields (`400`), `404` for missing or inaccessible resources, `409` for lifecycle and read-only conflicts, `502` for non-transient storage-provider failures, and `503` for transient storage failures.
+
+## Client visibility, discussions, and notifications
+
+Current visibility is enforced for client document lists, download grants, content streams, drawing previews, document conversation lists/creation, and conversation message lists/creation. Direct hidden-resource access returns `404`; project-wide lists omit hidden resources, and a filtered hidden-document conversation list may be empty. Authorized employees retain document and discussion access. Hiding preserves the discussion history, which becomes readable to clients again on publication.
+
+Real hidden-to-visible transitions send currently assigned eligible clients `document.added`; visible-to-hidden transitions send `document.removed`. The state, audit fields, event, and recipient rows commit atomically, with concurrent mutations serialized per document. Same-value requests do not update audit fields or notify. Hidden uploads and subsequent hidden-document activity notify employees only. Existing delivered notifications remain historical, and publication does not replay suppressed activity.
+
+Hiding blocks new client grants and new authorized content/preview requests. Already-issued signed download grants retain their normal expiry (`DownloadGrantLifetime`, five minutes by default); hiding cannot retract downloaded bytes or an existing grant. No push-based revocation of an open preview is provided.
+
+## Visibility rollout
+
+Release the schema, backend, and frontend together and drain old API instances during migration/cutover: old instances do not enforce visibility. The migration preserves existing visibility without publication events. Do not roll back to a pre-visibility API while hidden documents exist; prefer a forward fix or pause serving traffic until a safe version is available. Production migrations are a deployment operation, separate from implementation and local verification.

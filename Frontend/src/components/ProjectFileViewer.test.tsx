@@ -5,7 +5,7 @@ import JSZip from "jszip";
 import * as XLSX from "xlsx";
 import { filePreviewKind, ProjectFileViewer } from "./ProjectFileViewer";
 
-const document = (fileName: string) => ({ id: "doc", phaseId: 1, fileName, contentType: "application/octet-stream", length: 10, status: "Available", createdBy: 1, createdByDisplayName: "Ana", createdAt: "2026-01-01T00:00:00Z", uploadedAt: "2026-01-01T00:00:01Z" });
+const document = (fileName: string) => ({ id: "doc", phaseId: 1, fileName, contentType: "application/octet-stream", length: 10, status: "Available", isVisible: true, createdBy: 1, createdByDisplayName: "Ana", createdAt: "2026-01-01T00:00:00Z", uploadedAt: "2026-01-01T00:00:01Z" });
 
 afterEach(cleanup);
 
