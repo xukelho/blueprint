@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Bell, Building2, ExternalLink, MapPin, Milestone, MoreHorizontal, Pencil, Search, UsersRound, X } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import PortalShell from "../components/PortalShell";
@@ -7,7 +7,7 @@ import { ProjectTimelineEditor, ProjectTimelineView, TimelinePhase, newTimelineP
 import { ProjectDocuments, ProjectDocumentsByPhase, ProjectWorkspacePanel } from "../components/ProjectWorkspace";
 import { ProjectDocumentViewer } from "../components/ProjectDocumentViewer";
 import { filePreviewKind } from "../components/ProjectFileViewer";
-import { archiveProject, createProjectDocumentDownload, createProjectPartConversation, deleteProjectDocument, getClients, getCompanyMembers, getProject, getProjectDocumentContent, getProjectDocumentDrawing, getProjectDocuments, getProjectPartConversations, Project, ProjectDocument, ProjectMember, projectClients, reactivateProject, updateMembers, updateProject, updateProjectPhases, uploadProjectDocument, DrawingDocument, DrawingSelection, ProjectPartConversation } from "../api/projects";
+import { archiveProject, createProjectDocumentDownload, createProjectPartConversation, deleteProjectDocument, getClients, getCompanyMembers, getProject, getProjectDocumentContent, getProjectDocumentDrawing, getProjectDocuments, getProjectPartConversations, Project, ProjectDocument, ProjectMember, projectClients, reactivateProject, setProjectDocumentVisibility, updateMembers, updateProject, updateProjectPhases, uploadProjectDocument, DrawingDocument, DrawingSelection, ProjectPartConversation } from "../api/projects";
 import { useProfile } from "../profile/ProfileContext";
 import { useNotificationSummary } from "../hooks/useNotificationSummary";
 import { phaseLabel, PROJECT_PHASES, QUICK_FILL_PHASE_CODES } from "../projectPhases";
@@ -59,6 +59,7 @@ export function CompanyProjectPage() {
   const [documents, setDocuments] = useState<ProjectDocumentsByPhase>({});
   const [documentsLoading, setDocumentsLoading] = useState(true);
   const [documentsError, setDocumentsError] = useState("");
+  const documentRequestGeneration = useRef(0);
   const [viewerDocumentId, setViewerDocumentId] = useState<string | null>(null);
   const [viewerPhaseId, setViewerPhaseId] = useState<string | null>(null);
   const [documentPreview, setDocumentPreview] = useState<DrawingDocument | null>(null);
@@ -101,17 +102,19 @@ export function CompanyProjectPage() {
   }, [owner]);
   useEffect(() => { if (id) getProject(id).then(loadProject).catch((caught) => setError(caught instanceof Error ? caught.message : "Erro ao carregar.")); }, [id]);
   useEffect(() => {
+    const generation = ++documentRequestGeneration.current;
     if (!id) return;
     setDocumentsLoading(true);
     setDocumentsError("");
     getProjectDocuments(id)
-      .then((loadedDocuments) => setDocuments(loadedDocuments.reduce<ProjectDocumentsByPhase>((grouped, document) => {
+      .then((loadedDocuments) => { if (generation === documentRequestGeneration.current) setDocuments(loadedDocuments.reduce<ProjectDocumentsByPhase>((grouped, document) => {
         const phaseId = String(document.phaseId);
         grouped[phaseId] = [...(grouped[phaseId] ?? []), document];
         return grouped;
-      }, {})))
-      .catch((caught) => setDocumentsError(caught instanceof Error ? caught.message : "Não foi possível carregar os documentos."))
-      .finally(() => setDocumentsLoading(false));
+      }, {})); })
+      .catch((caught) => { if (generation === documentRequestGeneration.current) setDocumentsError(caught instanceof Error ? caught.message : "Não foi possível carregar os documentos."); })
+      .finally(() => { if (generation === documentRequestGeneration.current) setDocumentsLoading(false); });
+    return () => { documentRequestGeneration.current += 1; };
   }, [id]);
 
   const displayedMembers = isEditing ? members : project?.members ?? [];
@@ -166,6 +169,18 @@ export function CompanyProjectPage() {
     if (!id) throw new Error("Projeto indisponível.");
     await deleteProjectDocument(id, documentId);
     setDocuments((current) => Object.fromEntries(Object.entries(current).map(([phaseId, phaseDocuments]) => [phaseId, phaseDocuments.filter((document) => document.id !== documentId)])));
+  };
+  const changeDocumentVisibility = async (document: ProjectDocument, isVisible: boolean) => {
+    if (!id || String(project?.id) !== id) throw new Error("Projeto indisponível.");
+    const generation = documentRequestGeneration.current;
+    const updated = await setProjectDocumentVisibility(id, document.id, isVisible);
+    if (generation !== documentRequestGeneration.current) return;
+    setDocuments((current) => {
+      if (generation !== documentRequestGeneration.current) return current;
+      return Object.fromEntries(Object.entries(current).map(([phaseId, phaseDocuments]) => [phaseId,
+        phaseDocuments.map((item) => item.id === document.id ? updated : item),
+      ]));
+    });
   };
   const downloadDocument = async (projectDocument: ProjectDocument) => {
     if (!id) throw new Error("Projeto indisponível.");
@@ -274,7 +289,7 @@ export function CompanyProjectPage() {
             {isTimelineEditing ? <><ProjectTimelineEditor phases={timelinePhases} currentPhaseId={currentPhaseId} onPhasesChange={setTimelinePhases} onCurrentPhaseIdChange={setCurrentPhaseId} onQuickFill={() => { setTimelinePhases(QUICK_FILL_PHASE_CODES.map(newTimelinePhase)); setCurrentPhaseId(null); }} /><div className="mock-project-form-actions"><button type="button" className="secondary-action" onClick={cancelTimeline}>Cancelar</button><button type="button" className="primary-action" disabled={isSavingTimeline} onClick={saveTimeline}>{isSavingTimeline ? "A guardar…" : "Guardar timeline"}</button></div></> : projectPhases.length ? <ProjectTimelineView phases={projectPhases} currentPhaseId={officialCurrentPhaseId} viewedPhaseId={viewedPhaseId} expanded={isTimelineExpanded} onPhaseSelect={setViewedPhaseId} /> : <p className="mock-empty-state">Timeline opcional ainda não configurada.</p>}
           </section>
         <ProjectDocumentViewer phaseCode={viewedPhase?.code ?? null} document={viewerDocument} drawing={documentPreview} content={documentContent} loading={documentPreviewLoading} error={documentPreviewError} onRetry={() => setDocumentPreviewRetry((current) => current + 1)} isMaximized={isDocumentViewerMaximized} onMaximizedChange={setIsDocumentViewerMaximized} selectedPart={selectedDrawingPart} conversations={partConversations} onPartSelect={setSelectedDrawingPart} onConversationOpen={(conversationId) => setConversationOpenRequest((current) => ({ id: conversationId, token: current.token + 1 }))} />
-        <ProjectDocuments phases={projectPhases} viewedPhaseId={viewedPhaseId} documents={documents} loading={documentsLoading} error={documentsError} readOnly={project.isArchived} previewDocumentId={viewerDocumentId} onUploadFile={uploadDocument} onDeleteDocument={removeDocument} onDownloadDocument={downloadDocument} onPreviewDocumentSelect={(document) => { setViewerDocumentId(document.id); setViewerPhaseId(String(document.phaseId)); }} />
+        <ProjectDocuments key={id} phases={projectPhases} viewedPhaseId={viewedPhaseId} documents={documents} loading={documentsLoading} error={documentsError} readOnly={project.isArchived} previewDocumentId={viewerDocumentId} onUploadFile={uploadDocument} onDeleteDocument={removeDocument} onDownloadDocument={downloadDocument} onVisibilityChange={changeDocumentVisibility} onPreviewDocumentSelect={(document) => { setViewerDocumentId(document.id); setViewerPhaseId(String(document.phaseId)); }} />
         <ProjectWorkspacePanel projectId={id!} projectTitle={project.title} archived={project.isArchived} phases={projectPhases} viewedPhaseId={viewedPhaseId} documents={documents} selectedDrawingPart={selectedDrawingPart} partConversations={partConversations} requestedConversationId={conversationOpenRequest.id} requestedConversationToken={conversationOpenRequest.token} onCreatePartConversation={async (title) => { if (!viewerDocument || !selectedDrawingPart) throw new Error("Selecione uma parte do desenho."); const created = await createProjectPartConversation(id!, viewerDocument.id, selectedDrawingPart, title); setPartConversations((current) => [...current, created]); return created; }} onPartConversationsRefresh={() => setPartConversationsRetry((current) => current + 1)} onCollapsedChange={setIsWorkspaceCollapsed} />
       </div>
       {owner && isEditing && <div className="mock-project-form-actions project-page-actions"><button className="secondary-action" type="button" onClick={() => setArchiveStatusDialogOpen(true)}>{project.isArchived ? "Reativar" : "Arquivar"}</button><button className="secondary-action" type="button" onClick={cancelEditing}>Cancelar</button><button className="primary-action" type="submit" form="project-details-form" disabled={isSaving}>{isSaving ? "A guardar…" : "Guardar"}</button></div>}

@@ -51,6 +51,12 @@ public static class ProjectDocumentEndpoints
             .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
             .ProducesProblem(StatusCodes.Status502BadGateway)
             .ProducesProblem(StatusCodes.Status503ServiceUnavailable);
+        projects.MapPut("/documents/{documentId:guid}/visibility", SetVisibility)
+            .Accepts<SetDocumentVisibilityRequest>("application/json")
+            .Produces<ProjectDocumentResponse>()
+            .ProducesValidationProblem()
+            .Produces<AdministrationErrorResponse>(StatusCodes.Status409Conflict)
+            .Produces(StatusCodes.Status404NotFound);
         projects.MapPut("/documents/{documentId:guid}/phase", Move)
             .Accepts<MoveDocumentRequest>("application/json")
             .Produces<ProjectDocumentResponse>()
@@ -87,7 +93,7 @@ public static class ProjectDocumentEndpoints
 
     private static async Task<IResult> List(long projectId, ClaimsPrincipal principal, BlueprintDbContext db, CancellationToken ct)
     {
-        var access = await FindAccessAsync(projectId, principal, db, ct);
+        var access = await ProjectDocumentAccessService.FindAccessAsync(projectId, principal, db, ct);
         if (access is null) return TypedResults.NotFound();
 
         var query = db.ProjectDocuments.AsNoTracking()
@@ -95,7 +101,7 @@ public static class ProjectDocumentEndpoints
                 document.StoredObject!.Status != StoredObjectStatus.DeletionPending &&
                 document.StoredObject.Status != StoredObjectStatus.Deleted);
         if (!access.IsProfessional)
-            query = query.Where(document => document.StoredObject!.Status == StoredObjectStatus.Available);
+            query = query.Where(document => document.IsVisible && document.StoredObject!.Status == StoredObjectStatus.Available);
 
         var documents = await query
             .Include(document => document.StoredObject)
@@ -141,10 +147,10 @@ public static class ProjectDocumentEndpoints
     private static async Task<IResult> CreateDownload(long projectId, Guid documentId, ClaimsPrincipal principal,
         BlueprintDbContext db, IFileService files, CancellationToken ct)
     {
-        var access = await FindAccessAsync(projectId, principal, db, ct);
+        var access = await ProjectDocumentAccessService.FindAccessAsync(projectId, principal, db, ct);
         if (access is null || !await ActiveDocumentBelongsToProjectAsync(projectId, documentId, db, ct)) return TypedResults.NotFound();
         if (!access.IsProfessional && !await db.ProjectDocuments.AnyAsync(document => document.Id == documentId && document.ProjectId == projectId &&
-                !document.IsDeleted && document.StoredObject!.Status == StoredObjectStatus.Available, ct))
+                !document.IsDeleted && document.IsVisible && document.StoredObject!.Status == StoredObjectStatus.Available, ct))
             return TypedResults.NotFound();
         return await ExecuteAsync(async () =>
         {
@@ -156,12 +162,12 @@ public static class ProjectDocumentEndpoints
     private static async Task<IResult> GetContent(long projectId, Guid documentId, ClaimsPrincipal principal,
         HttpContext httpContext, BlueprintDbContext db, IObjectStore objectStore, CancellationToken ct)
     {
-        var access = await FindAccessAsync(projectId, principal, db, ct);
+        var access = await ProjectDocumentAccessService.FindAccessAsync(projectId, principal, db, ct);
         if (access is null) return TypedResults.NotFound();
         var document = await db.ProjectDocuments.AsNoTracking().Include(candidate => candidate.StoredObject)
             .SingleOrDefaultAsync(candidate => candidate.ProjectId == projectId && candidate.Id == documentId && !candidate.IsDeleted, ct);
         if (document?.StoredObject is null ||
-            (!access.IsProfessional && document.StoredObject.Status != StoredObjectStatus.Available) ||
+            (!access.IsProfessional && !document.IsVisible) ||
             document.StoredObject.Status != StoredObjectStatus.Available)
             return TypedResults.NotFound();
 
@@ -183,11 +189,11 @@ public static class ProjectDocumentEndpoints
     private static async Task<IResult> GetDrawing(long projectId, Guid documentId, ClaimsPrincipal principal,
         BlueprintDbContext db, DrawingPreviewService previews, CancellationToken ct)
     {
-        var access = await FindAccessAsync(projectId, principal, db, ct);
+        var access = await ProjectDocumentAccessService.FindAccessAsync(projectId, principal, db, ct);
         if (access is null) return TypedResults.NotFound();
         var document = await db.ProjectDocuments.AsNoTracking().Include(candidate => candidate.StoredObject)
             .SingleOrDefaultAsync(candidate => candidate.ProjectId == projectId && candidate.Id == documentId && !candidate.IsDeleted, ct);
-        if (document is null || (!access.IsProfessional && document.StoredObject!.Status != StoredObjectStatus.Available)) return TypedResults.NotFound();
+        if (document is null || (!access.IsProfessional && (!document.IsVisible || document.StoredObject!.Status != StoredObjectStatus.Available))) return TypedResults.NotFound();
         try
         {
             return TypedResults.Ok(await previews.GetAsync(document, ct));
@@ -202,6 +208,24 @@ public static class ProjectDocumentEndpoints
             return Results.Problem(title: exception.IsTransient ? "Object storage is temporarily unavailable." : "Object storage request failed.",
                 statusCode: exception.IsTransient ? StatusCodes.Status503ServiceUnavailable : StatusCodes.Status502BadGateway);
         }
+    }
+
+    private static async Task<IResult> SetVisibility(long projectId, Guid documentId, SetDocumentVisibilityRequest? request,
+        ClaimsPrincipal principal, BlueprintDbContext db, IFileService files, CancellationToken ct)
+    {
+        var accessResult = await RequireMutationAccessAsync(projectId, principal, db, ct);
+        if (accessResult.Result is not null) return accessResult.Result;
+        if (request is null) return MissingBody();
+        if (request.IsVisible is null)
+            return TypedResults.ValidationProblem(new Dictionary<string, string[]> { ["isVisible"] = ["A visibility value is required."] });
+        if (!await ActiveDocumentBelongsToProjectAsync(projectId, documentId, db, ct)) return TypedResults.NotFound();
+
+        return await ExecuteAsync(async () =>
+        {
+            var document = await files.SetVisibilityAsync(documentId, request.IsVisible.Value, accessResult.Access!.UserId, ct);
+            var uploaderNames = await UploaderNamesAsync([document.CreatedBy], db, ct);
+            return TypedResults.Ok(ToResponse(document, uploaderNames.GetValueOrDefault(document.CreatedBy, string.Empty)));
+        });
     }
 
     private static async Task<IResult> Move(long projectId, Guid documentId, MoveDocumentRequest? request,
@@ -294,30 +318,10 @@ public static class ProjectDocumentEndpoints
     private static async Task<(ProjectFileAccess? Access, IResult? Result)> RequireMutationAccessAsync(
         long projectId, ClaimsPrincipal principal, BlueprintDbContext db, CancellationToken ct)
     {
-        var access = await FindAccessAsync(projectId, principal, db, ct);
+        var access = await ProjectDocumentAccessService.FindAccessAsync(projectId, principal, db, ct);
         if (access is null || !access.IsProfessional) return (null, TypedResults.NotFound());
         if (access.IsArchived) return (access, TypedResults.Conflict(new AdministrationErrorResponse("Archived projects are read-only.")));
         return (access, null);
-    }
-
-    private static async Task<ProjectFileAccess?> FindAccessAsync(long projectId, ClaimsPrincipal principal, BlueprintDbContext db, CancellationToken ct)
-    {
-        if (!long.TryParse(principal.FindFirstValue(ClaimTypes.NameIdentifier), out var userId)) return null;
-
-        var professional = await db.Projects.AsNoTracking()
-            .Where(project => project.Id == projectId && project.Company!.IsActive &&
-                project.Company.CompanyEmployees.Any(membership => membership.Employee!.UserId == userId && membership.Employee.User!.IsActive &&
-                    (membership.CompanyRole == CompanyRoles.Owner || membership.IsArchitect && project.Members.Any(member => member.EmployeeId == membership.EmployeeId))))
-            .Select(project => new ProjectFileAccess(userId, true, project.IsArchived))
-            .SingleOrDefaultAsync(ct);
-        if (professional is not null) return professional;
-
-        return await db.Projects.AsNoTracking()
-            .Where(project => project.Id == projectId && project.Company!.IsActive && project.ProjectClients.Any(projectClient =>
-                projectClient.Client!.UserId == userId && projectClient.Client.User!.IsActive &&
-                projectClient.Client.CompanyClients.Any(membership => membership.CompanyId == project.CompanyId)))
-            .Select(project => new ProjectFileAccess(userId, false, project.IsArchived))
-            .SingleOrDefaultAsync(ct);
     }
 
     private static Task<bool> ActiveDocumentBelongsToProjectAsync(long projectId, Guid documentId, BlueprintDbContext db, CancellationToken ct) =>
@@ -343,6 +347,7 @@ public static class ProjectDocumentEndpoints
         uploaderDisplayName,
         document.CreatedAt,
         document.StoredObject.UploadedAt,
+        document.IsVisible,
         PreviewFor(document.StoredObject.FileName));
 
     private static DocumentPreviewResponse? PreviewFor(string fileName)
@@ -408,5 +413,4 @@ public static class ProjectDocumentEndpoints
         }
     }
 
-    private sealed record ProjectFileAccess(long UserId, bool IsProfessional, bool IsArchived);
 }

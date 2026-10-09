@@ -388,6 +388,7 @@ public sealed class BlueprintDbContext(DbContextOptions<BlueprintDbContext> opti
         document.Property(candidate => candidate.PhaseId).HasColumnName("phase_id").IsRequired();
         document.Property(candidate => candidate.StoredObjectId).HasColumnName("stored_object_id").IsRequired();
         document.Property(candidate => candidate.IsDeleted).HasColumnName("is_deleted").HasDefaultValue(false).IsRequired();
+        document.Property(candidate => candidate.IsVisible).HasColumnName("is_visible").HasDefaultValue(false).IsRequired();
         document.Property(candidate => candidate.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone").IsRequired();
         document.Property(candidate => candidate.CreatedBy).HasColumnName("created_by").IsRequired();
         document.Property(candidate => candidate.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone").IsRequired();

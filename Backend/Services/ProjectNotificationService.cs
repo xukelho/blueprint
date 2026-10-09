@@ -4,6 +4,13 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Blueprint.Api.Services;
 
+public enum ProjectNotificationAudience
+{
+    AllParticipants,
+    EmployeesOnly,
+    ClientsOnly
+}
+
 public sealed record ProjectNotificationCommand(
     long ProjectId,
     long ActorUserId,
@@ -15,7 +22,8 @@ public sealed record ProjectNotificationCommand(
     long? ConversationId = null,
     long? MessageId = null,
     object? Context = null,
-    IReadOnlyCollection<long>? AdditionalRecipientUserIds = null);
+    IReadOnlyCollection<long>? AdditionalRecipientUserIds = null,
+    ProjectNotificationAudience Audience = ProjectNotificationAudience.AllParticipants);
 
 public interface IProjectNotificationService
 {
@@ -26,6 +34,9 @@ public interface IProjectNotificationService
 public sealed class ProjectNotificationService(BlueprintDbContext db, TimeProvider timeProvider) : IProjectNotificationService
 {
     public async Task<long[]> ParticipantUserIdsAsync(long projectId, CancellationToken cancellationToken = default)
+        => await ParticipantUserIdsAsync(projectId, ProjectNotificationAudience.AllParticipants, cancellationToken);
+
+    private async Task<long[]> ParticipantUserIdsAsync(long projectId, ProjectNotificationAudience audience, CancellationToken cancellationToken)
     {
         var employeeUsers = db.ProjectMembers
             .Where(member => member.ProjectId == projectId && member.Employee!.User!.IsActive)
@@ -34,7 +45,13 @@ public sealed class ProjectNotificationService(BlueprintDbContext db, TimeProvid
             .Where(member => member.ProjectId == projectId && member.Client!.User!.IsActive &&
                 member.Client.CompanyClients.Any(company => company.CompanyId == member.Project!.CompanyId))
             .Select(member => member.Client!.UserId);
-        return await employeeUsers.Union(clientUsers).ToArrayAsync(cancellationToken);
+        var users = audience switch
+        {
+            ProjectNotificationAudience.EmployeesOnly => employeeUsers,
+            ProjectNotificationAudience.ClientsOnly => clientUsers,
+            _ => employeeUsers.Union(clientUsers)
+        };
+        return await users.Distinct().ToArrayAsync(cancellationToken);
     }
 
     public async Task<bool> AddAsync(ProjectNotificationCommand command, CancellationToken cancellationToken = default)
@@ -48,8 +65,8 @@ public sealed class ProjectNotificationService(BlueprintDbContext db, TimeProvid
         var actor = await db.Users.AsNoTracking().Where(item => item.Id == command.ActorUserId)
             .Select(item => item.Employee != null ? item.Employee.DisplayName : item.Client != null ? item.Client.DisplayName : item.Username)
             .SingleAsync(cancellationToken);
-        var recipients = (await ParticipantUserIdsAsync(command.ProjectId, cancellationToken))
-            .Concat(command.AdditionalRecipientUserIds ?? [])
+        var recipients = (await ParticipantUserIdsAsync(command.ProjectId, command.Audience, cancellationToken))
+            .Concat(command.Audience == ProjectNotificationAudience.AllParticipants ? command.AdditionalRecipientUserIds ?? [] : [])
             .Where(id => id != command.ActorUserId)
             .Distinct()
             .ToArray();

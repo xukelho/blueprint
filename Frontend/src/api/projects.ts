@@ -14,6 +14,7 @@ export type ProjectDocument = {
   contentType: string;
   length: number;
   status: string;
+  isVisible: boolean;
   createdBy: number;
   createdByDisplayName: string;
   createdAt: string;
@@ -77,6 +78,9 @@ export const updateMembers = (id: string, employeeIds: number[]) => request<Proj
 export const archiveProject = (id: string) => request<void>(`/api/projects/${id}/archive`, { method: "POST" });
 export const reactivateProject = (id: string) => request<void>(`/api/projects/${id}/reactivate`, { method: "POST" });
 export const getProjectDocuments = (id: string) => request<ProjectDocument[]>(`/api/projects/${id}/documents`);
+export const setProjectDocumentVisibility = (projectId: string, documentId: string, isVisible: boolean): Promise<ProjectDocument> => request<ProjectDocument>(
+  `/api/projects/${projectId}/documents/${documentId}/visibility`, json("PUT", { isVisible }),
+);
 export const getProjectMessages = (id: string, options: { beforeId?: number; afterId?: number; limit?: number } = {}) => {
   const query = new URLSearchParams();
   if (options.beforeId !== undefined) query.set("beforeId", String(options.beforeId));

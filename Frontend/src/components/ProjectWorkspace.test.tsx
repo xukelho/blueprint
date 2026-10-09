@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { ProjectDocuments, ProjectDocumentsByPhase, ProjectGlobalChat } from "./ProjectWorkspace";
 
 const phases = [{ id: "11", code: "preliminary-study" }];
-const document = (id: string, fileName: string) => ({ id, phaseId: 11, fileName, contentType: "application/octet-stream", length: 1000, status: "Available", createdBy: 1, createdByDisplayName: "Ana", createdAt: "2026-08-12T10:00:00Z", uploadedAt: "2026-08-12T10:00:01Z" });
+const document = (id: string, fileName: string) => ({ id, phaseId: 11, fileName, contentType: "application/octet-stream", length: 1000, status: "Available", isVisible: true, createdBy: 1, createdByDisplayName: "Ana", createdAt: "2026-08-12T10:00:00Z", uploadedAt: "2026-08-12T10:00:01Z" });
 const documents: ProjectDocumentsByPhase = { "11": [document("one", "one.pdf"), document("two", "two.docx"), document("three", "three.ifc")] };
 
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
@@ -90,6 +90,180 @@ describe("ProjectDocuments", () => {
     expect(onDownloadDocument).toHaveBeenCalledWith(documents["11"][0]);
     expect(onPreviewDocumentSelect).not.toHaveBeenCalled();
     expect(screen.getByRole("option", { name: /one\.pdf/ })).toHaveAttribute("aria-selected", "false");
+  });
+
+  it("shows the hidden action only on hover or focus and hides it without professional support", () => {
+    const hidden = { ...documents["11"][0], isVisible: false };
+    const { rerender } = render(<ProjectDocuments phases={phases} viewedPhaseId="11" documents={{ "11": [hidden] }} onUploadFile={vi.fn()} onDeleteDocument={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: "Mostrar one.pdf aos clientes" })).not.toBeInTheDocument();
+
+    rerender(<ProjectDocuments phases={phases} viewedPhaseId="11" documents={{ "11": [hidden] }} onUploadFile={vi.fn()} onDeleteDocument={vi.fn()} onVisibilityChange={vi.fn().mockResolvedValue(undefined)} />);
+    const control = screen.getByRole("button", { name: "Mostrar one.pdf aos clientes" });
+    expect(control).toHaveAttribute("aria-pressed", "false");
+    expect(control).not.toHaveClass("is-shown");
+    fireEvent.pointerEnter(control.closest(".project-document")!);
+    fireEvent.focus(control);
+    expect(control).not.toHaveClass("is-shown");
+  });
+
+  it("keeps visibility pending after pointer exit, blocks duplicates, and waits for server props", async () => {
+    const hidden = { ...documents["11"][0], isVisible: false };
+    let resolveChange: (() => void) | undefined;
+    const onVisibilityChange = vi.fn(() => new Promise<void>((resolve) => { resolveChange = resolve; }));
+    const { rerender } = render(<ProjectDocuments phases={phases} viewedPhaseId="11" documents={{ "11": [hidden] }} onUploadFile={vi.fn()} onDeleteDocument={vi.fn()} onVisibilityChange={onVisibilityChange} />);
+    const card = screen.getByRole("option", { name: /one\.pdf/ }).closest(".project-document")!;
+    const control = screen.getByRole("button", { name: "Mostrar one.pdf aos clientes" });
+    fireEvent.pointerEnter(card);
+    fireEvent.click(control);
+    expect(control).toBeDisabled();
+    expect(control).toHaveAttribute("aria-busy", "true");
+    expect(control).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("status")).toHaveTextContent("A atualizar visibilidade de one.pdf");
+    fireEvent.pointerLeave(card);
+    expect(control).toHaveClass("is-shown");
+    fireEvent.click(control);
+    expect(onVisibilityChange).toHaveBeenCalledTimes(1);
+
+    await act(async () => { resolveChange?.(); });
+    expect(control).toHaveAttribute("aria-pressed", "false");
+    expect(control).not.toBeDisabled();
+    rerender(<ProjectDocuments phases={phases} viewedPhaseId="11" documents={{ "11": [{ ...hidden, isVisible: true }] }} onUploadFile={vi.fn()} onDeleteDocument={vi.fn()} onVisibilityChange={onVisibilityChange} />);
+    expect(screen.getByRole("button", { name: "Ocultar one.pdf dos clientes" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("keeps pending state across phase changes, allows other documents, and suppresses a late failure", async () => {
+    const testPhases = [...phases, { id: "12", code: "licensing-project" }];
+    const first = { ...documents["11"][0], isVisible: false };
+    const other = { ...documents["11"][1], isVisible: false };
+    const nextPhase = { ...documents["11"][2], phaseId: 12, isVisible: false };
+    const deferred = new Map<string, { resolve: () => void; reject: () => void }>();
+    const onVisibilityChange = vi.fn((item: typeof first) => new Promise<void>((resolve, reject) => {
+      deferred.set(item.id, { resolve: () => resolve(), reject: () => reject(new Error("late failure")) });
+    }));
+    const { rerender } = render(<ProjectDocuments phases={testPhases} viewedPhaseId="11" documents={{ "11": [first, other], "12": [nextPhase] }} onUploadFile={vi.fn()} onDeleteDocument={vi.fn()} onVisibilityChange={onVisibilityChange} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Mostrar one.pdf aos clientes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Mostrar two.docx aos clientes" }));
+    expect(onVisibilityChange).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole("button", { name: "A atualizar visibilidade de one.pdf" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "A atualizar visibilidade de two.docx" })).toBeDisabled();
+    await act(async () => { deferred.get("two")?.resolve(); });
+
+    rerender(<ProjectDocuments phases={testPhases} viewedPhaseId="12" documents={{ "11": [first, other], "12": [nextPhase] }} onUploadFile={vi.fn()} onDeleteDocument={vi.fn()} onVisibilityChange={onVisibilityChange} />);
+    fireEvent.click(screen.getByRole("button", { name: "Mostrar three.ifc aos clientes" }));
+    expect(screen.getByRole("button", { name: "A atualizar visibilidade de three.ifc" })).toBeDisabled();
+    rerender(<ProjectDocuments phases={testPhases} viewedPhaseId="11" documents={{ "11": [first, other], "12": [nextPhase] }} onUploadFile={vi.fn()} onDeleteDocument={vi.fn()} onVisibilityChange={onVisibilityChange} />);
+    expect(screen.getByRole("button", { name: "A atualizar visibilidade de one.pdf" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "A atualizar visibilidade de one.pdf" }));
+    expect(onVisibilityChange).toHaveBeenCalledTimes(3);
+
+    rerender(<ProjectDocuments phases={testPhases} viewedPhaseId="12" documents={{ "11": [first, other], "12": [nextPhase] }} onUploadFile={vi.fn()} onDeleteDocument={vi.fn()} onVisibilityChange={onVisibilityChange} />);
+    await act(async () => { deferred.get("one")?.reject(); });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    await act(async () => { deferred.get("three")?.resolve(); });
+  });
+
+  it("starts hide grace after a save resolves outside the card and clears it when the document is removed", async () => {
+    vi.useFakeTimers();
+    let resolveVisibility: (() => void) | undefined;
+    const onVisibilityChange = vi.fn(() => new Promise<void>((resolve) => { resolveVisibility = resolve; }));
+    const visible = documents["11"][0];
+    const { rerender } = render(<ProjectDocuments phases={phases} viewedPhaseId="11" documents={{ "11": [visible] }} onUploadFile={vi.fn()} onDeleteDocument={vi.fn()} onVisibilityChange={onVisibilityChange} />);
+    let card = screen.getByRole("option", { name: /one\.pdf/ }).closest(".project-document")!;
+    fireEvent.pointerEnter(card);
+    fireEvent.click(screen.getByRole("button", { name: "Ocultar one.pdf dos clientes" }));
+    fireEvent.pointerLeave(card);
+    await act(async () => { resolveVisibility?.(); });
+    rerender(<ProjectDocuments phases={phases} viewedPhaseId="11" documents={{ "11": [{ ...visible, isVisible: false }] }} onUploadFile={vi.fn()} onDeleteDocument={vi.fn()} onVisibilityChange={onVisibilityChange} />);
+    let control = screen.getByRole("button", { name: "Mostrar one.pdf aos clientes" });
+    expect(control).toHaveClass("is-shown");
+    expect(vi.getTimerCount()).toBe(1);
+    await act(async () => { await vi.advanceTimersByTimeAsync(4999); });
+    expect(control).toHaveClass("is-shown");
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(control).not.toHaveClass("is-shown");
+
+    onVisibilityChange.mockResolvedValue(undefined);
+    rerender(<ProjectDocuments phases={phases} viewedPhaseId="11" documents={{ "11": [visible] }} onUploadFile={vi.fn()} onDeleteDocument={vi.fn()} onVisibilityChange={onVisibilityChange} />);
+    card = screen.getByRole("option", { name: /one\.pdf/ }).closest(".project-document")!;
+    fireEvent.pointerEnter(card);
+    fireEvent.click(screen.getByRole("button", { name: "Ocultar one.pdf dos clientes" }));
+    await act(async () => { await Promise.resolve(); });
+    rerender(<ProjectDocuments phases={phases} viewedPhaseId="11" documents={{ "11": [{ ...visible, isVisible: false }] }} onUploadFile={vi.fn()} onDeleteDocument={vi.fn()} onVisibilityChange={onVisibilityChange} />);
+    control = screen.getByRole("button", { name: "Mostrar one.pdf aos clientes" });
+    fireEvent.pointerLeave(card);
+    expect(vi.getTimerCount()).toBe(1);
+    rerender(<ProjectDocuments phases={phases} viewedPhaseId="11" documents={{}} onUploadFile={vi.fn()} onDeleteDocument={vi.fn()} onVisibilityChange={onVisibilityChange} />);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("restores hidden state and reports a Portuguese error when visibility fails", async () => {
+    const hidden = { ...documents["11"][0], isVisible: false };
+    render(<ProjectDocuments phases={phases} viewedPhaseId="11" documents={{ "11": [hidden] }} onUploadFile={vi.fn()} onDeleteDocument={vi.fn()} onVisibilityChange={vi.fn().mockRejectedValue(new Error("server"))} />);
+    const control = screen.getByRole("button", { name: "Mostrar one.pdf aos clientes" });
+    fireEvent.click(control);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Não foi possível atualizar a visibilidade de one.pdf.");
+    expect(control).toHaveAttribute("aria-pressed", "false");
+    expect(control).not.toBeDisabled();
+    expect(control).toHaveAttribute("aria-busy", "false");
+  });
+
+  it("keeps hide feedback for five seconds after pointer and focus leave, restarting after re-entry", async () => {
+    vi.useFakeTimers();
+    const onVisibilityChange = vi.fn().mockResolvedValue(undefined);
+    const { rerender } = render(<ProjectDocuments phases={phases} viewedPhaseId="11" documents={documents} onUploadFile={vi.fn()} onDeleteDocument={vi.fn()} onVisibilityChange={onVisibilityChange} />);
+    const card = screen.getByRole("option", { name: /one\.pdf/ }).closest(".project-document")!;
+    const control = screen.getByRole("button", { name: "Ocultar one.pdf dos clientes" });
+    fireEvent.pointerEnter(card);
+    fireEvent.focus(control);
+    fireEvent.click(control);
+    await act(async () => { await Promise.resolve(); });
+    expect(control).toHaveClass("is-shown");
+    rerender(<ProjectDocuments phases={phases} viewedPhaseId="11" documents={{ "11": [{ ...documents["11"][0], isVisible: false }, documents["11"][1], documents["11"][2]] }} onUploadFile={vi.fn()} onDeleteDocument={vi.fn()} onVisibilityChange={onVisibilityChange} />);
+    const hiddenControl = screen.getByRole("button", { name: "Mostrar one.pdf aos clientes" });
+    fireEvent.pointerLeave(card);
+    fireEvent.blur(hiddenControl, { relatedTarget: null });
+    await act(async () => { await vi.advanceTimersByTimeAsync(4999); });
+    expect(hiddenControl).toHaveClass("is-shown");
+    fireEvent.pointerEnter(card);
+    fireEvent.pointerLeave(card);
+    await act(async () => { await vi.advanceTimersByTimeAsync(4999); });
+    expect(hiddenControl).toHaveClass("is-shown");
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+      expect(hiddenControl).not.toHaveClass("is-shown");
+
+      rerender(<ProjectDocuments phases={phases} viewedPhaseId="11" documents={documents} onUploadFile={vi.fn()} onDeleteDocument={vi.fn()} onVisibilityChange={onVisibilityChange} />);
+      const shownControl = screen.getByRole("button", { name: "Ocultar one.pdf dos clientes" });
+      fireEvent.pointerEnter(card);
+      fireEvent.focus(shownControl);
+      fireEvent.click(shownControl);
+      await act(async () => { await Promise.resolve(); });
+      rerender(<ProjectDocuments phases={phases} viewedPhaseId="11" documents={{ "11": [{ ...documents["11"][0], isVisible: false }, documents["11"][1], documents["11"][2]] }} onUploadFile={vi.fn()} onDeleteDocument={vi.fn()} onVisibilityChange={onVisibilityChange} />);
+      const focusedHiddenControl = screen.getByRole("button", { name: "Mostrar one.pdf aos clientes" });
+      fireEvent.pointerLeave(card);
+      fireEvent.blur(focusedHiddenControl, { relatedTarget: null });
+      fireEvent.focus(focusedHiddenControl);
+      await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+      expect(focusedHiddenControl).toHaveClass("is-shown");
+      fireEvent.blur(focusedHiddenControl, { relatedTarget: null });
+      expect(vi.getTimerCount()).toBe(1);
+      cleanup();
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+  it("does not select a document when visibility is changed and omits unavailable actions", async () => {
+    const onPreviewDocumentSelect = vi.fn();
+    const onVisibilityChange = vi.fn().mockResolvedValue(undefined);
+    const hidden = { ...documents["11"][0], isVisible: false };
+    const { rerender } = render(<ProjectDocuments phases={phases} viewedPhaseId="11" documents={{ "11": [hidden] }} onUploadFile={vi.fn()} onDeleteDocument={vi.fn()} onVisibilityChange={onVisibilityChange} onPreviewDocumentSelect={onPreviewDocumentSelect} />);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Mostrar one.pdf aos clientes" })); await Promise.resolve(); });
+    expect(screen.getByRole("option", { name: /one\.pdf/ })).toHaveAttribute("aria-selected", "false");
+    expect(onPreviewDocumentSelect).not.toHaveBeenCalled();
+
+    rerender(<ProjectDocuments phases={phases} viewedPhaseId="11" documents={{ "11": [{ ...hidden, status: "Pending" }] }} onUploadFile={vi.fn()} onDeleteDocument={vi.fn()} onVisibilityChange={onVisibilityChange} onPreviewDocumentSelect={onPreviewDocumentSelect} />);
+    expect(screen.queryByRole("button", { name: /one\.pdf aos clientes/ })).not.toBeInTheDocument();
+    rerender(<ProjectDocuments phases={phases} viewedPhaseId="11" documents={{ "11": [hidden] }} readOnly onUploadFile={vi.fn()} onDeleteDocument={vi.fn()} onVisibilityChange={onVisibilityChange} />);
+    expect(screen.getByRole("button", { name: "one.pdf oculto para os clientes" })).toBeDisabled();
   });
 
   it("disables an in-progress download, reports failures, and hides unavailable downloads", async () => {

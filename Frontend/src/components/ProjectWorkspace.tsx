@@ -1,5 +1,5 @@
 import { ChangeEvent, DragEvent, FormEvent, KeyboardEvent, MouseEvent, useEffect, useRef, useState } from "react";
-import { ArrowLeft, Box, ChevronDown, Download, File, FileArchive, FileImage, FilePlus2, FileSpreadsheet, FileText, FileType2, Folder, FolderOpen, LoaderCircle, LockKeyhole, MessageSquare, MessagesSquare, PanelRightClose, PanelRightOpen, PanelsTopLeft, Plus, Presentation, Send, Trash2, X } from "lucide-react";
+import { ArrowLeft, Box, ChevronDown, Download, Eye, EyeOff, File, FileArchive, FileImage, FilePlus2, FileSpreadsheet, FileText, FileType2, Folder, FolderOpen, LoaderCircle, LockKeyhole, MessageSquare, MessagesSquare, PanelRightClose, PanelRightOpen, PanelsTopLeft, Plus, Presentation, Send, Trash2, X } from "lucide-react";
 import { getProjectMessages, getProjectPartConversationMessages, sendProjectMessage, sendProjectPartConversationMessage } from "../api/projects";
 import type { DrawingSelection, ProjectChatMessage, ProjectDocument, ProjectPartConversation, ProjectPartConversationMessage } from "../api/projects";
 import { phaseLabel } from "../projectPhases";
@@ -45,12 +45,104 @@ type ProjectDocumentsProps = {
   onUploadFile: (phaseId: string, file: File) => Promise<void>;
   onDeleteDocument: (documentId: string) => Promise<void>;
   onDownloadDocument?: (document: ProjectDocument) => Promise<void>;
+  onVisibilityChange?: (document: ProjectDocument, isVisible: boolean) => Promise<void>;
   onPreviewDocumentSelect?: (document: ProjectDocument) => void;
 };
 
 type PendingFile = { id: string; name: string; size: number };
 
-export function ProjectDocuments({ phases, viewedPhaseId, documents, loading = false, error = "", readOnly = false, previewDocumentId = null, onUploadFile, onDeleteDocument, onDownloadDocument, onPreviewDocumentSelect }: ProjectDocumentsProps) {
+type ProjectDocumentCardProps = {
+  document: ProjectDocument;
+  selected: boolean;
+  previewing: boolean;
+  downloading: boolean;
+  savingVisibility: boolean;
+  readOnly: boolean;
+  onSelect: (event: MouseEvent<HTMLButtonElement>) => void;
+  onDownload?: () => void;
+  onVisibilityChange?: (document: ProjectDocument, isVisible: boolean) => Promise<void>;
+  onError: (message: string) => void;
+};
+
+function ProjectDocumentCard({ document, selected, previewing, downloading, savingVisibility, readOnly, onSelect, onDownload, onVisibilityChange, onError }: ProjectDocumentCardProps) {
+  const [hideFeedback, setHideFeedback] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const feedbackActive = useRef(false);
+  const pointerInside = useRef(false);
+  const focusInside = useRef(false);
+  const requesting = useRef(false);
+  const mounted = useRef(false);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelHideTimer = () => {
+    if (hideTimer.current !== null) clearTimeout(hideTimer.current);
+    hideTimer.current = null;
+  };
+  const scheduleHideTimer = () => {
+    cancelHideTimer();
+    if (!feedbackActive.current || pointerInside.current || focusInside.current) return;
+    hideTimer.current = setTimeout(() => {
+      hideTimer.current = null;
+      feedbackActive.current = false;
+      setHideFeedback(false);
+    }, 5000);
+  };
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; cancelHideTimer(); };
+  }, []);
+  useEffect(() => {
+    if (document.isVisible) {
+      cancelHideTimer();
+      feedbackActive.current = false;
+      setHideFeedback(false);
+    }
+  }, [document.isVisible]);
+
+  const changeVisibility = async () => {
+    if (!onVisibilityChange || readOnly || savingVisibility || requesting.current || document.status !== "Available") return;
+    requesting.current = true;
+    const isVisible = !document.isVisible;
+    cancelHideTimer();
+    try {
+      await onVisibilityChange(document, isVisible);
+      if (!mounted.current) return;
+      // Disabling a focused native button can move focus without a React blur event.
+      focusInside.current = cardRef.current?.contains(window.document.activeElement) ?? false;
+      feedbackActive.current = !isVisible;
+      setHideFeedback(!isVisible);
+      scheduleHideTimer();
+    } catch {
+      if (mounted.current) {
+        onError(`Não foi possível atualizar a visibilidade de ${document.fileName}.`);
+        scheduleHideTimer();
+      }
+    } finally { requesting.current = false; }
+  };
+  const available = document.status === "Available";
+  const visibilityLabel = savingVisibility ? `A atualizar visibilidade de ${document.fileName}`
+    : readOnly ? `${document.fileName} ${document.isVisible ? "visível" : "oculto"} para os clientes`
+    : document.isVisible ? `Ocultar ${document.fileName} dos clientes` : `Mostrar ${document.fileName} aos clientes`;
+
+  return <div ref={cardRef} className={`project-document ${selected ? "is-selected" : ""} ${previewing ? "is-previewing" : ""} ${available && (onDownload || onVisibilityChange) ? "has-actions" : ""}`}
+    onPointerEnter={(event) => { if (event.pointerType !== "touch") { pointerInside.current = true; cancelHideTimer(); } }}
+    onPointerLeave={() => { pointerInside.current = false; scheduleHideTimer(); }}
+    onFocusCapture={() => { focusInside.current = true; cancelHideTimer(); }}
+    onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) { focusInside.current = false; scheduleHideTimer(); } }}>
+    <button type="button" role="option" aria-selected={selected} aria-current={previewing ? "true" : undefined} className="project-document__select" onClick={onSelect}>
+      <span className={`project-document__file project-document__file--${documentKind(document.fileName)}`}>{documentIcon(document.fileName)}</span>
+      <span className="project-document__name"><strong title={document.fileName}>{document.fileName}</strong><small>{document.createdByDisplayName} · {fileDate(document.uploadedAt ?? document.createdAt)}</small><small>{fileSize(document.length)}{!available ? ` · ${document.status}` : ""}</small></span>
+    </button>
+    {available && <div className="project-document__actions">
+      {onVisibilityChange && <button type="button" className={`project-document__visibility ${document.isVisible || savingVisibility || hideFeedback ? "is-shown" : ""}`} aria-label={visibilityLabel} title={visibilityLabel} aria-pressed={document.isVisible} aria-busy={savingVisibility} disabled={readOnly || savingVisibility} onClick={() => void changeVisibility()}>
+        {savingVisibility ? <LoaderCircle className="project-document__visibility-spinner" size={16} aria-hidden="true" /> : document.isVisible ? <Eye size={16} aria-hidden="true" /> : <EyeOff size={16} aria-hidden="true" />}
+      </button>}
+      {savingVisibility && <span className="sr-only" role="status">{visibilityLabel}</span>}
+      {onDownload && <button type="button" className="project-document__download" aria-label={downloading ? `A transferir ${document.fileName}` : `Transferir ${document.fileName}`} title={`Transferir ${document.fileName}`} disabled={downloading} onClick={onDownload}>{downloading ? <LoaderCircle className="project-document__download-spinner" size={16} aria-hidden="true" /> : <Download size={16} aria-hidden="true" />}</button>}
+    </div>}
+  </div>;
+}
+
+export function ProjectDocuments({ phases, viewedPhaseId, documents, loading = false, error = "", readOnly = false, previewDocumentId = null, onUploadFile, onDeleteDocument, onDownloadDocument, onVisibilityChange, onPreviewDocumentSelect }: ProjectDocumentsProps) {
   const phase = phases.find((candidate) => candidate.id === viewedPhaseId) ?? null;
   const phaseDocuments = phase ? documents[phase.id] ?? [] : [];
   const [expandedByPhase, setExpandedByPhase] = useState<Record<string, boolean>>(() => Object.fromEntries(phases.map((item) => [item.id, true])));
@@ -62,11 +154,18 @@ export function ProjectDocuments({ phases, viewedPhaseId, documents, loading = f
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [downloadingDocumentIds, setDownloadingDocumentIds] = useState<string[]>([]);
+  const [savingVisibilityIds, setSavingVisibilityIds] = useState<string[]>([]);
+  const visibilityRequests = useRef(new Set<string>());
+  const mounted = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const dragDepth = useRef(0);
   const expanded = phase ? expandedByPhase[phase.id] ?? true : false;
   const panelId = `phase-documents-${phase?.id ?? "none"}`;
 
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
   useEffect(() => {
     setExpandedByPhase((current) => ({ ...Object.fromEntries(phases.map((item) => [item.id, true])), ...current }));
   }, [phases]);
@@ -135,6 +234,18 @@ export function ProjectDocuments({ phases, viewedPhaseId, documents, loading = f
     finally { setDownloadingDocumentIds((current) => current.filter((id) => id !== document.id)); }
   };
 
+  const changeVisibility = async (document: ProjectDocument, isVisible: boolean) => {
+    if (!onVisibilityChange || readOnly || visibilityRequests.current.has(document.id)) return;
+    visibilityRequests.current.add(document.id);
+    setSavingVisibilityIds((current) => [...current, document.id]);
+    setOperationError("");
+    try { await onVisibilityChange(document, isVisible); }
+    finally {
+      visibilityRequests.current.delete(document.id);
+      if (mounted.current) setSavingVisibilityIds((current) => current.filter((id) => id !== document.id));
+    }
+  };
+
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     const target = event.target as HTMLElement;
     if (event.key !== "Delete" || !selectedIds.length || readOnly || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable) return;
@@ -175,16 +286,10 @@ export function ProjectDocuments({ phases, viewedPhaseId, documents, loading = f
     {expanded && phase && <div className="project-documents__content" id={panelId}>
       {(error || operationError) && <p className="project-documents__error" role="alert">{operationError || error}</p>}
       {loading ? <div className="project-documents__loading" role="status"><LoaderCircle size={24} aria-hidden="true" />A carregar documentos…</div> : phaseDocuments.length || pendingFiles.length ? <div className="project-documents__list" role="listbox" aria-label="Documentos da fase" aria-multiselectable="true">
-        {phaseDocuments.map((document) => {
-          const downloading = downloadingDocumentIds.includes(document.id);
-          return <div className={`project-document ${selectedIds.includes(document.id) ? "is-selected" : ""} ${previewDocumentId === document.id ? "is-previewing" : ""}`} key={document.id}>
-            <button type="button" role="option" aria-selected={selectedIds.includes(document.id)} aria-current={previewDocumentId === document.id ? "true" : undefined} className="project-document__select" onClick={(event) => { selectDocument(event, document.id); onPreviewDocumentSelect?.(document); }}>
-          <span className={`project-document__file project-document__file--${documentKind(document.fileName)}`}>{documentIcon(document.fileName)}</span>
-          <span className="project-document__name"><strong title={document.fileName}>{document.fileName}</strong><small>{document.createdByDisplayName} · {fileDate(document.uploadedAt ?? document.createdAt)}</small><small>{fileSize(document.length)}{document.status !== "Available" ? ` · ${document.status}` : ""}</small></span>
-            </button>
-            {document.status === "Available" && onDownloadDocument && <button type="button" className="project-document__download" aria-label={downloading ? `A transferir ${document.fileName}` : `Transferir ${document.fileName}`} title={`Transferir ${document.fileName}`} disabled={downloading} onClick={() => void downloadDocument(document)}>{downloading ? <LoaderCircle className="project-document__download-spinner" size={16} aria-hidden="true" /> : <Download size={16} aria-hidden="true" />}</button>}
-          </div>;
-        })}
+        {phaseDocuments.map((document) => <ProjectDocumentCard key={`${phase.id}:${document.id}`} document={document} selected={selectedIds.includes(document.id)} previewing={previewDocumentId === document.id} downloading={downloadingDocumentIds.includes(document.id)} savingVisibility={savingVisibilityIds.includes(document.id)} readOnly={readOnly}
+          onSelect={(event) => { selectDocument(event, document.id); onPreviewDocumentSelect?.(document); }}
+          onDownload={onDownloadDocument ? () => void downloadDocument(document) : undefined}
+          onVisibilityChange={onVisibilityChange ? changeVisibility : undefined} onError={setOperationError} />)}
         {pendingFiles.map((pending) => <div className="project-document--uploading" role="status" key={pending.id}>
           <span className="project-document__file"><LoaderCircle size={25} aria-hidden="true" /></span>
           <span className="project-document__name"><strong title={pending.name}>{pending.name}</strong><small>A carregar… · {fileSize(pending.size)}</small></span>

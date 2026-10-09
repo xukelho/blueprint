@@ -10,6 +10,7 @@ public interface IFileService
     Task<PendingUpload> CreatePendingUploadAsync(long projectId, long phaseId, string fileName, string contentType, long length, long actorId, CancellationToken cancellationToken = default);
     Task<bool> CompleteUploadAsync(Guid documentId, long actorId, CancellationToken cancellationToken = default);
     Task<PresignedDownloadGrant> CreateDownloadGrantAsync(Guid documentId, CancellationToken cancellationToken = default);
+    Task<ProjectDocument> SetVisibilityAsync(Guid documentId, bool isVisible, long actorId, CancellationToken cancellationToken = default);
     Task<bool> MoveAsync(Guid documentId, long targetPhaseId, long actorId, CancellationToken cancellationToken = default);
     Task<PendingReplacement> CreateReplacementUploadAsync(Guid documentId, string fileName, string contentType, long length, long actorId, CancellationToken cancellationToken = default);
     Task<bool> CompleteReplacementAsync(Guid documentId, Guid replacementObjectId, long actorId, CancellationToken cancellationToken = default);
@@ -40,6 +41,7 @@ public sealed class FileService(BlueprintDbContext db, IObjectStore objectStore,
             ProjectId = projectId,
             PhaseId = phaseId,
             StoredObjectId = storedObject.Id,
+            IsVisible = false,
             CreatedAt = now,
             UpdatedAt = now,
             CreatedBy = actorId,
@@ -57,17 +59,17 @@ public sealed class FileService(BlueprintDbContext db, IObjectStore objectStore,
 
     public async Task<bool> CompleteUploadAsync(Guid documentId, long actorId, CancellationToken cancellationToken = default)
     {
-        var document = await db.ProjectDocuments.Include(candidate => candidate.StoredObject)
-            .SingleOrDefaultAsync(candidate => candidate.Id == documentId && !candidate.IsDeleted, cancellationToken)
-            ?? throw new FileResourceNotFoundException("Document not found.");
+        await using var transaction = db.Database.CurrentTransaction is null ? await db.Database.BeginTransactionAsync(cancellationToken) : null;
+        var document = await LockActiveDocumentAsync(documentId, cancellationToken);
         if (document.StoredObject!.Status == StoredObjectStatus.Available) return false;
         await VerifyPendingObjectAsync(document.StoredObject!, actorId, cancellationToken);
         await notifications.AddAsync(new ProjectNotificationCommand(
             document.ProjectId, actorId, ProjectEventTypes.DocumentUploaded,
             $"adicionou o ficheiro «{document.StoredObject.FileName}».", NotificationTargetKinds.Document,
             $"document-uploaded:{document.Id}:{document.StoredObjectId}", document.Id,
-            Context: new { document.StoredObject.FileName, document.PhaseId }), cancellationToken);
+            Context: new { document.StoredObject.FileName, document.PhaseId }, Audience: AudienceFor(document)), cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
         return true;
     }
 
@@ -83,8 +85,8 @@ public sealed class FileService(BlueprintDbContext db, IObjectStore objectStore,
 
     public async Task<bool> MoveAsync(Guid documentId, long targetPhaseId, long actorId, CancellationToken cancellationToken = default)
     {
-        var document = await db.ProjectDocuments.SingleOrDefaultAsync(candidate => candidate.Id == documentId && !candidate.IsDeleted, cancellationToken)
-            ?? throw new FileResourceNotFoundException("Document not found.");
+        await using var transaction = db.Database.CurrentTransaction is null ? await db.Database.BeginTransactionAsync(cancellationToken) : null;
+        var document = await LockActiveDocumentAsync(documentId, cancellationToken);
         if (!await db.ProjectPhases.AnyAsync(phase => phase.Id == targetPhaseId && phase.ProjectId == document.ProjectId, cancellationToken))
             throw new FileResourceNotFoundException("The target phase was not found.");
         if (document.PhaseId == targetPhaseId) return false;
@@ -95,8 +97,9 @@ public sealed class FileService(BlueprintDbContext db, IObjectStore objectStore,
             document.ProjectId, actorId, ProjectEventTypes.DocumentMoved,
             "moveu um ficheiro para outra fase.", NotificationTargetKinds.Document,
             $"document-moved:{document.Id}:{document.UpdatedAt.UtcTicks}", document.Id,
-            Context: new { previousPhaseId, targetPhaseId }), cancellationToken);
+            Context: new { previousPhaseId, targetPhaseId }, Audience: AudienceFor(document)), cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
         return true;
     }
 
@@ -109,6 +112,7 @@ public sealed class FileService(BlueprintDbContext db, IObjectStore objectStore,
             ?? throw new FileResourceNotFoundException("Document not found.");
         var projectId = existing.ProjectId;
         var quota = await quotas.LockCompanyForProjectAsync(projectId, cancellationToken);
+        existing = await LockActiveDocumentAsync(documentId, cancellationToken);
         var reservation = Math.Max(0, length - (existing.StoredObject!.VerifiedLength ?? existing.StoredObject.ExpectedLength));
         if (quota.CurrentChargeBytes > quota.LimitBytes - reservation) throw new StorageQuotaExceededException();
         var storedObject = NewPendingObject(projectId, fileName, contentType, length, reservation, actorId);
@@ -124,9 +128,12 @@ public sealed class FileService(BlueprintDbContext db, IObjectStore objectStore,
     public async Task<bool> CompleteReplacementAsync(Guid documentId, Guid replacementObjectId, long actorId, CancellationToken cancellationToken = default)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        var document = await db.ProjectDocuments.Include(candidate => candidate.StoredObject)
-            .SingleOrDefaultAsync(candidate => candidate.Id == documentId && !candidate.IsDeleted, cancellationToken)
+        var projectId = await db.ProjectDocuments.Where(item => item.Id == documentId && !item.IsDeleted)
+            .Select(item => (long?)item.ProjectId).SingleOrDefaultAsync(cancellationToken)
             ?? throw new FileResourceNotFoundException("Document not found.");
+        // Quota operations take the company lock before any document lock.
+        var quota = await quotas.LockCompanyForProjectAsync(projectId, cancellationToken);
+        var document = await LockActiveDocumentAsync(documentId, cancellationToken);
         var replacement = await db.StoredObjects.SingleOrDefaultAsync(candidate => candidate.Id == replacementObjectId && candidate.ProjectId == document.ProjectId, cancellationToken)
             ?? throw new FileResourceNotFoundException("Replacement object not found.");
         if (document.StoredObjectId == replacementObjectId && replacement.Status == StoredObjectStatus.Available) return false;
@@ -143,10 +150,9 @@ public sealed class FileService(BlueprintDbContext db, IObjectStore objectStore,
             document.ProjectId, actorId, ProjectEventTypes.DocumentReplaced,
             $"substituiu o ficheiro por «{replacement.FileName}».", NotificationTargetKinds.Document,
             $"document-replaced:{document.Id}:{replacement.Id}", document.Id,
-            Context: new { replacement.FileName, document.PhaseId }), cancellationToken);
+            Context: new { replacement.FileName, document.PhaseId }, Audience: AudienceFor(document)), cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
-        var companyId = await db.Projects.Where(item => item.Id == document.ProjectId).Select(item => item.CompanyId).SingleAsync(cancellationToken);
-        await quotas.EvaluateWarningAsync(companyId, actorId, cancellationToken);
+        await quotas.EvaluateWarningAsync(quota.CompanyId, actorId, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return true;
@@ -154,8 +160,8 @@ public sealed class FileService(BlueprintDbContext db, IObjectStore objectStore,
 
     public async Task<bool> DeleteAsync(Guid documentId, long actorId, CancellationToken cancellationToken = default, bool createNotification = true)
     {
-        var document = await db.ProjectDocuments.Include(candidate => candidate.StoredObject)
-            .SingleOrDefaultAsync(candidate => candidate.Id == documentId, cancellationToken)
+        await using var transaction = db.Database.CurrentTransaction is null ? await db.Database.BeginTransactionAsync(cancellationToken) : null;
+        var document = await ProjectDocumentAccessService.LockAsync(db, documentId, cancellationToken)
             ?? throw new FileResourceNotFoundException("Document not found.");
         if (document.IsDeleted) return false;
         var now = timeProvider.GetUtcNow();
@@ -170,10 +176,48 @@ public sealed class FileService(BlueprintDbContext db, IObjectStore objectStore,
                 document.ProjectId, actorId, ProjectEventTypes.DocumentDeleted,
                 $"eliminou o ficheiro «{storedObject.FileName}».", NotificationTargetKinds.Document,
                 $"document-deleted:{document.Id}:{now.UtcTicks}", document.Id,
-                Context: new { storedObject.FileName, document.PhaseId }), cancellationToken);
+                Context: new { storedObject.FileName, document.PhaseId }, Audience: AudienceFor(document)), cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
         return true;
     }
+
+    public async Task<ProjectDocument> SetVisibilityAsync(Guid documentId, bool isVisible, long actorId, CancellationToken cancellationToken = default)
+    {
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        var document = await LockActiveDocumentAsync(documentId, cancellationToken);
+        if (await db.Projects.AnyAsync(item => item.Id == document.ProjectId && item.IsArchived, cancellationToken))
+            throw new FileConflictException("Archived projects are read-only.");
+        if (document.StoredObject!.Status != StoredObjectStatus.Available)
+            throw new FileConflictException("The document is not available.");
+        if (document.IsVisible == isVisible)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return document;
+        }
+
+        document.IsVisible = isVisible;
+        Touch(document, actorId);
+        var verb = isVisible ? "adicionou" : "removeu";
+        await notifications.AddAsync(new ProjectNotificationCommand(
+            document.ProjectId, actorId, isVisible ? ProjectEventTypes.DocumentAdded : ProjectEventTypes.DocumentRemoved,
+            $"{verb} o ficheiro «{document.StoredObject.FileName}».", NotificationTargetKinds.Document,
+            $"document-visibility:{document.Id}:{Guid.NewGuid():N}", document.Id,
+            Context: new { document.StoredObject.FileName, document.PhaseId }, Audience: ProjectNotificationAudience.ClientsOnly), cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return document;
+    }
+
+    private async Task<ProjectDocument> LockActiveDocumentAsync(Guid documentId, CancellationToken ct)
+    {
+        var document = await ProjectDocumentAccessService.LockAsync(db, documentId, ct);
+        if (document is null || document.IsDeleted) throw new FileResourceNotFoundException("Document not found.");
+        return document;
+    }
+
+    private static ProjectNotificationAudience AudienceFor(ProjectDocument document) =>
+        document.IsVisible ? ProjectNotificationAudience.AllParticipants : ProjectNotificationAudience.EmployeesOnly;
 
     private StoredObject NewPendingObject(long projectId, string fileName, string contentType, long length, long quotaChargeBytes, long actorId)
     {

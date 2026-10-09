@@ -42,6 +42,7 @@ public sealed class ProjectDocument
     public long PhaseId { get; set; }
     public Guid StoredObjectId { get; set; }
     public bool IsDeleted { get; set; }
+    public bool IsVisible { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public long CreatedBy { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }

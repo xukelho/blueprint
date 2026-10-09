@@ -1025,14 +1025,28 @@ button { cursor: pointer; }
 .project-document:hover { background: #f1f8f9; border-color: #b9d7db; }
 .project-document.is-selected { background: #e5f4f6; border-color: #16808a; box-shadow: 0 0 0 2px rgba(0, 109, 119, .14); }
 .project-document.is-previewing:not(.is-selected) { border-color: #62aeb6; box-shadow: inset 0 0 0 1px #62aeb6; }
-.project-document__select:focus-visible, .project-document__download:focus-visible { outline: 2px solid #006d77; outline-offset: 2px; }
-.project-document__download { position: absolute; top: 7px; right: 7px; width: 30px; height: 30px; display: inline-grid; place-items: center; padding: 0; color: #005864; background: #fff; border: 1px solid #b9d7db; border-radius: 7px; box-shadow: 0 1px 3px rgba(24, 54, 58, .14); }
-.project-document__download:hover:not(:disabled) { background: #edf7f8; border-color: #62aeb6; }
+.project-document.has-actions .project-document__select { padding-top: 44px; }
+.project-document__select:focus-visible, .project-document__download:focus-visible, .project-document__visibility:focus-visible { outline: 2px solid #006d77; outline-offset: 2px; }
+.project-document__actions { position: absolute; top: 7px; right: 7px; display: flex; gap: 5px; }
+.project-document__download, .project-document__visibility { width: 30px; height: 30px; display: inline-grid; place-items: center; padding: 0; color: #005864; background: #fff; border: 1px solid #b9d7db; border-radius: 7px; box-shadow: 0 1px 3px rgba(24, 54, 58, .14); }
+.project-document__download:hover:not(:disabled), .project-document__visibility:hover:not(:disabled) { background: #edf7f8; border-color: #62aeb6; }
 .project-document__download:disabled { cursor: wait; opacity: .8; }
-.project-document__download-spinner { animation: mock-spin .8s linear infinite; }
-@media (hover: hover) {
-  .project-document__download { opacity: 0; pointer-events: none; transform: translateY(-3px); transition: opacity .16s ease, transform .16s ease; }
-  .project-document:hover .project-document__download, .project-document:focus-within .project-document__download { opacity: 1; pointer-events: auto; transform: translateY(0); }
+.project-document__visibility:disabled { cursor: default; }
+.project-document__visibility[aria-busy="true"] { cursor: wait; }
+.project-document__download-spinner, .project-document__visibility-spinner { animation: mock-spin .8s linear infinite; }
+@media (hover: hover) and (pointer: fine) {
+  .project-document__download, .project-document__visibility { opacity: 0; pointer-events: none; transform: translateY(-3px); transition: opacity .16s ease, transform .16s ease; }
+  .project-document:hover .project-document__download, .project-document:focus-within .project-document__download,
+  .project-document:hover .project-document__visibility, .project-document:focus-within .project-document__visibility,
+  .project-document__visibility.is-shown { opacity: 1; pointer-events: auto; transform: translateY(0); }
+}
+@media (hover: none), (pointer: coarse) {
+  .project-document__download, .project-document__visibility { width: 44px; height: 44px; }
+  .project-document.has-actions .project-document__select { padding-top: 58px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .project-document__download, .project-document__visibility { transition: none; }
+  .project-document__visibility-spinner { animation: none; }
 }
 .project-document--uploading .project-document__file svg, .project-documents__loading svg { animation: mock-spin .8s linear infinite; }
 .project-document__file { width: 48px; height: 48px; display: grid; place-items: center; color: #64777a; background: #edf3f4; border-radius: 9px; }
@@ -3543,6 +3557,7 @@ html[data-theme="dark"] .app-shell :is(
   .project-document-viewer__state button,
   .project-documents__upload,
   .project-document__download,
+  .project-document__visibility,
   .project-icon-action,
   .project-options-menu,
   .project-conversations__messages article,
